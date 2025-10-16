@@ -1,0 +1,260 @@
+/* ===== Admin Login Wrapper ===== */
+.admin-login-wrap {
+  min-height: 100vh;
+  width: 100vw;
+  background: #f6f7fb;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+/* ===== Back Button ===== */
+.back-btn {
+  position: fixed;
+  top: 18px;
+  left: 18px;
+  border: none;
+  background: #fff;
+  border-radius: 10px;
+  padding: 6px 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  cursor: pointer;
+}
+
+/* ===== Layout ===== */
+.admin-login-layout {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  gap: 32px;
+  align-items: center;
+  width: min(1200px, 100vw - 48px);
+  height: 100vh;
+}
+
+/* ===== Brand Side ===== */
+.brand-side {
+  display: grid;
+  place-items: center;
+  height: 100%;
+}
+
+.brand-logo {
+  width: min(520px, 70vw);
+  max-width: 100%;
+  max-height: 70vh;
+  height: auto;
+}
+
+/* ===== Form Card ===== */
+.form-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+  width: 100%;
+  max-width: 420px;
+}
+
+.form-title {
+  font-weight: 700;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+/* ===== Form Fields ===== */
+.field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.field input {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  font-size: 14px;
+}
+
+/* ===== Forgot Password ===== */
+.forgot-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 6px 0 14px;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: #14a039;
+  cursor: pointer;
+}
+
+/* ===== Sign-in Button ===== */
+.signin-btn {
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  padding: 12px;
+  background: #ff8c00;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.signin-btn:hover {
+  background: #e67c00;
+}
+
+/* ===== Modal Styles ===== */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: #fff;
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  width: 90%;
+  max-width: 400px;
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.modal-close:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.cancel-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.cancel-btn:hover {
+  background: #f9fafb;
+}
+
+.reset-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  background: #14a039;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.reset-btn:hover {
+  background: #12832e;
+}
+
+/* ===== Validation Messages ===== */
+.error-message {
+  color: #b91c1c;
+  font-size: 12px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+}
+
+.success-message {
+  color: #059669;
+  font-size: 12px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+}
+
+.field-hint {
+  color: #6b7280;
+  font-size: 11px;
+  margin-top: 4px;
+  font-style: italic;
+}
+
+.verification-input {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  font-family: 'Courier New', monospace;
+}
+
+/* ===== Responsive: Stack on small screens ===== */
+@media (max-width: 900px) {
+  .admin-login-layout {
+    grid-template-columns: 1fr;
+    place-items: center;
+    height: auto;
+    padding: 40px 0;
+  }
+
+  .brand-logo {
+    width: min(340px, 80vw);
+    max-height: 30vh;
+    margin-bottom: 16px;
+  }
+}
