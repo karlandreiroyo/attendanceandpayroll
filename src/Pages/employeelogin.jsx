@@ -17,138 +17,96 @@ export default function EmployeeLogin() {
   const [generatedCode, setGeneratedCode] = useState("");
   const [codeUsed, setCodeUsed] = useState(false);
 
-  // Email validation function
-  const validateEmail = (email) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
-  // Phone number validation function
+  // --- VALIDATIONS ---
+  const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const validatePhone = (phone) => {
-    // Remove all non-digit characters for validation
-    const cleanPhone = phone.replace(/\D/g, '');
-    // Check if it's a valid phone number (10-15 digits)
-    return cleanPhone.length >= 10 && cleanPhone.length <= 15;
+    const clean = phone.replace(/\D/g, "");
+    return clean.length >= 10 && clean.length <= 15;
   };
+  const isEmail = (input) => input.includes("@");
 
-  // Check if input is email or phone
-  const isEmail = (input) => {
-    return input.includes('@');
-  };
+  const generateVerificationCode = () =>
+    Math.floor(100000 + Math.random() * 900000).toString();
 
-  // Generate 6-digit verification code
-  const generateVerificationCode = () => {
-    return Math.floor(100000 + Math.random() * 900000).toString();
-  };
-
-  // Handle verification code submission
+  // --- VERIFICATION HANDLER ---
   const handleVerification = (e) => {
     e.preventDefault();
-    setVerificationError("");
+    if (!verificationCode.trim()) return setVerificationError("Please enter the verification code.");
+    if (verificationCode.length !== 6) return setVerificationError("Verification code must be 6 digits.");
+    if (codeUsed) return setVerificationError("This verification code has already been used. Please request a new one.");
+    if (verificationCode !== generatedCode) return setVerificationError("Invalid verification code. Please try again.");
 
-    if (!verificationCode.trim()) {
-      setVerificationError("Please enter the verification code.");
-      return;
-    }
-
-    if (verificationCode.length !== 6) {
-      setVerificationError("Verification code must be 6 digits.");
-      return;
-    }
-
-    // Check if code has already been used
-    if (codeUsed) {
-      setVerificationError("This verification code has already been used. Please request a new one.");
-      return;
-    }
-
-    if (verificationCode !== generatedCode) {
-      setVerificationError("Invalid verification code. Please try again.");
-      return;
-    }
-
-    // Mark code as used to prevent reuse
     setCodeUsed(true);
-
-    // Verification successful - redirect to employee dashboard
     setShowVerification(false);
     setShowForgotPassword(false);
-    setForgotContact("");
-    setVerificationCode("");
-    setVerificationError("");
-    setGeneratedCode("");
-    setCodeUsed(false);
-    
-    // Auto-login the user (simulate successful verification)
     navigate("/employee/dashboard");
   };
 
-  // Handle forgot password form submission
+  // --- FORGOT PASSWORD HANDLER ---
   const handleForgotPassword = (e) => {
     e.preventDefault();
     setForgotError("");
     setForgotSuccess("");
 
-    // Validation checks
-    if (!forgotContact.trim()) {
-      setForgotError("Please enter your email address or phone number.");
-      return;
-    }
+    if (!forgotContact.trim())
+      return setForgotError("Please enter your email address or phone number.");
 
-    // Determine if input is email or phone and validate accordingly
     if (isEmail(forgotContact)) {
-      if (!validateEmail(forgotContact)) {
-        setForgotError("Please enter a valid email address.");
-        return;
-      }
-      
-      // Check if email matches employee email (example employee emails)
-      const validEmployeeEmails = ["employee1@tatayilio.com", "employee2@tatayilio.com", "john.doe@tatayilio.com"];
-      if (!validEmployeeEmails.includes(forgotContact.toLowerCase())) {
-        setForgotError("No account found with this email address.");
-        return;
-      }
+      if (!validateEmail(forgotContact))
+        return setForgotError("Please enter a valid email address.");
     } else {
-      if (!validatePhone(forgotContact)) {
-        setForgotError("Please enter a valid phone number (10-15 digits).");
-        return;
-      }
-      
-      // Check if phone matches employee phone (example employee phones)
-      const validEmployeePhones = ["09123456789", "09234567890", "09345678901"];
-      const cleanInputPhone = forgotContact.replace(/\D/g, '');
-      const cleanValidPhones = validEmployeePhones.map(phone => phone.replace(/\D/g, ''));
-      
-      if (!cleanValidPhones.includes(cleanInputPhone)) {
-        setForgotError("No account found with this phone number.");
-        return;
-      }
+      if (!validatePhone(forgotContact))
+        return setForgotError("Please enter a valid phone number (10-15 digits).");
     }
 
-    // Generate verification code
     const code = generateVerificationCode();
     setGeneratedCode(code);
-    setCodeUsed(false); // Reset code usage status for new code
-    
-    // Show verification code in console for testing (in real app, this would be sent via SMS/email)
+    setCodeUsed(false);
     console.log(`Verification code for ${forgotContact}: ${code}`);
-    
-    // Show verification form
     setShowVerification(true);
     setShowForgotPassword(false);
   };
 
-  const handleLogin = (e) => {
+  // --- LOGIN HANDLER ---
+  const handleLogin = async (e) => {
     e.preventDefault();
-    const validEmployeeId = "EMP001";
-    const validPassword = "employee123";
-    if (employeeId.trim() === validEmployeeId && password === validPassword) {
-      setError("");
+    setError("");
+
+    try {
+      const response = await fetch("http://localhost:3000/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: employeeId.trim(),
+          password,
+          role: "employee",
+        }),
+      });
+
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        setError(result.message || "Invalid employee ID or password.");
+        console.log(username, password, role);
+        return;
+      }
+
+      // Store session data
+      try {
+        sessionStorage.setItem("userRole", result.role);
+        sessionStorage.setItem("loginTime", new Date().toISOString());
+      } catch { }
+
       navigate("/employee/dashboard");
-    } else {
-      setError("Invalid employee ID or password.");
+    } catch (err) {
+      console.error("Login error:", err);
+      setError("An error occurred. Please try again.");
     }
   };
+
 
   return (
     <div className="login-container">
@@ -175,14 +133,16 @@ export default function EmployeeLogin() {
           />
 
           <div className="forgot-row">
-            <button type="button" className="link-btn" onClick={() => setShowForgotPassword(true)}>
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => setShowForgotPassword(true)}
+            >
               Forgot password?
             </button>
           </div>
 
-          {error && (
-            <div className="error-message">{error}</div>
-          )}
+          {error && <div className="error-message">{error}</div>}
 
           <button type="submit" className="login-button">
             Log In
@@ -194,14 +154,14 @@ export default function EmployeeLogin() {
         </Link>
       </div>
 
-      {/* Forgot Password Modal */}
+      {/* FORGOT PASSWORD MODAL */}
       {showForgotPassword && (
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
               <h3>Reset Password</h3>
-              <button 
-                className="modal-close" 
+              <button
+                className="modal-close"
                 onClick={() => {
                   setShowForgotPassword(false);
                   setForgotContact("");
@@ -213,7 +173,7 @@ export default function EmployeeLogin() {
                 ×
               </button>
             </div>
-            
+
             <form onSubmit={handleForgotPassword}>
               <div className="field">
                 <span>Email Address or Phone Number</span>
@@ -232,14 +192,13 @@ export default function EmployeeLogin() {
               {forgotError && (
                 <div className="error-message">{forgotError}</div>
               )}
-
               {forgotSuccess && (
                 <div className="success-message">{forgotSuccess}</div>
               )}
 
               <div className="modal-actions">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   className="cancel-btn"
                   onClick={() => {
                     setShowForgotPassword(false);
@@ -260,14 +219,14 @@ export default function EmployeeLogin() {
         </div>
       )}
 
-      {/* Verification Code Modal */}
+      {/* VERIFICATION MODAL */}
       {showVerification && (
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
               <h3>Enter Verification Code</h3>
-              <button 
-                className="modal-close" 
+              <button
+                className="modal-close"
                 onClick={() => {
                   setShowVerification(false);
                   setVerificationCode("");
@@ -279,7 +238,7 @@ export default function EmployeeLogin() {
                 ×
               </button>
             </div>
-            
+
             <form onSubmit={handleVerification}>
               <div className="field">
                 <span>6-Digit Verification Code</span>
@@ -287,10 +246,11 @@ export default function EmployeeLogin() {
                   type="text"
                   placeholder="123456"
                   value={verificationCode}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/\D/g, '').slice(0, 6);
-                    setVerificationCode(value);
-                  }}
+                  onChange={(e) =>
+                    setVerificationCode(
+                      e.target.value.replace(/\D/g, "").slice(0, 6)
+                    )
+                  }
                   maxLength="6"
                   required
                   className="verification-input"
@@ -305,8 +265,8 @@ export default function EmployeeLogin() {
               )}
 
               <div className="modal-actions">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   className="cancel-btn"
                   onClick={() => {
                     setShowVerification(false);
