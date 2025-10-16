@@ -1,0 +1,16 @@
+{
+  "name": "attendanceandpayroll",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run start:dev --prefix backend\" \"npm run dev --prefix frontend\"",
+    "start:backend": "npm run start:dev --prefix backend",
+    "start:frontend": "npm run dev --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^8.0.1"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.75.0"
+  }
+}
