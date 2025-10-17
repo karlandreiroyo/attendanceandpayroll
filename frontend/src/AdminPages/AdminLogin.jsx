@@ -153,11 +153,18 @@ export default function AdminLogin() {
       });
 
       const data = await response.json();
-      if (data.success) {
-        navigate("/admin/dashboard");
-      } else {
+      if (!response.ok || !data.success) {
         setError(data.message || "Login failed.");
+        return;
       }
+
+      // Store session info
+      sessionStorage.setItem("userRole", data.user.role);
+      sessionStorage.setItem("username", data.user.username);
+      sessionStorage.setItem("loginTime", new Date().toISOString());
+
+      navigate("/admin/dashboard");
+
     } catch (err) {
       console.error("Login error:", err);
       setError("Unable to connect to server.");

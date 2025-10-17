@@ -75,38 +75,40 @@ export default function EmployeeLogin() {
     try {
       const response = await fetch("http://localhost:3000/auth/login", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           username: username.trim(),
           password,
-          role: "employee",
         }),
-
       });
-
 
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        setError(result.message || "Invalid Username or password.");
-        console.log(username, password);
+        setError(result.message || "Invalid username or password.");
         return;
       }
 
-      // Store session data
-      try {
-        sessionStorage.setItem("userRole", result.role);
-        sessionStorage.setItem("loginTime", new Date().toISOString());
-      } catch { }
+      // Store session info
+      sessionStorage.setItem("userRole", result.user.role);
+      sessionStorage.setItem("username", result.user.username);
+      sessionStorage.setItem("loginTime", new Date().toISOString());
 
-      navigate("/employee/dashboard");
+      // Redirect based on role
+      if (result.user.role === "admin") {
+        navigate("/admin/dashboard");
+      } else if (result.user.role === "employee") {
+        navigate("/employee/dashboard");
+      } else {
+        setError("Unknown role. Cannot navigate.");
+      }
     } catch (err) {
       console.error("Login error:", err);
       setError("An error occurred. Please try again.");
     }
   };
+
+
 
 
   return (

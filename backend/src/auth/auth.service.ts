@@ -1,19 +1,35 @@
 import { Injectable } from '@nestjs/common';
+import { SupabaseService } from '../supabase/supabase.service';
 
 @Injectable()
 export class AuthService {
-  async login(username: string, password: string, role: string) {
-    console.log('🟢 Validating user:', username, password, role);
+  constructor(private readonly supabaseService: SupabaseService) { }
 
+  // auth.service.ts
+  async login(username: string, password: string) {
+    const { data, error } = await this.supabaseService.client
+      .from('users')
+      .select('*')
+      .eq('username', username)
+      .single();
 
-    if (role === 'employee' && username === 'employee1' && password === '1234') {
-      return { success: true, role: 'employee', message: 'Employee login successful' };
+    if (error || !data) {
+      throw new Error('User not found');
     }
 
-    if (role === 'admin' && username === 'admin@tatayilio.com' && password === 'admin123') {
-      return { success: true, role: 'admin', message: 'Admin login successful' };
+    if (data.password !== password) {
+      throw new Error('Invalid password');
     }
 
-    return { success: false, message: 'Invalid username or password' };
+    return {
+      success: true,              // <-- for frontend checks
+      message: 'Login successful',
+      user: {
+        id: data.id,
+        username: data.username,
+        role: data.role || 'employee', // default to employee if role missing
+      },
+    };
   }
+
 }
