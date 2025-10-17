@@ -4,7 +4,7 @@ import "../Pages/employeecss/employeelogin.css";
 
 export default function EmployeeLogin() {
   const navigate = useNavigate();
-  const [employeeId, setEmployeeId] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -79,18 +79,19 @@ export default function EmployeeLogin() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          username: employeeId.trim(),
+          username: username.trim(),
           password,
           role: "employee",
         }),
+
       });
 
 
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        setError(result.message || "Invalid employee ID or password.");
-        console.log(username, password, role);
+        setError(result.message || "Invalid Username or password.");
+        console.log(username, password);
         return;
       }
 
@@ -117,12 +118,14 @@ export default function EmployeeLogin() {
         <form onSubmit={handleLogin}>
           <input
             type="text"
-            placeholder="Employee ID"
+            placeholder="Username"
             className="login-input"
-            value={employeeId}
-            onChange={(e) => setEmployeeId(e.target.value)}
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
             required
           />
+
+
           <input
             type="password"
             placeholder="Password"

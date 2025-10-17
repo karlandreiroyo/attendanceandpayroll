@@ -5,7 +5,6 @@ export class AuthService {
   async login(username: string, password: string, role: string) {
     console.log('🟢 Validating user:', username, password, role);
 
-    // Temporary test credentials
     if (role === 'employee' && username === 'employee1' && password === '1234') {
       return { success: true, role: 'employee', message: 'Employee login successful' };
     }
