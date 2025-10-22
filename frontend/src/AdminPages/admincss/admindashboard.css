@@ -481,3 +481,65 @@
 .schedule-grid {
   overflow-x: auto;
 }
+
+/* ===== Table Layout Overrides ===== */
+.table {
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.thead,
+.tr {
+  display: grid;
+  grid-template-columns: 3fr 1fr 0.8fr 0.8fr 1fr 140px;
+  align-items: center;
+  gap: 16px;
+}
+
+.thead {
+  background: #f9fafb;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 16px 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.thead > div {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.actions-header {
+  text-align: right !important;
+  justify-self: end;
+  white-space: nowrap;
+}
+
+.tbody .tr {
+  padding: 16px 20px;
+  border-top: 1px solid #f1f5f9;
+  background: #fff;
+  transition: background-color 0.2s ease;
+}
+
+.tbody .tr > div {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.right {
+  text-align: right;
+}
+
+.thead .right {
+  text-align: right !important;
+}

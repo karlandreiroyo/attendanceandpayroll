@@ -7,8 +7,12 @@ import {
   Body,
   Param,
   BadRequestException,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
 import { UsersService, User } from './users.service';
+import { CreateEmployeeDto } from './dto/create-employee.dto';
+import { UpdateEmployeeDto } from './dto/update-employee.dto';
 
 @Controller('users')
 export class UsersController {
@@ -24,20 +28,27 @@ export class UsersController {
   }
 
   @Post()
-  async create(
-    @Body() body: { username: string; password: string; role: string },
-  ): Promise<User> {
+  @UsePipes(new ValidationPipe())
+  async create(@Body() body: CreateEmployeeDto): Promise<User> {
     try {
-      return await this.usersService.create(body);
+      // Set default values
+      const employeeData = {
+        ...body,
+        role: body.role || 'employee',
+        status: body.status || 'Active',
+        join_date: body.join_date || new Date().toISOString().split('T')[0],
+      };
+      return await this.usersService.create(employeeData);
     } catch (error) {
       throw new BadRequestException(error.message);
     }
   }
 
   @Put(':id')
+  @UsePipes(new ValidationPipe())
   async update(
     @Param('id') id: string,
-    @Body() body: { username?: string; password?: string; role?: string },
+    @Body() body: UpdateEmployeeDto,
   ): Promise<User> {
     try {
       return await this.usersService.update(Number(id), body);

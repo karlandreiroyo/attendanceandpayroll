@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import "../AdminPages/admincss/admindashboard.css";
-import "../AdminPages/admincss/adminschedules.css";
+import "../AdminPages/admincss/adminDashboard.css";
+import "../AdminPages/admincss/adminSchedules.css";
 
 // Simple helpers for month navigation
 function getMonthMatrix(year, month) {
@@ -23,13 +23,7 @@ export default function AdminSchedules() {
     return { year: now.getFullYear(), month: now.getMonth() };
   });
 
-  const employees = useMemo(() => ([
-    { id: 1, name: "Ezra Orizal", dept: "IT" },
-    { id: 2, name: "Heuben Clyde Dagami", dept: "HR" },
-    { id: 3, name: "Jheff Cruz", dept: "Finance" },
-    { id: 4, name: "John Ivan Santos", dept: "Marketing" },
-    { id: 5, name: "Karl Andrei Royo", dept: "Operations" },
-  ]), []);
+  const employees = useMemo(() => [], []);
 
   const days = useMemo(() => getMonthMatrix(current.year, current.month), [current]);
 

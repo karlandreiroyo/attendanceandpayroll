@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import "../AdminPages/admincss/admindashboard.css";
-import "../AdminPages/admincss/adminattendance.css";
+import "../AdminPages/admincss/adminDashboard.css";
+import "../AdminPages/admincss/adminAttendance.css";
 
 export default function AdminAttendance() {
   const navigate = useNavigate();
@@ -13,13 +13,7 @@ export default function AdminAttendance() {
   const [statusFilter, setStatusFilter] = useState("All Status");
   const [deptFilter, setDeptFilter] = useState("All Departments");
 
-  const [rows, setRows] = useState([
-    { id: 1, name: "Ezra Orizal", empId: "EMP001", dept: "IT", date: "6/1/2023", in: "07:55:23", out: "17:05:12", status: "Present", total: "9:10", ot: "1:05" },
-    { id: 2, name: "Heuben Clyde Dagami", empId: "EMP002", dept: "HR", date: "6/1/2023", in: "08:15:05", out: "17:00:30", status: "Late", total: "8:45", ot: "0:00" },
-    { id: 3, name: "Jheff Cruz", empId: "EMP003", dept: "Finance", date: "6/1/2023", in: "07:50:11", out: "18:30:22", status: "Present", total: "10:40", ot: "2:30" },
-    { id: 4, name: "John Ivan Santos", empId: "EMP004", dept: "Marketing", date: "6/1/2023", in: "08:05:33", out: "17:10:45", status: "Present", total: "9:05", ot: "1:10" },
-    { id: 5, name: "Karl Andrei Royo", empId: "EMP005", dept: "Operations", date: "6/1/2023", in: "-", out: "-", status: "Absent", total: "0:00", ot: "0:00" },
-  ]);
+  const [rows, setRows] = useState([]);
 
   const filtered = useMemo(() => {
     let filtered = rows;

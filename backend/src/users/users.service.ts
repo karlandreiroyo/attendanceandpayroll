@@ -6,6 +6,16 @@ export interface User { // ✅ Export it so controller can import
     username: string;
     password: string;
     role: string;
+    full_name?: string;
+    first_name?: string;
+    last_name?: string;
+    email?: string;
+    department?: string;
+    position?: string;
+    status?: 'Active' | 'Inactive';
+    join_date?: string;
+    phone?: string;
+    address?: string;
 }
 
 @Injectable()

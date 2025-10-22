@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import "../AdminPages/admincss/admindashboard.css"; // Use admin layout CSS
-import "../Pages/employeecss/employeedashboard.css";
+import "../AdminPages/admincss/adminDashboard.css"; // Use admin layout CSS
+import "../Pages/employeecss/employeeDashboard.css";
 
 export default function EmployeeDashboard() {
   const [view, setView] = useState("Monthly");
@@ -86,8 +86,8 @@ export default function EmployeeDashboard() {
               className="profile-btn"
               onClick={() => setIsTopUserOpen((v) => !v)}
             >
-              <span className="profile-avatar">EO</span>
-              <span>Ezra Orizal</span>
+              <span className="profile-avatar">U</span>
+              <span>User</span>
             </button>
             <div
               className={`profile-popover${isTopUserOpen ? " open" : ""}`}
@@ -100,7 +100,7 @@ export default function EmployeeDashboard() {
 
         <section className="welcome-card">
           <div className="welcome-title">
-            Welcome, <strong>Ezra Orizal</strong>
+            Welcome, <strong>User</strong>
           </div>
           <div className="welcome-sub" id="today"></div>
         </section>

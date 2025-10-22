@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import "../AdminPages/admincss/admindashboard.css"; // Use admin layout CSS
-import "../Pages/employeecss/employeeleaverequest.css"; // Keep employee-specific styles
+import "../AdminPages/admincss/adminDashboard.css"; // Use admin layout CSS
+import "../Pages/employeecss/employeeLeaveRequest.css"; // Keep employee-specific styles
 
 export default function EmployeeLeaveRequest() {
   const [type, setType] = useState("");
@@ -74,8 +74,8 @@ export default function EmployeeLeaveRequest() {
                 if (el) el.classList.toggle("open");
               }}
             >
-              <span className="profile-avatar">EO</span>
-              <span>Ezra Orizal</span>
+              <span className="profile-avatar">U</span>
+              <span>User</span>
             </button>
             <div id="user-popover-lr" className="profile-popover">
               <div className="profile-row">Profile</div>

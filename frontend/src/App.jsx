@@ -3,24 +3,21 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 
 
 
-import PayrollLogin from "./Pages/Payrolllogin";
+import PayrollLogin from "./Pages/PayrollLogin";
+import AdminDashboard from "./AdminPages/adminDashboard";
+import AdminEmployee from "./AdminPages/adminEmployee";
+import AdminSchedules from "./AdminPages/adminSchedules";
+import AdminAttendance from "./AdminPages/adminAttendance";
+import AdminOvertime from "./AdminPages/adminOvertime";
+import AdminPayroll from "./AdminPages/adminPayroll";
+import AdminReports from "./AdminPages/adminReports";
 
 
-import AdminLogin from "./AdminPages/AdminLogin";
-import AdminDashboard from "./AdminPages/admindashboard";
-import AdminEmployee from "./AdminPages/adminemployee";
-import AdminSchedules from "./AdminPages/adminschedules";
-import AdminAttendance from "./AdminPages/adminattendance";
-import AdminOvertime from "./AdminPages/adminovertime";
-import AdminPayroll from "./AdminPages/adminpayroll";
-import AdminReports from "./AdminPages/adminreports";
-
-
-import EmployeeLogin from "./Pages/employeelogin";
-import EmployeeDashboard from "./Pages/employeedashboard";
-import EmployeeSchedules from "./Pages/employeeschedules";
-import EmployeeLeaveRequest from "./Pages/employeeleaverequest";
-import EmployeePayslips from "./Pages/employeepayslips";
+// Unified login is used for both admin and employee
+import EmployeeDashboard from "./Pages/employeeDashboard";
+import EmployeeSchedules from "./Pages/employeeSchedules";
+import EmployeeLeaveRequest from "./Pages/employeeLeaveRequest";
+import EmployeePayslips from "./Pages/employeePayslips";
 
 function App() {
   return (
@@ -32,7 +29,7 @@ function App() {
         <Route path="/" element={<PayrollLogin />} />
 
 
-        <Route path="/admin" element={<AdminLogin />} />
+        <Route path="/admin" element={<PayrollLogin />} />
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
         <Route path="/admin/employee" element={<AdminEmployee />} />
         <Route path="/admin/schedules" element={<AdminSchedules />} />
@@ -42,7 +39,7 @@ function App() {
         <Route path="/admin/reports" element={<AdminReports />} />
 
 
-        <Route path="/employee" element={<EmployeeLogin />} />
+        <Route path="/employee" element={<PayrollLogin />} />
         <Route path="/employee/dashboard" element={<EmployeeDashboard />} />
         <Route path="/employee/schedules" element={<EmployeeSchedules />} />
         <Route path="/employee/leave-requests" element={<EmployeeLeaveRequest />} />

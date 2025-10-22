@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import "..//AdminPages/admincss/admindashboard.css";
+import "../AdminPages/admincss/adminDashboard.css";
 
 export default function AdminDashboard() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -8,28 +8,12 @@ export default function AdminDashboard() {
   const location = useLocation();
   const isActive = (path) => location.pathname.startsWith(path);
 
-  // Sample data - in a real app, this would come from an API
-  const employees = useMemo(() => [
-    { id: 1, name: "Ezra Orizal", dept: "IT", status: "Active" },
-    { id: 2, name: "Heuben Clyde Dagami", dept: "HR", status: "Active" },
-    { id: 3, name: "Jheff Cruz", dept: "Finance", status: "Active" },
-    { id: 4, name: "John Ivan Santos", dept: "Marketing", status: "Active" },
-    { id: 5, name: "Karl Andrei Royo", dept: "Operations", status: "Active" },
-  ], []);
+  // Employee data will be fetched from API
+  const employees = useMemo(() => [], []);
 
-  const attendanceData = useMemo(() => [
-    { id: 1, name: "Ezra Orizal", date: new Date().toISOString().slice(0, 10), status: "Present", timeIn: "07:55", timeOut: "17:05" },
-    { id: 2, name: "Heuben Clyde Dagami", date: new Date().toISOString().slice(0, 10), status: "Late", timeIn: "08:15", timeOut: "17:00" },
-    { id: 3, name: "Jheff Cruz", date: new Date().toISOString().slice(0, 10), status: "Present", timeIn: "07:50", timeOut: "18:30" },
-    { id: 4, name: "John Ivan Santos", date: new Date().toISOString().slice(0, 10), status: "Present", timeIn: "08:05", timeOut: "17:10" },
-    { id: 5, name: "Karl Andrei Royo", date: new Date().toISOString().slice(0, 10), status: "Absent", timeIn: "-", timeOut: "-" },
-  ], []);
+  const attendanceData = useMemo(() => [], []);
 
-  const overtimeRequests = useMemo(() => [
-    { id: 1, name: "Ezra Orizal", date: "6/10/2023", hours: 2, status: "Pending" },
-    { id: 2, name: "John Ivan Santos", date: "6/12/2023", hours: 2, status: "Pending" },
-    { id: 3, name: "Karl Andrei Royo", date: "6/15/2023", hours: 3, status: "Pending" },
-  ], []);
+  const overtimeRequests = useMemo(() => [], []);
 
   const dashboardStats = useMemo(() => {
     const totalEmployees = employees.length;
@@ -47,12 +31,7 @@ export default function AdminDashboard() {
     };
   }, [employees, attendanceData, overtimeRequests]);
 
-  const recentActivities = useMemo(() => [
-    { id: 1, action: "clocked in", employee: "Ezra Orizal", time: "7:55 AM", type: "attendance" },
-    { id: 2, action: "clocked in late", employee: "Heuben Clyde Dagami", time: "8:15 AM", type: "attendance" },
-    { id: 3, action: "requested overtime", employee: "Karl Andrei Royo", time: "5:30 PM", type: "overtime" },
-    { id: 4, action: "payroll processed", employee: "System", time: "6:00 PM", type: "payroll" },
-  ], []);
+  const recentActivities = useMemo(() => [], []);
 
   return (
     <div className="admin-layout">

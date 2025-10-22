@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import "../AdminPages/admincss/admindashboard.css";
-import "../AdminPages/admincss/adminpayroll.css";
+import "../AdminPages/admincss/adminDashboard.css";
+import "../AdminPages/admincss/adminPayroll.css";
 
 export default function AdminPayroll() {
   const navigate = useNavigate();
@@ -15,13 +15,7 @@ export default function AdminPayroll() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
 
-  const [rows, setRows] = useState([
-    { id: 1, name: "Ezra Orizal", empId: "EMP001", position: "Software Developer", dept: "IT", basic: 25000, allow: 2000, ot: 1500, gross: 28500, deduct: 3000, net: 25500, status: "Pending" },
-    { id: 2, name: "Heuben Clyde Dagami", empId: "EMP002", position: "HR Manager", dept: "HR", basic: 30000, allow: 3000, ot: 0, gross: 33000, deduct: 4650, net: 28350, status: "Pending" },
-    { id: 3, name: "Jheff Cruz", empId: "EMP003", position: "Accountant", dept: "Finance", basic: 23000, allow: 1500, ot: 2000, gross: 26500, deduct: 2750, net: 23750, status: "Pending" },
-    { id: 4, name: "John Ivan Santos", empId: "EMP004", position: "Marketing Specialist", dept: "Marketing", basic: 22000, allow: 1500, ot: 0, gross: 23500, deduct: 3000, net: 20500, status: "Pending" },
-    { id: 5, name: "Karl Andrei Royo", empId: "EMP005", position: "Operations Manager", dept: "Operations", basic: 32000, allow: 3000, ot: 0, gross: 35000, deduct: 4000, net: 31000, status: "Pending" },
-  ]);
+  const [rows, setRows] = useState([]);
 
   const filtered = useMemo(() => {
     let filtered = rows;

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import "../AdminPages/admincss/admindashboard.css";
-import "../AdminPages/admincss/adminovertime.css";
+import "../AdminPages/admincss/adminDashboard.css";
+import "../AdminPages/admincss/adminOvertime.css";
 
 export default function AdminOvertime() {
   const navigate = useNavigate();
@@ -12,13 +12,7 @@ export default function AdminOvertime() {
   const [statusFilter, setStatusFilter] = useState("All Status");
   const [deptFilter, setDeptFilter] = useState("All Departments");
 
-  const [rows, setRows] = useState([
-    { id: 1, name: "Ezra Orizal", dept: "IT", date: "6/10/2023", req: "6/5/2023", hours: 2, time: "17:00 - 19:00", status: "Approved" },
-    { id: 2, name: "Heuben Clyde Dagami", dept: "Finance", date: "6/8/2023", req: "6/3/2023", hours: 3, time: "17:00 - 20:00", status: "Approved" },
-    { id: 3, name: "Jheff Cruz", dept: "HR", date: "6/7/2023", req: "6/2/2023", hours: 1.5, time: "17:00 - 18:30", status: "Rejected" },
-    { id: 4, name: "John Ivan Santos", dept: "Marketing", date: "6/12/2023", req: "6/5/2023", hours: 2, time: "17:00 - 19:00", status: "Pending" },
-    { id: 5, name: "Karl Andrei Royo", dept: "IT", date: "6/15/2023", req: "6/6/2023", hours: 3, time: "17:00 - 20:00", status: "Pending" },
-  ]);
+  const [rows, setRows] = useState([]);
 
   const filtered = useMemo(() => {
     let filtered = rows;

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import "../AdminPages/admincss/admindashboard.css";
-import "..//AdminPages/admincss/adminreports.css";
+import "../AdminPages/admincss/adminDashboard.css";
+import "../AdminPages/admincss/adminReports.css";
 
 export default function AdminReports() {
   const navigate = useNavigate();
@@ -32,29 +32,11 @@ export default function AdminReports() {
     { dept: "Operations", requests: 6, approved: 4, rejected: 1, pending: 1, totalHours: 15 },
   ], []);
 
-  const payrollData = useMemo(() => [
-    { dept: "IT", employees: 10, grossPay: 285000, deductions: 30000, netPay: 255000 },
-    { dept: "HR", employees: 5, grossPay: 165000, deductions: 23250, netPay: 141750 },
-    { dept: "Finance", employees: 8, grossPay: 212000, deductions: 22000, netPay: 190000 },
-    { dept: "Marketing", employees: 12, grossPay: 282000, deductions: 36000, netPay: 246000 },
-    { dept: "Operations", employees: 15, grossPay: 525000, deductions: 60000, netPay: 465000 },
-  ], []);
+  const payrollData = useMemo(() => [], []);
 
-  const employeeListData = useMemo(() => [
-    { id: 1, name: "Ezra Orizal", email: "ezra@tatayilio.com", dept: "IT", position: "Software Developer", status: "Active", joinDate: "5/15/2021" },
-    { id: 2, name: "Heuben Clyde Dagami", email: "heuben@tatayilio.com", dept: "HR", position: "HR Manager", status: "Active", joinDate: "3/10/2020" },
-    { id: 3, name: "Jheff Cruz", email: "jheff@tatayilio.com", dept: "Finance", position: "Accountant", status: "Active", joinDate: "1/5/2022" },
-    { id: 4, name: "John Ivan Santos", email: "john@tatayilio.com", dept: "Marketing", position: "Marketing Specialist", status: "Active", joinDate: "8/22/2021" },
-    { id: 5, name: "Karl Andrei Royo", email: "karl@tatayilio.com", dept: "Operations", position: "Operations Manager", status: "Active", joinDate: "11/30/2019" },
-  ], []);
+  const employeeListData = useMemo(() => [], []);
 
-  const leaveData = useMemo(() => [
-    { dept: "IT", totalEmployees: 10, pendingLeaves: 2, approvedLeaves: 5, rejectedLeaves: 1, totalDays: 15 },
-    { dept: "HR", totalEmployees: 5, pendingLeaves: 1, approvedLeaves: 3, rejectedLeaves: 0, totalDays: 8 },
-    { dept: "Finance", totalEmployees: 8, pendingLeaves: 3, approvedLeaves: 4, rejectedLeaves: 1, totalDays: 12 },
-    { dept: "Marketing", totalEmployees: 12, pendingLeaves: 4, approvedLeaves: 6, rejectedLeaves: 2, totalDays: 20 },
-    { dept: "Operations", totalEmployees: 15, pendingLeaves: 5, approvedLeaves: 8, rejectedLeaves: 2, totalDays: 25 },
-  ], []);
+  const leaveData = useMemo(() => [], []);
 
   function generateReport() {
     const reportData = getReportData();

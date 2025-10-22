@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import "../AdminPages/admincss/admindashboard.css";
-import "../AdminPages/admincss/adminemployee.css";
+import "../AdminPages/admincss/adminDashboard.css";
+import "../AdminPages/admincss/adminEmployee.css";
+import { API_BASE_URL } from "../config/api";
 
 export default function AdminEmployee() {
   const navigate = useNavigate();
@@ -19,34 +20,62 @@ export default function AdminEmployee() {
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [viewEmployee, setViewEmployee] = useState(null);
   const [notification, setNotification] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [submitLoading, setSubmitLoading] = useState(false);
+  const [formErrors, setFormErrors] = useState({});
 
-  const [rows, setRows] = useState([
-    { id: 1, name: "Ezra Orizal", email: "ezra@tatayilio.com", dept: "IT", position: "Software Developer", status: "Active", joinDate: "5/15/2021" },
-    { id: 2, name: "Heuben Clyde Dagami", email: "heuben@tatayilio.com", dept: "HR", position: "HR Manager", status: "Active", joinDate: "3/10/2020" },
-    { id: 3, name: "Jheff Cruz", email: "jheff@tatayilio.com", dept: "Finance", position: "Accountant", status: "Active", joinDate: "1/5/2022" },
-    { id: 4, name: "John Ivan Santos", email: "john@tatayilio.com", dept: "Marketing", position: "Marketing Specialist", status: "Active", joinDate: "8/22/2021" },
-    { id: 5, name: "Karl Andrei Royo", email: "karl@tatayilio.com", dept: "Operations", position: "Operations Manager", status: "Active", joinDate: "11/30/2019" },
-  ]);
+  const [rows, setRows] = useState([]);
+
+  React.useEffect(() => {
+    let aborted = false;
+    async function loadEmployees() {
+      try {
+        setLoading(true);
+        const res = await fetch(`${API_BASE_URL}/users`, { credentials: "include" });
+        if (!res.ok) throw new Error(`Failed to fetch users: ${res.status}`);
+        const users = await res.json();
+        if (aborted) return;
+        const mapped = (users || []).map((u) => ({
+          id: u.id,
+          name: [u.first_name, u.last_name].filter(Boolean).join(" ") || u.username,
+          username: u.username,
+          role: u.role || 'employee',
+          email: u.email,
+          dept: u.department,
+          position: u.position,
+          status: u.status || "Active",
+          joinDate: u.join_date || new Date().toLocaleDateString(),
+        }));
+        setRows(mapped);
+        setOpenActionsId(null); // Reset dropdown state when data loads
+      } catch (err) {
+        console.error(err);
+        setNotification({ type: "error", message: "Failed to load employees" });
+        setTimeout(() => setNotification(null), 3000);
+      } finally {
+        if (!aborted) setLoading(false);
+      }
+    }
+    loadEmployees();
+    return () => { aborted = true; };
+  }, []);
 
   const filteredRows = useMemo(() => {
     let filtered = rows;
-    
-    // Text search filter
+
     const q = query.trim().toLowerCase();
     if (q) {
-      filtered = filtered.filter(r => `${r.name} ${r.email} ${r.dept} ${r.position}`.toLowerCase().includes(q));
+      filtered = filtered.filter(r => `${r.name} ${r.username} ${r.role} ${r.email}`.toLowerCase().includes(q));
     }
-    
-    // Department filter
+
     if (deptFilter !== "All Departments") {
       filtered = filtered.filter(r => r.dept === deptFilter);
     }
-    
-    // Status filter
+
     if (statusFilter !== "All Status") {
       filtered = filtered.filter(r => r.status === statusFilter);
     }
-    
+
     return filtered;
   }, [rows, query, deptFilter, statusFilter]);
 
@@ -74,31 +103,94 @@ export default function AdminEmployee() {
     setRows(prev => prev.map(r => (r.id === updated.id ? updated : r)));
     setIsEditOpen(false);
     setSelected(null);
+    setOpenActionsId(null); // Reset dropdown state after update
   }
 
-  function handleAdd(e) {
+  function validateAddForm(formData) {
+    const errors = {};
+    const firstName = formData.get("first_name")?.trim();
+    const lastName = formData.get("last_name")?.trim();
+    const email = formData.get("email")?.trim();
+    const dept = formData.get("dept")?.trim();
+    const position = formData.get("position")?.trim();
+    const username = formData.get("username")?.trim();
+    const password = formData.get("password") || "";
+    const confirmPassword = formData.get("confirm_password") || "";
+
+    if (!firstName) errors.first_name = "First name is required";
+    if (!lastName) errors.last_name = "Last name is required";
+    if (!email) errors.email = "Email is required";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = "Invalid email";
+    if (!dept) errors.dept = "Department is required";
+    if (!position) errors.position = "Position is required";
+    if (!username) errors.username = "Username is required";
+    if (!password) errors.password = "Password is required";
+    else if (password.length < 6) errors.password = "Password must be at least 6 characters";
+    if (confirmPassword !== password) errors.confirm_password = "Passwords do not match";
+
+    return errors;
+  }
+
+  async function handleAdd(e) {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
-    const next = {
-      id: Math.max(0, ...rows.map(r => r.id)) + 1,
-      name: data.get("name"),
+
+    const errors = validateAddForm(data);
+    setFormErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
+    const payload = {
+      username: data.get("username"),
+      password: data.get("password"),
+      first_name: data.get("first_name"),
+      last_name: data.get("last_name"),
       email: data.get("email"),
-      dept: data.get("dept"),
+      department: data.get("dept"),
       position: data.get("position"),
-      status: "Active",
-      joinDate: new Date().toLocaleDateString(),
+      status: data.get("status") || "Active",
+      phone: data.get("phone") || undefined,
+      address: data.get("address") || undefined,
+      role: "employee",
     };
-    setRows(prev => [...prev, next]);
-    setIsAddOpen(false);
-    // Reset form
-    e.target.reset();
-    // Show success notification
-    setNotification({
-      type: 'success',
-      message: `Employee "${next.name}" has been added successfully!`
-    });
-    // Auto-hide notification after 3 seconds
-    setTimeout(() => setNotification(null), 3000);
+
+    try {
+      setSubmitLoading(true);
+      const res = await fetch(`${API_BASE_URL}/users`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `Failed to add employee (${res.status})`);
+      }
+      const created = await res.json();
+      const newRow = {
+        id: created.id,
+        name: [created.first_name, created.last_name].filter(Boolean).join(" ") || created.username,
+        username: created.username,
+        role: created.role || 'employee',
+        email: created.email,
+        dept: created.department,
+        position: created.position,
+        status: created.status || "Active",
+        joinDate: created.join_date || new Date().toLocaleDateString(),
+      };
+      setRows(prev => [...prev, newRow]);
+      setIsAddOpen(false);
+      e.currentTarget.reset();
+      setFormErrors({});
+      setOpenActionsId(null); // Reset dropdown state after adding
+      setNotification({ type: 'success', message: `Employee "${newRow.name}" has been added successfully!` });
+      setTimeout(() => setNotification(null), 3000);
+    } catch (err) {
+      console.error(err);
+      setNotification({ type: 'error', message: err.message || 'Failed to add employee' });
+      setTimeout(() => setNotification(null), 4000);
+    } finally {
+      setSubmitLoading(false);
+    }
   }
 
   function toggleEmployeeStatus(id) {
@@ -113,7 +205,6 @@ export default function AdminEmployee() {
     }
   }
 
-  // Close actions dropdown when clicking outside
   React.useEffect(() => {
     function handleClickOutside(event) {
       if (openActionsId && !event.target.closest('.actions-dropdown')) {
@@ -167,7 +258,7 @@ export default function AdminEmployee() {
             />
             <div className="header-actions">
               <button className="btn outline" onClick={() => setFilterOpen(v => !v)}>Filter</button>
-              <button className="btn primary" onClick={() => setIsAddOpen(true)}>Add Employee</button>
+              <button className="btn primary" onClick={() => setIsAddOpen(true)} disabled={loading}>Add Employee</button>
             </div>
           </div>
 
@@ -191,60 +282,68 @@ export default function AdminEmployee() {
 
           <div className="table">
             <div className="thead">
-              <div>Employee</div>
-              <div>Department</div>
-              <div>Position</div>
+              <div>Full Name</div>
+              <div>Username</div>
+              <div>Role</div>
               <div>Status</div>
               <div>Join Date</div>
-              <div className="right">Actions</div>
+              <div className="actions-header">Actions</div>
             </div>
             <div className="tbody">
-              {filteredRows.map(r => (
-                <div key={r.id} className="tr">
-                  <div>
-                    <div className="emp">
-                      <div className="emp-avatar">{r.name?.[0]}</div>
-                      <div className="emp-meta">
-                        <div className="emp-name">{r.name}</div>
-                        <div className="emp-email">{r.email}</div>
+              {loading ? (
+                <div className="tr"><div>Loading...</div></div>
+              ) : (
+                filteredRows.map(r => (
+                  <div key={r.id} className="tr">
+                    <div>
+                      <div className="emp">
+                        <div className="emp-avatar">{r.name?.[0]}</div>
+                        <div className="emp-meta">
+                          <div className="emp-name">{r.name}</div>
+                          <div className="emp-email">{r.email}</div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div>{r.dept}</div>
-                  <div>{r.position}</div>
-                  <div><span className="status success">{r.status}</span></div>
-                  <div>{r.joinDate}</div>
-                  <div className="right">
-                    <div className="actions-dropdown">
-                      <button 
-                        className="actions-btn" 
-                        onClick={() => setOpenActionsId(openActionsId === r.id ? null : r.id)}
-                      >
-                        Details
-                      </button>
-                      {openActionsId === r.id && (
-                        <div className="actions-menu">
+                    <div>{r.username}</div>
+                    <div>
+                      <span className={`role-badge ${r.role === 'admin' ? 'admin' : 'employee'}`}>
+                        {r.role === 'admin' ? 'Admin' : 'Employee'}
+                      </span>
+                    </div>
+                    <div><span className="status success">{r.status}</span></div>
+                    <div>{r.joinDate}</div>
+                    <div className="right">
+                      <div className="actions-dropdown">
+                        <button 
+                          className="actions-btn" 
+                          onClick={() => setOpenActionsId(openActionsId === r.id ? null : r.id)}
+                        >
+                          Details
+                        </button>
+                        {openActionsId === r.id && (
+                          <div className="actions-menu">
                             <button className="action-item" onClick={() => openView(r)}>
                               View
                             </button>
-                          <button className="action-item" onClick={() => openEdit(r)}>
-                             Edit
-                          </button>
-                          <button 
-                            className="action-item" 
-                            onClick={() => toggleEmployeeStatus(r.id)}
-                          >
-                            {r.status === "Active" ? " Deactivate" : " Activate"}
-                          </button>
-                          <button className="action-item" onClick={() => deleteEmployee(r.id)}>
-                             Delete
-                          </button>
-                        </div>
-                      )}
+                            <button className="action-item" onClick={() => openEdit(r)}>
+                              Edit
+                            </button>
+                            <button 
+                              className="action-item" 
+                              onClick={() => toggleEmployeeStatus(r.id)}
+                            >
+                              {r.status === "Active" ? " Deactivate" : " Activate"}
+                            </button>
+                            <button className="action-item" onClick={() => deleteEmployee(r.id)}>
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </section>
@@ -368,14 +467,27 @@ export default function AdminEmployee() {
                 <form onSubmit={handleAdd} className="details-grid">
                   <div className="detail-section">
                     <h3>Personal Information</h3>
-                    <div className="detail-item">
-                      <span className="detail-label">Full Name</span>
-                      <input 
-                        name="name" 
-                        placeholder="Enter full name" 
-                        className="detail-input"
-                        required 
-                      />
+                    <div className="detail-row two">
+                      <div className="detail-item">
+                        <span className="detail-label">First Name</span>
+                        <input 
+                          name="first_name" 
+                          placeholder="Enter first name" 
+                          className="detail-input"
+                          required 
+                        />
+                        {formErrors.first_name && <div className="field-error">{formErrors.first_name}</div>}
+                      </div>
+                      <div className="detail-item">
+                        <span className="detail-label">Last Name</span>
+                        <input 
+                          name="last_name" 
+                          placeholder="Enter last name" 
+                          className="detail-input"
+                          required 
+                        />
+                        {formErrors.last_name && <div className="field-error">{formErrors.last_name}</div>}
+                      </div>
                     </div>
                     <div className="detail-item">
                       <span className="detail-label">Email Address</span>
@@ -386,10 +498,17 @@ export default function AdminEmployee() {
                         className="detail-input"
                         required 
                       />
+                      {formErrors.email && <div className="field-error">{formErrors.email}</div>}
                     </div>
-                    <div className="detail-item">
-                      <span className="detail-label">Employee ID</span>
-                      <span className="detail-value">Auto-generated</span>
+                    <div className="detail-row two">
+                      <div className="detail-item">
+                        <span className="detail-label">Phone </span>
+                        <input name="phone" placeholder="Enter phone number" className="detail-input" />
+                      </div>
+                      <div className="detail-item">
+                        <span className="detail-label">Address </span>
+                        <input name="address" placeholder="Enter address" className="detail-input" />
+                      </div>
                     </div>
                   </div>
 
@@ -405,6 +524,7 @@ export default function AdminEmployee() {
                         <option>Marketing</option>
                         <option>Operations</option>
                       </select>
+                      {formErrors.dept && <div className="field-error">{formErrors.dept}</div>}
                     </div>
                     <div className="detail-item">
                       <span className="detail-label">Position</span>
@@ -414,23 +534,41 @@ export default function AdminEmployee() {
                         className="detail-input"
                         required 
                       />
+                      {formErrors.position && <div className="field-error">{formErrors.position}</div>}
                     </div>
                     <div className="detail-item">
                       <span className="detail-label">Status</span>
-                      <select name="status" className="detail-select" required>
+                      <select name="status" className="detail-select" required defaultValue="Active">
                         <option value="Active">Active</option>
                         <option value="Inactive">Inactive</option>
                       </select>
                     </div>
+                  </div>
+
+                  <div className="detail-section">
+                    <h3>Account</h3>
+                    <div className="detail-row two">
+                      <div className="detail-item">
+                        <span className="detail-label">Username</span>
+                        <input name="username" placeholder="Choose a username" className="detail-input" required />
+                        {formErrors.username && <div className="field-error">{formErrors.username}</div>}
+                      </div>
+                      <div className="detail-item">
+                        <span className="detail-label">Password</span>
+                        <input type="password" name="password" placeholder="Create a password" className="detail-input" required />
+                        {formErrors.password && <div className="field-error">{formErrors.password}</div>}
+                      </div>
+                    </div>
                     <div className="detail-item">
-                      <span className="detail-label">Join Date</span>
-                      <span className="detail-value">{new Date().toLocaleDateString()}</span>
+                      <span className="detail-label">Confirm Password</span>
+                      <input type="password" name="confirm_password" placeholder="Re-enter password" className="detail-input" required />
+                      {formErrors.confirm_password && <div className="field-error">{formErrors.confirm_password}</div>}
                     </div>
                   </div>
 
                   <div className="modal-actions">
-                    <button type="button" className="btn" onClick={() => setIsAddOpen(false)}>Cancel</button>
-                    <button className="btn primary" type="submit">Add Employee</button>
+                    <button type="button" className="btn" onClick={() => setIsAddOpen(false)} disabled={submitLoading}>Cancel</button>
+                    <button className="btn primary" type="submit" disabled={submitLoading}>{submitLoading ? 'Adding...' : 'Add Employee'}</button>
                   </div>
                 </form>
               </div>
@@ -534,7 +672,6 @@ export default function AdminEmployee() {
           </div>
         )}
 
-        {/* Notification */}
         {notification && (
           <div className={`notification notification-${notification.type}`}>
             <div className="notification-icon">✓</div>

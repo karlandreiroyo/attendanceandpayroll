@@ -1,15 +1,10 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import "../AdminPages/admincss/admindashboard.css"; // Use admin layout CSS
-import "../Pages/employeecss/employeepayslips.css";
+import "../AdminPages/admincss/adminDashboard.css"; // Use admin layout CSS
+import "../Pages/employeecss/employeePayslips.css";
 
 export default function EmployeePayslips() {
-  const payslips = [
-    { period: "June 1–15, 2023", issueDate: "June 16, 2023", netPay: "₱12500.00" },
-    { period: "May 16–31, 2023", issueDate: "June 1, 2023", netPay: "₱12500.00" },
-    { period: "May 1–15, 2023", issueDate: "May 16, 2023", netPay: "₱12500.00" },
-    { period: "April 16–30, 2023", issueDate: "May 1, 2023", netPay: "₱12500.00" }
-  ];
+  const payslips = [];
   const [selectedIndex, setSelectedIndex] = useState(0);
   const selected = payslips[selectedIndex] ?? payslips[0];
 
@@ -41,8 +36,8 @@ export default function EmployeePayslips() {
                 if (el) el.classList.toggle("open");
               }}
             >
-              <span className="profile-avatar">EO</span>
-              <span>Ezra Orizal</span>
+              <span className="profile-avatar">U</span>
+              <span>User</span>
             </button>
             <div id="user-popover-pay" className="profile-popover">
               <div className="profile-row">Profile</div>
@@ -90,10 +85,10 @@ export default function EmployeePayslips() {
           <div className="ps-detail-grid">
             <div className="ps-block">
               <div className="ps-subtitle">Employee Information</div>
-              <div className="ps-kv"><span>Name:</span> <span>Ezra Orizal</span></div>
-              <div className="ps-kv"><span>Employee ID:</span> <span>EMP-001</span></div>
-              <div className="ps-kv"><span>Position:</span> <span>Software Developer</span></div>
-              <div className="ps-kv"><span>Department:</span> <span>IT Department</span></div>
+              <div className="ps-kv"><span>Name:</span> <span>User</span></div>
+              <div className="ps-kv"><span>Employee ID:</span> <span>EMP-000</span></div>
+              <div className="ps-kv"><span>Position:</span> <span>Employee</span></div>
+              <div className="ps-kv"><span>Department:</span> <span>General</span></div>
             </div>
 
             <div className="ps-block">
