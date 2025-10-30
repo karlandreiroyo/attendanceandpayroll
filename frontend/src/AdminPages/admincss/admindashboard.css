@@ -494,7 +494,7 @@
 .thead,
 .tr {
   display: grid;
-  grid-template-columns: 3fr 1fr 0.8fr 0.8fr 1fr 140px;
+  grid-template-columns: 3fr 1fr 0.8fr 0.8fr 1fr 160px; /* keep consistent with employee table */
   align-items: center;
   gap: 16px;
 }
@@ -520,6 +520,8 @@
   text-align: right !important;
   justify-self: end;
   white-space: nowrap;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .tbody .tr {

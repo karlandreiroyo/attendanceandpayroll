@@ -44,12 +44,13 @@ export class UsersService {
         return (data as User[])[0];
     }
 
-    async update(id: number, user: Partial<User>): Promise<User> {
+    async update(id: number | string, user: Partial<User>): Promise<User> {
+        // Use user_id as the primary key column name
         const { data, error } = await this.supabaseService.client
-            .from('users') // ✅ remove <User>
+            .from('users')
             .update(user)
-            .eq('id', id)
-            .select('*'); // ✅ needed for updated row
+            .eq('user_id', id)
+            .select('*');
 
         if (error) throw new Error(error.message);
         if (!data || (data as User[]).length === 0)
@@ -58,11 +59,12 @@ export class UsersService {
         return (data as User[])[0];
     }
 
-    async delete(id: number): Promise<{ deleted: boolean }> {
+    async delete(id: number | string): Promise<{ deleted: boolean }> {
+        // Use user_id as the primary key column name
         const { error } = await this.supabaseService.client
-            .from('users') // ✅ remove <User>
+            .from('users')
             .delete()
-            .eq('id', id);
+            .eq('user_id', id);
 
         if (error) throw new Error(error.message);
         return { deleted: true };

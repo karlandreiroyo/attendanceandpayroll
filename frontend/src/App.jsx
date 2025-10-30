@@ -17,7 +17,6 @@ import AdminReports from "./AdminPages/adminReports";
 import EmployeeDashboard from "./Pages/employeeDashboard";
 import EmployeeSchedules from "./Pages/employeeSchedules";
 import EmployeeLeaveRequest from "./Pages/employeeLeaveRequest";
-import EmployeePayslips from "./Pages/employeePayslips";
 
 function App() {
   return (
@@ -43,7 +42,6 @@ function App() {
         <Route path="/employee/dashboard" element={<EmployeeDashboard />} />
         <Route path="/employee/schedules" element={<EmployeeSchedules />} />
         <Route path="/employee/leave-requests" element={<EmployeeLeaveRequest />} />
-        <Route path="/employee/payslips" element={<EmployeePayslips />} />
       </Routes>
     </Router>
   );

@@ -127,17 +127,6 @@ export default function EmployeeDashboard() {
             </div>
             <div className="qc-chevron">›</div>
           </Link>
-
-          <Link className="quick-card" to="/employee/payslips">
-            <div className="qc-left">
-              <div className="qc-icon">📄</div>
-              <div>
-                <div className="qc-title">Payslips</div>
-                <div className="qc-sub">Access and download your payslips</div>
-              </div>
-            </div>
-            <div className="qc-chevron">›</div>
-          </Link>
         </section>
 
         <section className="grid-2">

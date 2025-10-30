@@ -51,7 +51,7 @@ export class UsersController {
     @Body() body: UpdateEmployeeDto,
   ): Promise<User> {
     try {
-      return await this.usersService.update(Number(id), body);
+      return await this.usersService.update(id, body);
     } catch (error) {
       throw new BadRequestException(error.message);
     }
@@ -60,7 +60,7 @@ export class UsersController {
   @Delete(':id')
   async delete(@Param('id') id: string) {
     try {
-      return await this.usersService.delete(Number(id));
+      return await this.usersService.delete(id);
     } catch (error) {
       throw new BadRequestException(error.message);
     }

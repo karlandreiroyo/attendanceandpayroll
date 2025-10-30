@@ -92,66 +92,72 @@
 }
 
 /* ----- Header Row & Table Rows ----- */
-.thead,
-.tr {
-  display: grid;
-  grid-template-columns: 3fr 1fr 0.8fr 0.8fr 1fr 140px; /* fixed Actions width to avoid wrap */
-  align-items: center;
-  gap: 16px;
-}
+  .thead,
+  .tr {
+    display: grid;
+    grid-template-columns: 3fr 1fr 0.8fr 0.8fr 1fr 180px; /* widen Actions to prevent wrap */
+    align-items: center;
+    gap: 16px;
+  }
 
-.thead {
-  background: #f9fafb;
-  color: #6b7280;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 16px 20px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
+  .thead {
+    background: #f9fafb;
+    color: #6b7280;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 16px 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
 
-.thead > div {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  white-space: nowrap; /* keep headers on one line */
-}
+  .thead > div {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    white-space: nowrap; /* keep headers on one line */
+  }
 
-.thead .right {
-  text-align: right !important;
-}
+  .thead .right {
+    text-align: right !important;
+  }
 
-.actions-header {
-  text-align: right !important;
-  justify-self: end;
-  white-space: nowrap;
-}
+  .actions-header {
+    text-align: right !important;
+    white-space: nowrap;
+    justify-self: end;
+    display: flex;
+    justify-content: flex-end;
+  }
 
-.tbody .tr {
-  padding: 16px 20px;
-  border-top: 1px solid #f1f5f9;
-  background: #fff;
-  transition: background-color 0.2s ease;
-}
+ 
 
-.tbody .tr > div {
-  display: flex;
-  align-items: center;
-  min-width: 0; /* Allow content to shrink */
-  overflow: hidden;
-}
+  .tbody .tr {
+    padding: 16px 20px;
+    border-top: 1px solid #f1f5f9;
+    background: #fff;
+    transition: background-color 0.2s ease;
+  }
 
-.tbody .tr:hover {
-  background: #f8fafc;
-}
+  .tbody .tr > div {
+    display: flex;
+    align-items: center;
+    min-width: 0; /* Allow content to shrink */
+    overflow: hidden;
+  }
 
-.right {
-  text-align: right;
-}
+  .tbody .tr:hover {
+    background: #f8fafc;
+  }
 
-.thead .right {
-  text-align: right !important;
-}
+  .right {
+    text-align: right;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .thead .right {
+    text-align: right !important;
+  }
 
 /* ----- Employee Info ----- */
 .emp {
@@ -296,6 +302,11 @@
   color: #0b7a2b;
 }
 
+.status.danger {
+  background: #fee2e2; /* light red */
+  color: #991b1b;      /* dark red text */
+}
+
 /* ----- Role Badge ----- */
 .role-badge {
   display: inline-block;
@@ -323,6 +334,54 @@
   font-size: 12px;
   margin-top: 4px;
   font-weight: 500;
+  word-wrap: break-word;
+  max-width: 100%;
+}
+
+/* ----- Input Error State ----- */
+.detail-input.error,
+.detail-select.error {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+.detail-input.error:focus,
+.detail-select.error:focus {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+/* ----- Password Input Container ----- */
+.password-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-container .detail-input {
+  padding-right: 40px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background 0.2s ease;
+  font-size: 16px;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+.password-toggle:hover {
+  background: #f3f4f6;
 }
 
 /* ----- Detail Row Two Columns ----- */
@@ -736,7 +795,7 @@
 @media (max-width: 1200px) {
   .thead,
   .tr {
-    grid-template-columns: 2.5fr 0.8fr 0.6fr 0.6fr 0.8fr 130px;
+    grid-template-columns: 2.5fr 0.8fr 0.6fr 0.6fr 0.8fr 160px;
     gap: 12px;
   }
 }
@@ -744,7 +803,7 @@
 @media (max-width: 1000px) {
   .thead,
   .tr {
-    grid-template-columns: 2fr 0.7fr 0.5fr 0.5fr 0.7fr 120px;
+    grid-template-columns: 2fr 0.7fr 0.5fr 0.5fr 0.7fr 150px;
     gap: 10px;
   }
   
@@ -761,7 +820,7 @@
 @media (max-width: 800px) {
   .thead,
   .tr {
-    grid-template-columns: 1.8fr 0.6fr 0.4fr 0.4fr 0.6fr 110px;
+    grid-template-columns: 1.8fr 0.6fr 0.4fr 0.4fr 0.6fr 140px;
     gap: 8px;
   }
   
@@ -792,7 +851,7 @@
 @media (max-width: 600px) {
   .thead,
   .tr {
-    grid-template-columns: 1.5fr 0.5fr 0.3fr 0.3fr 0.5fr 100px;
+    grid-template-columns: 1.5fr 0.5fr 0.3fr 0.3fr 0.5fr 130px;
     gap: 6px;
   }
   
