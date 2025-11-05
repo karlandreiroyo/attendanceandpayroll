@@ -194,7 +194,7 @@ export default function AdminEmployee() {
 
     try {
       const res = await fetch(`${API_BASE_URL}/users/${userId}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(body),
@@ -293,7 +293,7 @@ export default function AdminEmployee() {
 
   const handleInputChange = (field, value) => {
     let processedValue = value;
-    
+
     // Auto-capitalize first letter for names and remove numbers/special characters
     if (field === 'first_name' || field === 'last_name') {
       // Remove all non-letter characters (keep only letters and spaces)
@@ -303,7 +303,7 @@ export default function AdminEmployee() {
         processedValue = processedValue.charAt(0).toUpperCase() + processedValue.slice(1);
       }
     }
-    
+
     // Auto-add +63 prefix for phone and only allow numbers
     if (field === 'phone') {
       // Remove all non-numeric characters
@@ -317,13 +317,13 @@ export default function AdminEmployee() {
         processedValue = '+63' + numbersOnly.slice(0, 10);
       }
     }
-    
+
     setFormData(prev => ({ ...prev, [field]: processedValue }));
-    
+
     // Live validation
     const errors = { ...formErrors };
     let error = null;
-    
+
     switch (field) {
       case 'first_name':
         error = validateFirstName(processedValue);
@@ -351,36 +351,36 @@ export default function AdminEmployee() {
         error = validateConfirmPassword(processedValue);
         break;
     }
-    
+
     if (error) {
       errors[field] = error;
     } else {
       delete errors[field];
     }
-    
+
     setFormErrors(errors);
   };
 
   function validateAddForm() {
     const errors = {};
     const normalize = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
-    
+
     const firstNameError = validateFirstName(formData.first_name);
     if (firstNameError) errors.first_name = firstNameError;
-    
+
     const lastNameError = validateLastName(formData.last_name);
     if (lastNameError) errors.last_name = lastNameError;
-    
+
     const emailError = validateEmail(formData.email);
     if (emailError) errors.email = emailError;
-    
+
     const phoneError = validatePhone(formData.phone);
     if (phoneError) errors.phone = phoneError;
-    
+
     if (!formData.dept) errors.dept = "Department is required";
     if (!formData.position) errors.position = "Position is required";
     if (!formData.status) errors.status = "Status is required";
-    
+
     const usernameError = validateUsername(formData.username);
     if (usernameError) errors.username = usernameError;
     // Duplicate username check (case-insensitive)
@@ -389,13 +389,13 @@ export default function AdminEmployee() {
     if (!errors.username && desiredUsername && usernameExists) {
       errors.username = 'Username already exists';
     }
-    
+
     const passwordError = validatePassword(formData.password);
     if (passwordError) errors.password = passwordError;
-    
+
     const confirmPasswordError = validateConfirmPassword(formData.confirm_password);
     if (confirmPasswordError) errors.confirm_password = confirmPasswordError;
-    
+
     // Duplicate name check (first_name + last_name, case-insensitive)
     const desiredFullName = normalize(`${formData.first_name} ${formData.last_name}`);
     const nameExists = rows.some(r => normalize(r.name) === desiredFullName);
@@ -403,7 +403,7 @@ export default function AdminEmployee() {
       errors.first_name = errors.first_name || 'An account with this name already exists';
       errors.last_name = errors.last_name || 'An account with this name already exists';
     }
-    
+
     return errors;
   }
 
@@ -487,7 +487,7 @@ export default function AdminEmployee() {
   }
 
   function toggleEmployeeStatus(id) {
-    setRows(prev => prev.map(r => 
+    setRows(prev => prev.map(r =>
       r.id === id ? { ...r, status: r.status === "Active" ? "Inactive" : "Active" } : r
     ));
   }
@@ -496,18 +496,18 @@ export default function AdminEmployee() {
     if (!window.confirm("Are you sure you want to delete this employee?")) {
       return;
     }
-    
+
     try {
       const res = await fetch(`${API_BASE_URL}/users/${id}`, {
         method: 'DELETE',
         credentials: 'include',
       });
-      
+
       if (!res.ok) {
         const errText = await res.text();
         throw new Error(errText || `Failed to delete employee (${res.status})`);
       }
-      
+
       setRows(prev => prev.filter(x => (x.user_id || x.id) !== id));
       setNotification({ type: 'success', message: 'Employee deleted successfully' });
       setTimeout(() => setNotification(null), 3000);
@@ -598,7 +598,7 @@ export default function AdminEmployee() {
               <div>Role</div>
               <div>Status</div>
               <div>Join Date</div>
-              
+
             </div>
             <div className="tbody">
               {loading ? (
@@ -625,8 +625,8 @@ export default function AdminEmployee() {
                     <div>{r.joinDate}</div>
                     <div className="right">
                       <div className="actions-dropdown">
-                        <button 
-                          className="actions-btn" 
+                        <button
+                          className="actions-btn"
                           onClick={() => openView(r)}
                         >
                           Details
@@ -647,7 +647,7 @@ export default function AdminEmployee() {
                 <div className="modal-title">Edit Employee</div>
                 <button className="icon-btn" onClick={() => setIsEditOpen(false)}>✖</button>
               </div>
-              
+
               <div className="employee-details">
                 <div className="employee-header">
                   <div className="employee-avatar-large">
@@ -668,33 +668,33 @@ export default function AdminEmployee() {
                     <div className="detail-row two">
                       <div className="detail-item">
                         <span className="detail-label">First Name</span>
-                        <input 
-                          name="first_name" 
+                        <input
+                          name="first_name"
                           value={editFirstName}
                           onChange={(e) => setEditFirstName(e.target.value)}
                           className="detail-input"
-                          required 
+                          required
                         />
                       </div>
                       <div className="detail-item">
                         <span className="detail-label">Last Name</span>
-                        <input 
-                          name="last_name" 
+                        <input
+                          name="last_name"
                           value={editLastName}
                           onChange={(e) => setEditLastName(e.target.value)}
                           className="detail-input"
-                          required 
+                          required
                         />
                       </div>
                     </div>
                     <div className="detail-item">
                       <span className="detail-label">Email Address</span>
-                      <input 
-                        type="email" 
-                        name="email" 
-                        defaultValue={selected.email} 
+                      <input
+                        type="email"
+                        name="email"
+                        defaultValue={selected.email}
                         className="detail-input"
-                        required 
+                        required
                       />
                     </div>
                     <div className="detail-item">
@@ -779,7 +779,7 @@ export default function AdminEmployee() {
                 <div className="modal-title">Add Employee</div>
                 <button className="icon-btn" onClick={() => setIsAddOpen(false)}>✖</button>
               </div>
-              
+
               <div className="employee-details">
 
                 <form onSubmit={handleAdd} className="details-grid" autoComplete="off">
@@ -788,48 +788,48 @@ export default function AdminEmployee() {
                     <div className="detail-row two">
                       <div className="detail-item">
                         <span className="detail-label">First Name</span>
-                        <input 
-                          name="first_name" 
-                          placeholder="Enter first name" 
+                        <input
+                          name="first_name"
+                          placeholder="Enter first name"
                           className={`detail-input ${formErrors.first_name ? 'error' : ''}`}
                           value={formData.first_name}
                           onChange={(e) => handleInputChange('first_name', e.target.value)}
-                          required 
+                          required
                         />
                         {formErrors.first_name && <div className="field-error">{formErrors.first_name}</div>}
                       </div>
                       <div className="detail-item">
                         <span className="detail-label">Last Name</span>
-                        <input 
-                          name="last_name" 
-                          placeholder="Enter last name" 
+                        <input
+                          name="last_name"
+                          placeholder="Enter last name"
                           className={`detail-input ${formErrors.last_name ? 'error' : ''}`}
                           value={formData.last_name}
                           onChange={(e) => handleInputChange('last_name', e.target.value)}
-                          required 
+                          required
                         />
                         {formErrors.last_name && <div className="field-error">{formErrors.last_name}</div>}
                       </div>
                     </div>
                     <div className="detail-item">
                       <span className="detail-label">Email Address</span>
-                      <input 
-                        type="email" 
-                        name="email" 
-                        placeholder="Enter email address" 
+                      <input
+                        type="email"
+                        name="email"
+                        placeholder="Enter email address"
                         className={`detail-input ${formErrors.email ? 'error' : ''}`}
                         value={formData.email}
                         onChange={(e) => handleInputChange('email', e.target.value)}
-                        required 
+                        required
                       />
                       {formErrors.email && <div className="field-error">{formErrors.email}</div>}
                     </div>
                     <div className="detail-row two">
                       <div className="detail-item">
                         <span className="detail-label">Phone </span>
-                        <input 
-                          name="phone" 
-                          placeholder="+63XXXXXXXXXX" 
+                        <input
+                          name="phone"
+                          placeholder="+63XXXXXXXXXX"
                           className={`detail-input ${formErrors.phone ? 'error' : ''}`}
                           value={formData.phone}
                           onChange={(e) => handleInputChange('phone', e.target.value)}
@@ -838,9 +838,9 @@ export default function AdminEmployee() {
                       </div>
                       <div className="detail-item">
                         <span className="detail-label">Address </span>
-                        <input 
-                          name="address" 
-                          placeholder="Enter address" 
+                        <input
+                          name="address"
+                          placeholder="Enter address"
                           className="detail-input"
                           value={formData.address}
                           onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
@@ -853,8 +853,8 @@ export default function AdminEmployee() {
                     <h3>Work Information</h3>
                     <div className="detail-item">
                       <span className="detail-label">Department</span>
-                      <select 
-                        name="dept" 
+                      <select
+                        name="dept"
                         className={`detail-select ${formErrors.dept ? 'error' : ''}`}
                         value={formData.dept}
                         onChange={(e) => {
@@ -881,8 +881,8 @@ export default function AdminEmployee() {
                     </div>
                     <div className="detail-item">
                       <span className="detail-label">Position</span>
-                      <select 
-                        name="position" 
+                      <select
+                        name="position"
                         className={`detail-select ${formErrors.position ? 'error' : ''}`}
                         value={formData.position}
                         onChange={(e) => {
@@ -930,8 +930,8 @@ export default function AdminEmployee() {
                     </div>
                     <div className="detail-item">
                       <span className="detail-label">Role</span>
-                      <select 
-                        name="role" 
+                      <select
+                        name="role"
                         className="detail-select"
                         value={formData.role}
                         onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value }))}
@@ -947,34 +947,34 @@ export default function AdminEmployee() {
                     <h3>Account</h3>
                     <div className="detail-item">
                       <span className="detail-label">Username</span>
-                      <input 
-                        name="username" 
-                        placeholder="Choose a username" 
+                      <input
+                        name="username"
+                        placeholder="Choose a username"
                         className={`detail-input ${formErrors.username ? 'error' : ''}`}
                         value={formData.username}
                         onChange={(e) => handleInputChange('username', e.target.value)}
                         autoComplete="off"
                         pattern="\S+"
                         title="Spaces are not allowed"
-                        required 
+                        required
                       />
                       {formErrors.username && <div className="field-error">{formErrors.username}</div>}
                     </div>
                     <div className="detail-item">
                       <span className="detail-label">Password</span>
                       <div className="password-input-container">
-                        <input 
-                          type={showPassword ? "text" : "password"} 
-                          name="password" 
-                          placeholder="Create a password" 
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          name="password"
+                          placeholder="Create a password"
                           className={`detail-input ${formErrors.password ? 'error' : ''}`}
                           value={formData.password}
                           onChange={(e) => handleInputChange('password', e.target.value)}
                           autoComplete="new-password"
-                          required 
+                          required
                         />
-                        <button 
-                          type="button" 
+                        <button
+                          type="button"
                           className="password-toggle"
                           onClick={() => setShowPassword(!showPassword)}
                         >
@@ -986,18 +986,18 @@ export default function AdminEmployee() {
                     <div className="detail-item">
                       <span className="detail-label">Confirm Password</span>
                       <div className="password-input-container">
-                        <input 
-                          type={showConfirmPassword ? "text" : "password"} 
-                          name="confirm_password" 
-                          placeholder="Re-enter password" 
+                        <input
+                          type={showConfirmPassword ? "text" : "password"}
+                          name="confirm_password"
+                          placeholder="Re-enter password"
                           className={`detail-input ${formErrors.confirm_password ? 'error' : ''}`}
                           value={formData.confirm_password}
                           onChange={(e) => handleInputChange('confirm_password', e.target.value)}
                           autoComplete="new-password"
-                          required 
+                          required
                         />
-                        <button 
-                          type="button" 
+                        <button
+                          type="button"
                           className="password-toggle"
                           onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                         >
@@ -1025,7 +1025,7 @@ export default function AdminEmployee() {
                 <div className="modal-title">Employee Details</div>
                 <button className="icon-btn" onClick={() => setIsViewOpen(false)}>✖</button>
               </div>
-              
+
               <div className="employee-details">
                 <div className="employee-header">
                   <div className="employee-avatar-large">
