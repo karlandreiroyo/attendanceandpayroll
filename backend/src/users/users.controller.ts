@@ -1,16 +1,5 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Delete,
-  Body,
-  Param,
-  BadRequestException,
-  UsePipes,
-  ValidationPipe,
-} from '@nestjs/common';
-import { UsersService, User } from './users.service';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UsePipes, ValidationPipe } from '@nestjs/common';
+import { UsersService } from './users.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 
@@ -18,51 +7,27 @@ import { UpdateEmployeeDto } from './dto/update-employee.dto';
 export class UsersController {
   constructor(private readonly usersService: UsersService) { }
 
-  @Get()
-  async findAll(): Promise<User[]> {
-    try {
-      return await this.usersService.findAll();
-    } catch (error) {
-      throw new BadRequestException(error.message);
-    }
-  }
-
   @Post()
-  @UsePipes(new ValidationPipe())
-  async create(@Body() body: CreateEmployeeDto): Promise<User> {
-    try {
-      // Set default values
-      const employeeData = {
-        ...body,
-        role: body.role || 'employee',
-        status: body.status || 'Active',
-        join_date: body.join_date || new Date().toISOString().split('T')[0],
-      };
-      return await this.usersService.create(employeeData);
-    } catch (error) {
-      throw new BadRequestException(error.message);
-    }
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  create(@Body() dto: CreateEmployeeDto) {
+    return this.usersService.create(dto);
   }
 
-  @Put(':id')
-  @UsePipes(new ValidationPipe())
-  async update(
-    @Param('id') id: string,
-    @Body() body: UpdateEmployeeDto,
-  ): Promise<User> {
-    try {
-      return await this.usersService.update(id, body);
-    } catch (error) {
-      throw new BadRequestException(error.message);
-    }
+  @Get()
+  findAll() {
+    return this.usersService.findAll();
+  }
+
+  @Patch(':id')
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  update(@Param('id') id: string, @Body() dto: UpdateEmployeeDto) {
+    // ✅ Ensure correct type (string) for Supabase UUID
+    return this.usersService.update(id, dto);
   }
 
   @Delete(':id')
-  async delete(@Param('id') id: string) {
-    try {
-      return await this.usersService.delete(id);
-    } catch (error) {
-      throw new BadRequestException(error.message);
-    }
+  remove(@Param('id') id: string) {
+    // ✅ Ensure correct type (string)
+    return this.usersService.remove(id);
   }
 }
