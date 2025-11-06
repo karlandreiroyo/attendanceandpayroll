@@ -1,10 +1,25 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "../Pages/employeecss/payrollLogin.css";
 import { API_BASE_URL } from "../config/api";
 
 export default function PayrollLogin() {
   const navigate = useNavigate();
+
+  // Check if user is already logged in and redirect them
+  useEffect(() => {
+    const userRole = sessionStorage.getItem("userRole");
+    const username = sessionStorage.getItem("username");
+
+    if (userRole && username) {
+      // User is already logged in, redirect to their dashboard
+      if (userRole === "admin") {
+        navigate("/admin/dashboard", { replace: true });
+      } else {
+        navigate("/employee/dashboard", { replace: true });
+      }
+    }
+  }, [navigate]);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");

@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import "../AdminPages/admincss/adminDashboard.css";
 import "../AdminPages/admincss/adminEmployee.css";
 import { API_BASE_URL } from "../config/api";
+import Papa from 'papaparse';
 
 export default function AdminEmployee() {
   const navigate = useNavigate();
@@ -10,6 +11,9 @@ export default function AdminEmployee() {
   const isActive = (path) => location.pathname.startsWith(path);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isBatchAddOpen, setIsBatchAddOpen] = useState(false);
+  const [batchAddData, setBatchAddData] = useState([]);
+  const [batchAddFileName, setBatchAddFileName] = useState("");
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -51,6 +55,278 @@ export default function AdminEmployee() {
     const d = typeof value === 'string' ? new Date(value) : value;
     if (Number.isNaN(d.getTime())) return String(value);
     return d.toISOString().slice(0, 10);
+  };
+
+  const handleDownloadCSV = () => {
+    const headers = [
+      "user_id", "first_name", "last_name", "username", "email", 
+      "role", "dept", "position", "status", "joinDate", "address"
+    ];
+
+    const csvData = rows.map(row => 
+      headers.map(header => {
+        let value = row[header] === null || row[header] === undefined ? '' : String(row[header]);
+        if (/[",\n]/.test(value)) {
+          value = `"${value.replace(/"/g, '""')}"`;
+        }
+        return value;
+      }).join(',')
+    );
+
+    const csvContent = [headers.join(','), ...csvData].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", "employees.csv");
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const handleDownloadTemplate = () => {
+    const headers = [
+      "first_name", "last_name", "email", "phone", "dept", "position", 
+      "status", "role", "username", "password", "address"
+    ];
+    const csvContent = headers.join(',');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", "employee_template.csv");
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const handleBatchFileSelect = (event) => {
+    const file = event.target.files[0];
+    if (!file) {
+      setBatchAddData([]);
+      setBatchAddFileName("");
+      return;
+    }
+    setBatchAddFileName(file.name);
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        setBatchAddData(results.data);
+      },
+      error: (error) => {
+        console.error("Error parsing batch CSV:", error);
+        setNotification({ type: 'error', message: 'Failed to parse CSV file for batch add.' });
+        setTimeout(() => setNotification(null), 4000);
+      }
+    });
+    event.target.value = null; // Reset file input
+  };
+
+  const handleProcessBatchAdd = async () => {
+    if (batchAddData.length === 0) {
+      setNotification({ type: 'error', message: 'No employees to add. Please upload a valid CSV.' });
+      setTimeout(() => setNotification(null), 3000);
+      return;
+    }
+
+    setSubmitLoading(true);
+    let successCount = 0;
+    let errorCount = 0;
+    const addedEmployees = [];
+
+    for (const employee of batchAddData) {
+      const payload = {
+        username: employee.username,
+        password: employee.password,
+        first_name: employee.first_name,
+        last_name: employee.last_name,
+        email: employee.email,
+        department: employee.dept,
+        position: employee.position,
+        status: employee.status || "Active",
+        phone: employee.phone || undefined,
+        address: employee.address || undefined,
+        role: employee.role === 'admin' ? 'admin' : 'employee',
+      };
+
+      if (!payload.username || !payload.password || !payload.first_name || !payload.last_name || !payload.email) {
+        errorCount++;
+        continue;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/users`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          credentials: "include",
+        });
+
+        if (res.ok) {
+          successCount++;
+          const created = await res.json();
+          addedEmployees.push({
+            id: created.id || created.user_id,
+            user_id: created.user_id || created.id,
+            name: [created.first_name, created.last_name].filter(Boolean).join(" ") || created.username,
+            first_name: created.first_name || '',
+            last_name: created.last_name || '',
+            username: created.username,
+            role: created.role || 'employee',
+            email: created.email,
+            dept: created.department,
+            position: created.position,
+            status: created.status || "Active",
+            joinDate: formatJoinDate(created.join_date),
+            address: created.address || '',
+          });
+        } else {
+          errorCount++;
+        }
+      } catch (err) {
+        errorCount++;
+        console.error("Error adding employee via batch:", err);
+      }
+    }
+
+    if (addedEmployees.length > 0) {
+      setRows(prev => [...prev, ...addedEmployees]);
+    }
+
+    setSubmitLoading(false);
+    setIsBatchAddOpen(false);
+    setBatchAddData([]);
+    setBatchAddFileName("");
+    setNotification({
+      type: successCount > 0 ? 'success' : 'error',
+      message: `Batch add complete. ${successCount} added, ${errorCount} failed.`
+    });
+    setTimeout(() => setNotification(null), 4000);
+  };
+
+  const handleUploadCSV = (event) => {
+    const file = event.target.files[0];
+    if (!file) {
+      return;
+    }
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const updatedRows = results.data;
+        // Basic validation: Check for required headers
+        const requiredHeaders = ["user_id", "first_name", "last_name", "username"];
+        const fileHeaders = results.meta.fields;
+        const hasRequiredHeaders = requiredHeaders.every(h => fileHeaders.includes(h));
+
+        if (!hasRequiredHeaders) {
+          setNotification({ type: 'error', message: 'Invalid CSV format. Missing required headers.' });
+          setTimeout(() => setNotification(null), 4000);
+          return;
+        }
+
+        // Create a map for quick lookups
+        const updatedRowsMap = new Map();
+        updatedRows.forEach(row => {
+          if (row.user_id) {
+            updatedRowsMap.set(String(row.user_id), row);
+          }
+        });
+
+        // Merge updates into existing rows (in-memory only)
+        let changesCount = 0;
+        const mergedRows = rows.map(existingRow => {
+          const updatedRow = updatedRowsMap.get(String(existingRow.user_id));
+          if (updatedRow) {
+            changesCount++;
+            // Merge fields, keeping existing ones if not in CSV
+            return { ...existingRow, ...updatedRow };
+          }
+          return existingRow;
+        });
+
+        setRows(mergedRows);
+        if (changesCount > 0) {
+          setNotification({ type: 'success', message: `${changesCount} employee(s) updated in table (not saved to server).` });
+        } else {
+          setNotification({ type: 'error', message: 'No matching employees found in the CSV to update.' });
+        }
+        setTimeout(() => setNotification(null), 3000);
+      },
+      error: (error) => {
+        console.error("Error parsing CSV:", error);
+        setNotification({ type: 'error', message: 'Failed to parse CSV file.' });
+        setTimeout(() => setNotification(null), 4000);
+      }
+    });
+
+    // Reset file input to allow re-uploading the same file
+    event.target.value = null;
+  };
+
+  const handleBatchUpdate = async (updatedRows) => {
+    setSubmitLoading(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const row of updatedRows) {
+      const userId = row.user_id || row.id;
+      if (!userId) continue;
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/users/${userId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(row),
+        });
+
+        if (res.ok) {
+          successCount++;
+        } else {
+          errorCount++;
+        }
+      } catch (err) {
+        errorCount++;
+        console.error(`Failed to update user ${userId}:`, err);
+      }
+    }
+
+    setSubmitLoading(false);
+    setNotification({
+      type: 'success',
+      message: `CSV import complete. ${successCount} updated, ${errorCount} failed.`
+    });
+    setTimeout(() => setNotification(null), 4000);
+
+    // Refresh data from server after update
+    // This is a simplified way to refetch. You might have a dedicated function for this.
+    const res = await fetch(`${API_BASE_URL}/users`, { credentials: "include" });
+    const users = await res.json();
+    const mapped = (users || []).map((u) => ({
+      id: u.id || u.user_id,
+      user_id: u.user_id || u.id,
+      name: [u.first_name, u.last_name].filter(Boolean).join(" ") || u.username,
+      first_name: u.first_name || '',
+      last_name: u.last_name || '',
+      username: u.username,
+      role: u.role || 'employee',
+      email: u.email,
+      dept: u.department,
+      position: u.position,
+      status: u.status || "Active",
+      joinDate: formatJoinDate(u.join_date),
+      address: u.address || '',
+    }));
+    setRows(mapped);
   };
 
   // Department -> Positions mapping based on provided positions list
@@ -571,6 +847,8 @@ export default function AdminEmployee() {
             />
             <div className="header-actions">
               <button className="btn outline" onClick={() => setFilterOpen(v => !v)}>Filter</button>
+              <button className="btn outline" onClick={handleDownloadCSV}>Export CSV</button>
+              <button className="btn outline" onClick={() => setIsBatchAddOpen(true)}>Batch Add</button>
               <button className="btn primary" onClick={() => setIsAddOpen(true)} disabled={loading}>Add Employee</button>
             </div>
           </div>
@@ -1013,6 +1291,32 @@ export default function AdminEmployee() {
                     <button className="btn primary" type="submit" disabled={submitLoading}>{submitLoading ? 'Adding...' : 'Add Employee'}</button>
                   </div>
                 </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isBatchAddOpen && (
+          <div className="modal" role="dialog">
+            <div className="modal-body">
+              <div className="modal-header">
+                <div className="modal-title">Batch Add Employees</div>
+                <button className="icon-btn" onClick={() => setIsBatchAddOpen(false)}>✖</button>
+              </div>
+              <div className="batch-add-content">
+                <p>Upload a CSV file with new employee data. Please use the provided template to ensure correct formatting.</p>
+                <button className="btn outline" onClick={handleDownloadTemplate}>Download Template</button>
+                <div className="batch-add-upload-area">
+                  <label htmlFor="batch-csv-upload" className="btn primary">Upload CSV File</label>
+                  <input type="file" id="batch-csv-upload" style={{ display: 'none' }} accept=".csv" onChange={handleBatchFileSelect} />
+                  <span>{batchAddFileName || "No file chosen"}</span>
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn" onClick={() => setIsBatchAddOpen(false)} disabled={submitLoading}>Cancel</button>
+                <button className="btn primary" onClick={handleProcessBatchAdd} disabled={submitLoading || batchAddData.length === 0}>
+                  {submitLoading ? 'Adding...' : `Add ${batchAddData.length} Employees`}
+                </button>
               </div>
             </div>
           </div>

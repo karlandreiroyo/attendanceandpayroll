@@ -1,12 +1,27 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import "../AdminPages/admincss/adminDashboard.css"; // Use admin layout CSS
 import "../Pages/employeecss/employeeDashboard.css";
 
 export default function EmployeeDashboard() {
+  const navigate = useNavigate();
   const [view, setView] = useState("Monthly");
   const [currentDate] = useState(new Date());
   const [isTopUserOpen, setIsTopUserOpen] = useState(false);
+
+  // Session destroyer function
+  const handleLogout = () => {
+    // Clear all session storage items
+    sessionStorage.removeItem("userRole");
+    sessionStorage.removeItem("username");
+    sessionStorage.removeItem("loginTime");
+    
+    // Clear any other session-related data
+    sessionStorage.clear();
+    
+    // Redirect to login page
+    navigate("/");
+  };
 
   useEffect(() => {
     const today = new Date();
@@ -93,7 +108,7 @@ export default function EmployeeDashboard() {
               className={`profile-popover${isTopUserOpen ? " open" : ""}`}
             >
               <div className="profile-row">Profile</div>
-              <div className="profile-row" onClick={() => (window.location.href = "/")}>Log out</div>
+              <div className="profile-row" onClick={handleLogout}>Log out</div>
             </div>
           </div>
         </header>
@@ -122,7 +137,18 @@ export default function EmployeeDashboard() {
               <div className="qc-icon">⏱️</div>
               <div>
                 <div className="qc-title">Leave Requests</div>
-                <div className="qc-sub">Request time off or report absence</div>
+                <div className="qc-sub">Request time o`ff or report absence</div>
+              </div>
+            </div>
+            <div className="qc-chevron">›</div>
+          </Link>
+
+          <Link className="quick-card" to="/employee/payslips">
+            <div className="qc-left">
+              <div className="qc-icon">📄</div>
+              <div>
+                <div className="qc-title">Payslips</div>
+                <div className="qc-sub">Access and download your payslips</div>
               </div>
             </div>
             <div className="qc-chevron">›</div>

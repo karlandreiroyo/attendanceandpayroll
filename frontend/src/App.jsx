@@ -1,8 +1,6 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 
-
-
 import PayrollLogin from "./Pages/PayrollLogin";
 import AdminDashboard from "./AdminPages/adminDashboard";
 import AdminEmployee from "./AdminPages/adminEmployee";
@@ -12,11 +10,12 @@ import AdminOvertime from "./AdminPages/adminOvertime";
 import AdminPayroll from "./AdminPages/adminPayroll";
 import AdminReports from "./AdminPages/adminReports";
 
-
 // Unified login is used for both admin and employee
 import EmployeeDashboard from "./Pages/employeeDashboard";
 import EmployeeSchedules from "./Pages/employeeSchedules";
 import EmployeeLeaveRequest from "./Pages/employeeLeaveRequest";
+import EmployeePayslips from "./Pages/employeePayslips";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
   return (
@@ -24,24 +23,101 @@ function App() {
 
     <Router>
       <Routes>
-
         <Route path="/" element={<PayrollLogin />} />
-
-
         <Route path="/admin" element={<PayrollLogin />} />
-        <Route path="/admin/dashboard" element={<AdminDashboard />} />
-        <Route path="/admin/employee" element={<AdminEmployee />} />
-        <Route path="/admin/schedules" element={<AdminSchedules />} />
-        <Route path="/admin/attendance" element={<AdminAttendance />} />
-        <Route path="/admin/overtime" element={<AdminOvertime />} />
-        <Route path="/admin/payroll" element={<AdminPayroll />} />
-        <Route path="/admin/reports" element={<AdminReports />} />
-
-
         <Route path="/employee" element={<PayrollLogin />} />
-        <Route path="/employee/dashboard" element={<EmployeeDashboard />} />
-        <Route path="/employee/schedules" element={<EmployeeSchedules />} />
-        <Route path="/employee/leave-requests" element={<EmployeeLeaveRequest />} />
+
+        {/* Protected Admin Routes */}
+        <Route 
+          path="/admin/dashboard" 
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminDashboard />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/admin/employee" 
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminEmployee />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/admin/schedules" 
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminSchedules />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/admin/attendance" 
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminAttendance />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/admin/overtime" 
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminOvertime />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/admin/payroll" 
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminPayroll />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/admin/reports" 
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminReports />
+            </ProtectedRoute>
+          } 
+        />
+
+        {/* Protected Employee Routes */}
+        <Route 
+          path="/employee/dashboard" 
+          element={
+            <ProtectedRoute requiredRole="employee">
+              <EmployeeDashboard />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/employee/schedules" 
+          element={
+            <ProtectedRoute requiredRole="employee">
+              <EmployeeSchedules />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/employee/leave-requests" 
+          element={
+            <ProtectedRoute requiredRole="employee">
+              <EmployeeLeaveRequest />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/employee/payslips" 
+          element={
+            <ProtectedRoute requiredRole="employee">
+              <EmployeePayslips />
+            </ProtectedRoute>
+          } 
+        />
       </Routes>
     </Router>
   );
