@@ -1,44 +1,38 @@
-// auth.service.ts
-import { Injectable } from '@nestjs/common';
-import { SupabaseService } from '../supabase/supabase.service';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly supabaseService: SupabaseService) { }
+  private supabase: SupabaseClient;
+
+  constructor() {
+    const url = process.env.SUPABASE_URL!;
+    const key = process.env.SUPABASE_KEY!;
+    if (!url || !key) throw new Error('Missing Supabase credentials');
+    this.supabase = createClient(url, key);
+  }
 
   async login(username: string, password: string) {
-    const { data, error } = await this.supabaseService
-      .getClient()
+    const { data, error } = await this.supabase
       .from('users')
       .select('*')
-      .eq('username', username) // ✅ only fetch where username matches
-      .single(); // ✅ expect only one record
+      .eq('username', username)
+      .eq('password', password)
+      .single();
 
     if (error || !data) {
-      throw new Error('User not found');
+      throw new UnauthorizedException('Invalid username or password');
     }
 
-    // Compare password (no hashing yet)
-    if (data.password !== password) {
-      throw new Error('Invalid password');
-    }
-
-    // Check if account is active
-    if (data.status !== 'Active') {
-      throw new Error('Account is inactive');
-    }
-
-    // Successful login
+    // ✅ Ensure the "role" column exists in your Supabase "users" table
+    //    (values should be 'admin' or 'employee')
     return {
       success: true,
       message: 'Login successful',
       user: {
-        id: data.user_id,
+        id: data.id,
         username: data.username,
         role: data.role || 'employee',
-        first_name: data.first_name,
-        last_name: data.last_name,
-        department: data.department,
       },
     };
   }

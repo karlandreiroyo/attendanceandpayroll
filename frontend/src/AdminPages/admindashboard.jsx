@@ -6,14 +6,24 @@ export default function AdminDashboard() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Helper to check active sidebar link
   const isActive = (path) => location.pathname.startsWith(path);
 
-  // Employee data will be fetched from API
-  const employees = useMemo(() => [], []);
+  // Dummy data (replace with API/data fetching later)
+  const employees = useMemo(() => [
+    { id: 1, name: "John Doe" },
+    { id: 2, name: "Jane Smith" },
+  ], []);
 
-  const attendanceData = useMemo(() => [], []);
+  const attendanceData = useMemo(() => [
+    { id: 1, status: "Present" },
+    { id: 2, status: "Late" },
+  ], []);
 
-  const overtimeRequests = useMemo(() => [], []);
+  const overtimeRequests = useMemo(() => [
+    { id: 1, status: "Pending" },
+  ], []);
 
   const dashboardStats = useMemo(() => {
     const totalEmployees = employees.length;
@@ -22,19 +32,23 @@ export default function AdminDashboard() {
     const absentToday = attendanceData.filter(a => a.status === "Absent").length;
     const pendingOvertime = overtimeRequests.filter(o => o.status === "Pending").length;
 
-    return {
-      totalEmployees,
-      presentToday,
-      lateToday,
-      absentToday,
-      pendingOvertime
-    };
+    return { totalEmployees, presentToday, lateToday, absentToday, pendingOvertime };
   }, [employees, attendanceData, overtimeRequests]);
 
-  const recentActivities = useMemo(() => [], []);
+  const recentActivities = useMemo(() => [
+    { id: 1, type: "attendance", employee: "John Doe", action: "clocked in", time: "9:00 AM" },
+    { id: 2, type: "overtime", employee: "Jane Smith", action: "requested overtime", time: "10:00 AM" },
+  ], []);
+
+  // --- Logout Function ---
+  const handleLogout = () => {
+    sessionStorage.clear();
+    navigate("/", { replace: true });
+  };
 
   return (
     <div className="admin-layout">
+      {/* Sidebar */}
       <aside className="admin-sidebar">
         <div className="brand">
           <div className="brand-avatar">TI</div>
@@ -51,6 +65,7 @@ export default function AdminDashboard() {
         </nav>
       </aside>
 
+      {/* Main Content */}
       <main className="admin-content">
         <header className="admin-topbar">
           <h1>Dashboard</h1>
@@ -61,11 +76,12 @@ export default function AdminDashboard() {
             </button>
             <div className={`profile-popover${isProfileOpen ? " open" : ""}`}>
               <div className="profile-row">Profile</div>
-              <div className="profile-row" onClick={() => navigate("/")}>Log out</div>
+              <div className="profile-row" onClick={handleLogout}>Log out</div>
             </div>
           </div>
         </header>
 
+        {/* KPI Section */}
         <section className="grid grid-4">
           <div className="kpi">
             <div className="kpi-title">Total Employees</div>
@@ -85,6 +101,7 @@ export default function AdminDashboard() {
           </div>
         </section>
 
+        {/* Attendance & Activities */}
         <section className="grid grid-2">
           <div className="card big">
             <div className="card-title">Attendance Overview</div>
@@ -108,31 +125,7 @@ export default function AdminDashboard() {
             </ul>
           </div>
         </section>
-
-        <section className="grid grid-3">
-          <div className="card">
-            <div className="card-title">Pending Overtime</div>
-            <div className="muted">{dashboardStats.pendingOvertime} Pending</div>
-            <Link to="/admin/overtime" className="card-link">View Details →</Link>
-          </div>
-          <div className="card">
-            <div className="card-title">Upcoming Payroll</div>
-            <div className="muted">Next Payroll Date: {new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toLocaleDateString()}</div>
-            <Link to="/admin/payroll" className="card-link">Process Payroll →</Link>
-          </div>
-          <div className="card">
-            <div className="card-title">Quick Links</div>
-            <ul className="links">
-              <li><Link to="/admin/employee">Manage Employees</Link></li>
-              <li><Link to="/admin/schedules">Update Schedules</Link></li>
-              <li><Link to="/admin/attendance">View Attendance</Link></li>
-              <li><Link to="/admin/reports">Generate Reports</Link></li>
-            </ul>
-          </div>
-        </section>
       </main>
     </div>
   );
 }
-
-

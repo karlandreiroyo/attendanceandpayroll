@@ -1,41 +1,25 @@
-import { IsEmail, IsNotEmpty, IsString, IsOptional, IsIn, IsPhoneNumber } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class CreateEmployeeDto {
-  @IsNotEmpty()
   @IsString()
+  @IsNotEmpty()
   username: string;
 
-  @IsNotEmpty()
   @IsString()
+  @IsNotEmpty()
   password: string;
 
-  @IsNotEmpty()
   @IsString()
-  first_name: string;
-
-  @IsNotEmpty()
-  @IsString()
-  last_name: string;
-
-  @IsNotEmpty()
-  @IsEmail()
-  email: string;
-
-  @IsNotEmpty()
-  @IsString()
-  department: string;
-
-  @IsNotEmpty()
-  @IsString()
-  position: string;
-
   @IsOptional()
-  @IsIn(['Active', 'Inactive'])
-  status?: 'Active' | 'Inactive';
+  role?: string;
 
-  @IsOptional()
   @IsString()
-  phone?: string;
+  @IsOptional()
+  first_name?: string;
+
+  @IsString()
+  @IsOptional()
+  last_name?: string;
 
   @IsOptional()
   @IsString()
@@ -43,7 +27,22 @@ export class CreateEmployeeDto {
 
   @IsOptional()
   @IsString()
-  role?: string;
+  department?: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
+  phone?: number;
+
+  @IsOptional()
+  @IsString()
+  position?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
 
   @IsOptional()
   @IsString()
