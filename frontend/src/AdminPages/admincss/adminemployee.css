@@ -124,27 +124,41 @@
     letter-spacing: 0.5px;
   }
 
+  /* Default header alignment - left */
   .thead > div {
     display: flex;
     align-items: center;
     min-width: 0;
-    white-space: nowrap; /* keep headers on one line */
+    white-space: nowrap;
+    justify-content: flex-start;
+    text-align: left;
   }
 
-  .thead .right {
-    text-align: right !important;
+  /* Username header - explicitly left aligned */
+  .thead > div.username-header {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  /* Center-aligned headers (Role, Status) */
+  .thead > div.center {
+    justify-content: center;
+    text-align: center;
+  }
+
+  /* Right-aligned headers (Join Date) */
+  .thead > div.right {
+    justify-content: flex-end;
+    text-align: right;
   }
 
   .actions-header {
-    text-align: right !important;
-    white-space: nowrap;
-    justify-self: end;
-    display: flex;
     justify-content: flex-end;
+    text-align: right;
+    white-space: nowrap;
   }
 
- 
-
+  /* Table body rows */
   .tbody .tr {
     padding: 16px 20px;
     border-top: 1px solid #f1f5f9;
@@ -152,25 +166,49 @@
     transition: background-color 0.2s ease;
   }
 
+  /* Default cell alignment - left */
   .tbody .tr > div {
     display: flex;
     align-items: center;
-    min-width: 0; /* Allow content to shrink */
+    min-width: 0;
     overflow: hidden;
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  /* Username cell - explicitly left aligned */
+  .tbody .tr > div.username-cell {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  /* Center-aligned cells (Role, Status) */
+  .tbody .tr > div.center {
+    justify-content: center;
+    text-align: center;
+  }
+
+  /* Join Date cell - right aligned */
+  .tbody .tr > div.right {
+    justify-content: flex-end;
+    text-align: right;
   }
 
   .tbody .tr:hover {
     background: #f8fafc;
   }
 
+  /* Alignment utility classes */
   .right {
     text-align: right;
     display: flex;
     justify-content: flex-end;
   }
 
-  .thead .right {
-    text-align: right !important;
+  .center {
+    text-align: center;
+    display: flex;
+    justify-content: center;
   }
 
 /* ----- Employee Info ----- */
@@ -309,6 +347,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  white-space: nowrap;
 }
 
 .status.success {
@@ -330,6 +369,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  white-space: nowrap;
 }
 
 .role-badge.admin {
@@ -464,6 +504,75 @@
   justify-content: flex-end;
   gap: 8px;
   margin-top: 6px;
+}
+
+/* ----- Delete Confirmation Modal ----- */
+.delete-confirmation-modal {
+  width: 480px;
+  max-width: calc(100% - 24px);
+  padding: 24px;
+  text-align: center;
+}
+
+.delete-modal-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.delete-icon {
+  font-size: 48px;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.delete-modal-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.delete-modal-message {
+  margin: 0;
+  font-size: 14px;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.delete-modal-message strong {
+  color: #111827;
+  font-weight: 600;
+}
+
+.delete-modal-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.btn-danger {
+  background: #dc2626;
+  color: #fff;
+  border-color: #dc2626;
+}
+
+.btn-danger:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(220, 38, 38, 0.3);
+}
+
+.btn-danger:disabled {
+  background: #fca5a5;
+  border-color: #fca5a5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 /* ===== Edit Modal Input Styles ===== */
@@ -638,6 +747,7 @@
   font-weight: 500;
   color: #6b7280;
   font-size: 14px;
+  margin-bottom: 6px;
 }
 
 .detail-value {
@@ -660,8 +770,8 @@
         .notification {
           position: fixed;
           top: 20px;
-          right: 20px !important;
-          left: auto !important;
+          left: 50%;
+          transform: translateX(-50%);
           background: #fff;
           border: 1px solid #e5e7eb;
           border-left: 4px solid #14a039;
@@ -673,11 +783,16 @@
           align-items: center;
           gap: 12px;
           max-width: 400px;
+          min-width: 300px;
           animation: slideIn 0.3s ease-out;
         }
 
 .notification-success {
   border-left: 4px solid #14a039;
+}
+
+.notification-error {
+  border-left: 4px solid #dc2626;
 }
 
 .notification-icon {
@@ -694,8 +809,20 @@
   flex-shrink: 0;
 }
 
+.notification-success .notification-icon {
+  background: #14a039;
+}
+
+.notification-error .notification-icon {
+  background: #dc2626;
+}
+
 .notification-success .notification-message {
   color: #0b7a2b;
+}
+
+.notification-error .notification-message {
+  color: #991b1b;
 }
 
 .notification-content {
@@ -742,11 +869,11 @@
 
 @keyframes slideIn {
   from {
-    transform: translateX(100%);
+    transform: translateX(-50%) translateY(-20px);
     opacity: 0;
   }
   to {
-    transform: translateX(0);
+    transform: translateX(-50%) translateY(0);
     opacity: 1;
   }
 }
@@ -755,10 +882,11 @@
 @media (max-width: 768px) {
   .notification {
     top: 15px;
-    right: 15px !important;
-    left: auto !important;
+    left: 50%;
+    transform: translateX(-50%);
     padding: 12px 16px;
     max-width: 320px;
+    min-width: 280px;
     gap: 10px;
   }
   
@@ -774,10 +902,11 @@
 @media (max-width: 480px) {
   .notification {
     top: 10px;
-    right: 10px !important;
-    left: auto !important;
+    left: 50%;
+    transform: translateX(-50%);
     padding: 10px 12px;
     max-width: 280px;
+    min-width: 260px;
     gap: 8px;
   }
   

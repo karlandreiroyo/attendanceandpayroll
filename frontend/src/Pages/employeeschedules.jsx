@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import "../AdminPages/admincss/adminDashboard.css"; // Use admin layout CSS
 import "../Pages/employeecss/employeeSchedules.css";
+import { handleLogout } from "../utils/logout";
 
 export default function EmployeeSchedules() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -79,7 +80,7 @@ export default function EmployeeSchedules() {
             </button>
             <div id="user-popover-sch" className="profile-popover">
               <div className="profile-row">Profile</div>
-              <div className="profile-row" onClick={() => (window.location.href = "/")}>Log out</div>
+              <div className="profile-row" onClick={handleLogout}>Log out</div>
             </div>
           </div>
         </header>

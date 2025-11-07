@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import "../AdminPages/admincss/adminDashboard.css"; // Use admin layout CSS
 import "../Pages/employeecss/employeeDashboard.css";
+import { handleLogout as logout } from "../utils/logout";
 
 export default function EmployeeDashboard() {
   const navigate = useNavigate();
@@ -10,17 +11,13 @@ export default function EmployeeDashboard() {
   const [isTopUserOpen, setIsTopUserOpen] = useState(false);
 
   // Session destroyer function
-  const handleLogout = () => {
-    // Clear all session storage items
-    sessionStorage.removeItem("userRole");
-    sessionStorage.removeItem("username");
-    sessionStorage.removeItem("loginTime");
-    
-    // Clear any other session-related data
-    sessionStorage.clear();
-    
-    // Redirect to login page
-    navigate("/");
+  const handleLogout = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Close profile popover
+    setIsTopUserOpen(false);
+    // Call logout utility
+    logout();
   };
 
   useEffect(() => {
@@ -108,7 +105,21 @@ export default function EmployeeDashboard() {
               className={`profile-popover${isTopUserOpen ? " open" : ""}`}
             >
               <div className="profile-row">Profile</div>
-              <div className="profile-row" onClick={handleLogout}>Log out</div>
+              <div 
+                className="profile-row" 
+                onClick={handleLogout}
+                style={{ cursor: "pointer" }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleLogout(e);
+                  }
+                }}
+              >
+                Log out
+              </div>
             </div>
           </div>
         </header>

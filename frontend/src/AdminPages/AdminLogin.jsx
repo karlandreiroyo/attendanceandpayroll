@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../AdminPages/admincss/adminLogin.css";
+import { notifyProfileUpdated } from "../utils/currentUser";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -162,6 +163,22 @@ export default function AdminLogin() {
       sessionStorage.setItem("userRole", data.user.role);
       sessionStorage.setItem("username", data.user.username);
       sessionStorage.setItem("loginTime", new Date().toISOString());
+      if (data.user.first_name) sessionStorage.setItem("firstName", data.user.first_name);
+      else sessionStorage.removeItem("firstName");
+
+      if (data.user.last_name) sessionStorage.setItem("lastName", data.user.last_name);
+      else sessionStorage.removeItem("lastName");
+
+      if (data.user.email) sessionStorage.setItem("email", data.user.email);
+      else sessionStorage.removeItem("email");
+
+      if (data.user.profile_picture) sessionStorage.setItem("profilePicture", data.user.profile_picture);
+      else sessionStorage.removeItem("profilePicture");
+
+      if (data.user.id) sessionStorage.setItem("userId", String(data.user.id));
+      else sessionStorage.removeItem("userId");
+
+      notifyProfileUpdated();
 
       navigate("/admin/dashboard");
 

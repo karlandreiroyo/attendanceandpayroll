@@ -25,9 +25,15 @@ export class AuthService {
       success: true,              // <-- for frontend checks
       message: 'Login successful',
       user: {
-        id: data.id,
+        id: data.user_id ?? data.id,
         username: data.username,
         role: data.role || 'employee', // default to employee if role missing
+        first_name: data.first_name,
+        last_name: data.last_name,
+        email: data.email,
+        department: data.department,
+        position: data.position,
+        profile_picture: data.profile_picture,
       },
     };
   }

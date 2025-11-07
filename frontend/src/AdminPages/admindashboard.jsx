@@ -1,12 +1,28 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import "../AdminPages/admincss/adminDashboard.css";
+import { handleLogout as logout } from "../utils/logout";
+import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
 
 export default function AdminDashboard() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [profileData, setProfileData] = useState(() => getSessionUserProfile());
   const navigate = useNavigate();
   const location = useLocation();
   const isActive = (path) => location.pathname.startsWith(path);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToProfileUpdates(setProfileData);
+    return unsubscribe;
+  }, []);
+
+  // Session destroyer function
+  const handleLogout = () => {
+    // Close profile popover
+    setIsProfileOpen(false);
+    // Call logout utility
+    logout();
+  };
 
   // Employee data will be fetched from API
   const employees = useMemo(() => [], []);
@@ -56,12 +72,22 @@ export default function AdminDashboard() {
           <h1>Dashboard</h1>
           <div className="top-actions">
             <button className="profile-btn" onClick={() => setIsProfileOpen((v) => !v)}>
-              <span className="profile-avatar">AU</span>
-              <span>Admin User</span>
+              <span className="profile-avatar">
+                {profileData.profilePicture ? (
+                  <img
+                    src={profileData.profilePicture}
+                    alt="Profile"
+                    style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  profileData.initials
+                )}
+              </span>
+              <span>{profileData.displayName}</span>
             </button>
             <div className={`profile-popover${isProfileOpen ? " open" : ""}`}>
-              <div className="profile-row">Profile</div>
-              <div className="profile-row" onClick={() => navigate("/")}>Log out</div>
+              <div className="profile-row" onClick={() => { setIsProfileOpen(false); navigate('/admin/profile'); }}>Profile</div>
+              <div className="profile-row" onClick={handleLogout}>Log out</div>
             </div>
           </div>
         </header>

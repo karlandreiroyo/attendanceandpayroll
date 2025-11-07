@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import "../AdminPages/admincss/adminDashboard.css"; // Use admin layout CSS
 import "../Pages/employeecss/employeePayslips.css";
+import { handleLogout } from "../utils/logout";
 
 export default function EmployeePayslips() {
   // DEMO: Replace this with real API data
@@ -53,7 +54,7 @@ export default function EmployeePayslips() {
             </button>
             <div id="user-popover-pay" className="profile-popover">
               <div className="profile-row">Profile</div>
-              <div className="profile-row" onClick={() => (window.location.href = "/")}>Log out</div>
+              <div className="profile-row" onClick={handleLogout}>Log out</div>
             </div>
           </div>
         </header>

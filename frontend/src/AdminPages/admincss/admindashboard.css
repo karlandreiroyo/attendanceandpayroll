@@ -200,6 +200,8 @@
   border-radius: 999px;
   padding: 6px 10px;
   cursor: pointer;
+  color: #111827;
+  font-weight: 600;
 }
 
 .profile-avatar {

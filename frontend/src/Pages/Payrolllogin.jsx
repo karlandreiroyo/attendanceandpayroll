@@ -2,22 +2,29 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "../Pages/employeecss/payrollLogin.css";
 import { API_BASE_URL } from "../config/api";
+import { notifyProfileUpdated } from "../utils/currentUser";
 
 export default function PayrollLogin() {
   const navigate = useNavigate();
 
   // Check if user is already logged in and redirect them
+  // BUT only if they haven't logged out (prevents forward button from auto-logging in)
   useEffect(() => {
+    const isLoggedOut = sessionStorage.getItem("isLoggedOut");
     const userRole = sessionStorage.getItem("userRole");
     const username = sessionStorage.getItem("username");
 
-    if (userRole && username) {
+    // Only redirect if user is logged in AND hasn't logged out
+    if (!isLoggedOut && userRole && username) {
       // User is already logged in, redirect to their dashboard
       if (userRole === "admin") {
         navigate("/admin/dashboard", { replace: true });
       } else {
         navigate("/employee/dashboard", { replace: true });
       }
+    } else if (isLoggedOut) {
+      // Clear logout flag and any residual data when on login page
+      sessionStorage.clear();
     }
   }, [navigate]);
   const [username, setUsername] = useState("");
@@ -43,9 +50,28 @@ export default function PayrollLogin() {
         return;
       }
 
+      // Clear any previous logout flags
+      sessionStorage.removeItem("isLoggedOut");
+      
+      // Store session info
       sessionStorage.setItem("userRole", data.user.role);
       sessionStorage.setItem("username", data.user.username);
       sessionStorage.setItem("loginTime", new Date().toISOString());
+      if (data.user.first_name) sessionStorage.setItem("firstName", data.user.first_name);
+      else sessionStorage.removeItem("firstName");
+
+      if (data.user.last_name) sessionStorage.setItem("lastName", data.user.last_name);
+      else sessionStorage.removeItem("lastName");
+
+      if (data.user.email) sessionStorage.setItem("email", data.user.email);
+      else sessionStorage.removeItem("email");
+
+      if (data.user.profile_picture) sessionStorage.setItem("profilePicture", data.user.profile_picture);
+      else sessionStorage.removeItem("profilePicture");
+
+      if (data.user.id) sessionStorage.setItem("userId", String(data.user.id));
+
+      notifyProfileUpdated();
 
       if (data.user.role === "admin") {
         navigate("/admin/dashboard");
@@ -78,6 +104,7 @@ export default function PayrollLogin() {
             className="login-input"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
+            autoComplete="off"
             required
           />
           <div className="password-field">
@@ -87,6 +114,7 @@ export default function PayrollLogin() {
               className="login-input"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
               required
             />
             <button

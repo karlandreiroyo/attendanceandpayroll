@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import type { File as MulterFile } from 'multer';
 import { SupabaseService } from '../supabase/supabase.service';
 
 export interface User { // ✅ Export it so controller can import
+    user_id?: number;
     id?: number;
     username: string;
     password: string;
@@ -16,11 +18,23 @@ export interface User { // ✅ Export it so controller can import
     join_date?: string;
     phone?: string;
     address?: string;
+    profile_picture?: string;
 }
 
 @Injectable()
 export class UsersService {
     constructor(private readonly supabaseService: SupabaseService) { }
+
+    async findByUsername(username: string): Promise<User | null> {
+        const { data, error } = await this.supabaseService.client
+            .from('users')
+            .select('*')
+            .eq('username', username)
+            .maybeSingle();
+
+        if (error) throw new Error(error.message);
+        return (data as User) ?? null;
+    }
 
     async findAll(): Promise<User[]> {
         const { data, error } = await this.supabaseService.client
@@ -45,12 +59,30 @@ export class UsersService {
     }
 
     async update(id: number | string, user: Partial<User>): Promise<User> {
-        // Use user_id as the primary key column name
-        const { data, error } = await this.supabaseService.client
+        const updatePayload: Record<string, any> = { ...user };
+        if (Object.prototype.hasOwnProperty.call(updatePayload, 'phone') && updatePayload.phone === '') {
+            updatePayload.phone = null;
+        }
+        if (Object.prototype.hasOwnProperty.call(updatePayload, 'address') && updatePayload.address === '') {
+            updatePayload.address = null;
+        }
+
+        let { data, error } = await this.supabaseService.client
             .from('users')
-            .update(user)
+            .update(updatePayload)
             .eq('user_id', id)
             .select('*');
+
+        if (!error && (!data || (data as User[]).length === 0)) {
+            const { data: dataById, error: errorById } = await this.supabaseService.client
+                .from('users')
+                .update(updatePayload)
+                .eq('id', id)
+                .select('*');
+
+            data = dataById;
+            error = errorById;
+        }
 
         if (error) throw new Error(error.message);
         if (!data || (data as User[]).length === 0)

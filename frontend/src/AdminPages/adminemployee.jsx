@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import "../AdminPages/admincss/adminDashboard.css";
 import "../AdminPages/admincss/adminEmployee.css";
 import { API_BASE_URL } from "../config/api";
-import Papa from 'papaparse';
+import { handleLogout as logout } from "../utils/logout";
+import { notifyProfileUpdated, getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
 
 export default function AdminEmployee() {
   const navigate = useNavigate();
@@ -11,9 +12,6 @@ export default function AdminEmployee() {
   const isActive = (path) => location.pathname.startsWith(path);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [isBatchAddOpen, setIsBatchAddOpen] = useState(false);
-  const [batchAddData, setBatchAddData] = useState([]);
-  const [batchAddFileName, setBatchAddFileName] = useState("");
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -23,17 +21,24 @@ export default function AdminEmployee() {
   const [openActionsId, setOpenActionsId] = useState(null);
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [viewEmployee, setViewEmployee] = useState(null);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [employeeToDelete, setEmployeeToDelete] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [notification, setNotification] = useState(null);
   const [loading, setLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [formErrors, setFormErrors] = useState({});
+  const [editFormErrors, setEditFormErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [editDept, setEditDept] = useState('');
   const [editPosition, setEditPosition] = useState('');
   const [editFirstName, setEditFirstName] = useState('');
   const [editLastName, setEditLastName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
   const [editAddress, setEditAddress] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editStatus, setEditStatus] = useState('Active');
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -49,288 +54,27 @@ export default function AdminEmployee() {
   });
 
   const [rows, setRows] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [profileSession, setProfileSession] = useState(() => getSessionUserProfile());
 
-  const formatJoinDate = (value) => {
-    if (!value) return new Date().toISOString().slice(0, 10);
-    const d = typeof value === 'string' ? new Date(value) : value;
-    if (Number.isNaN(d.getTime())) return String(value);
-    return d.toISOString().slice(0, 10);
-  };
+  // Departments that allow admin role
+  const adminAllowedDepartments = useMemo(() => ['HR', 'Management', 'Accounting', 'Branch'], []);
 
-  const handleDownloadCSV = () => {
-    const headers = [
-      "user_id", "first_name", "last_name", "username", "email", 
-      "role", "dept", "position", "status", "joinDate", "address"
-    ];
-
-    const csvData = rows.map(row => 
-      headers.map(header => {
-        let value = row[header] === null || row[header] === undefined ? '' : String(row[header]);
-        if (/[",\n]/.test(value)) {
-          value = `"${value.replace(/"/g, '""')}"`;
-        }
-        return value;
-      }).join(',')
-    );
-
-    const csvContent = [headers.join(','), ...csvData].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    if (link.download !== undefined) {
-      const url = URL.createObjectURL(blob);
-      link.setAttribute("href", url);
-      link.setAttribute("download", "employees.csv");
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+  const formatPhoneDisplay = (value) => {
+    if (!value && value !== 0) return '';
+    const numbersOnly = String(value).replace(/\D/g, '');
+    if (!numbersOnly) return '';
+    let digits = numbersOnly;
+    if (digits.startsWith('63')) {
+      digits = digits.slice(2);
+    } else if (digits.startsWith('0')) {
+      digits = digits.slice(1);
     }
-  };
-
-  const handleDownloadTemplate = () => {
-    const headers = [
-      "first_name", "last_name", "email", "phone", "dept", "position", 
-      "status", "role", "username", "password", "address"
-    ];
-    const csvContent = headers.join(',');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    if (link.download !== undefined) {
-      const url = URL.createObjectURL(blob);
-      link.setAttribute("href", url);
-      link.setAttribute("download", "employee_template.csv");
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-  };
-
-  const handleBatchFileSelect = (event) => {
-    const file = event.target.files[0];
-    if (!file) {
-      setBatchAddData([]);
-      setBatchAddFileName("");
-      return;
-    }
-    setBatchAddFileName(file.name);
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        setBatchAddData(results.data);
-      },
-      error: (error) => {
-        console.error("Error parsing batch CSV:", error);
-        setNotification({ type: 'error', message: 'Failed to parse CSV file for batch add.' });
-        setTimeout(() => setNotification(null), 4000);
-      }
-    });
-    event.target.value = null; // Reset file input
-  };
-
-  const handleProcessBatchAdd = async () => {
-    if (batchAddData.length === 0) {
-      setNotification({ type: 'error', message: 'No employees to add. Please upload a valid CSV.' });
-      setTimeout(() => setNotification(null), 3000);
-      return;
-    }
-
-    setSubmitLoading(true);
-    let successCount = 0;
-    let errorCount = 0;
-    const addedEmployees = [];
-
-    for (const employee of batchAddData) {
-      const payload = {
-        username: employee.username,
-        password: employee.password,
-        first_name: employee.first_name,
-        last_name: employee.last_name,
-        email: employee.email,
-        department: employee.dept,
-        position: employee.position,
-        status: employee.status || "Active",
-        phone: employee.phone || undefined,
-        address: employee.address || undefined,
-        role: employee.role === 'admin' ? 'admin' : 'employee',
-      };
-
-      if (!payload.username || !payload.password || !payload.first_name || !payload.last_name || !payload.email) {
-        errorCount++;
-        continue;
-      }
-
-      try {
-        const res = await fetch(`${API_BASE_URL}/users`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-          credentials: "include",
-        });
-
-        if (res.ok) {
-          successCount++;
-          const created = await res.json();
-          addedEmployees.push({
-            id: created.id || created.user_id,
-            user_id: created.user_id || created.id,
-            name: [created.first_name, created.last_name].filter(Boolean).join(" ") || created.username,
-            first_name: created.first_name || '',
-            last_name: created.last_name || '',
-            username: created.username,
-            role: created.role || 'employee',
-            email: created.email,
-            dept: created.department,
-            position: created.position,
-            status: created.status || "Active",
-            joinDate: formatJoinDate(created.join_date),
-            address: created.address || '',
-          });
-        } else {
-          errorCount++;
-        }
-      } catch (err) {
-        errorCount++;
-        console.error("Error adding employee via batch:", err);
-      }
-    }
-
-    if (addedEmployees.length > 0) {
-      setRows(prev => [...prev, ...addedEmployees]);
-    }
-
-    setSubmitLoading(false);
-    setIsBatchAddOpen(false);
-    setBatchAddData([]);
-    setBatchAddFileName("");
-    setNotification({
-      type: successCount > 0 ? 'success' : 'error',
-      message: `Batch add complete. ${successCount} added, ${errorCount} failed.`
-    });
-    setTimeout(() => setNotification(null), 4000);
-  };
-
-  const handleUploadCSV = (event) => {
-    const file = event.target.files[0];
-    if (!file) {
-      return;
-    }
-
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const updatedRows = results.data;
-        // Basic validation: Check for required headers
-        const requiredHeaders = ["user_id", "first_name", "last_name", "username"];
-        const fileHeaders = results.meta.fields;
-        const hasRequiredHeaders = requiredHeaders.every(h => fileHeaders.includes(h));
-
-        if (!hasRequiredHeaders) {
-          setNotification({ type: 'error', message: 'Invalid CSV format. Missing required headers.' });
-          setTimeout(() => setNotification(null), 4000);
-          return;
-        }
-
-        // Create a map for quick lookups
-        const updatedRowsMap = new Map();
-        updatedRows.forEach(row => {
-          if (row.user_id) {
-            updatedRowsMap.set(String(row.user_id), row);
-          }
-        });
-
-        // Merge updates into existing rows (in-memory only)
-        let changesCount = 0;
-        const mergedRows = rows.map(existingRow => {
-          const updatedRow = updatedRowsMap.get(String(existingRow.user_id));
-          if (updatedRow) {
-            changesCount++;
-            // Merge fields, keeping existing ones if not in CSV
-            return { ...existingRow, ...updatedRow };
-          }
-          return existingRow;
-        });
-
-        setRows(mergedRows);
-        if (changesCount > 0) {
-          setNotification({ type: 'success', message: `${changesCount} employee(s) updated in table (not saved to server).` });
-        } else {
-          setNotification({ type: 'error', message: 'No matching employees found in the CSV to update.' });
-        }
-        setTimeout(() => setNotification(null), 3000);
-      },
-      error: (error) => {
-        console.error("Error parsing CSV:", error);
-        setNotification({ type: 'error', message: 'Failed to parse CSV file.' });
-        setTimeout(() => setNotification(null), 4000);
-      }
-    });
-
-    // Reset file input to allow re-uploading the same file
-    event.target.value = null;
-  };
-
-  const handleBatchUpdate = async (updatedRows) => {
-    setSubmitLoading(true);
-    let successCount = 0;
-    let errorCount = 0;
-
-    for (const row of updatedRows) {
-      const userId = row.user_id || row.id;
-      if (!userId) continue;
-
-      try {
-        const res = await fetch(`${API_BASE_URL}/users/${userId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(row),
-        });
-
-        if (res.ok) {
-          successCount++;
-        } else {
-          errorCount++;
-        }
-      } catch (err) {
-        errorCount++;
-        console.error(`Failed to update user ${userId}:`, err);
-      }
-    }
-
-    setSubmitLoading(false);
-    setNotification({
-      type: 'success',
-      message: `CSV import complete. ${successCount} updated, ${errorCount} failed.`
-    });
-    setTimeout(() => setNotification(null), 4000);
-
-    // Refresh data from server after update
-    // This is a simplified way to refetch. You might have a dedicated function for this.
-    const res = await fetch(`${API_BASE_URL}/users`, { credentials: "include" });
-    const users = await res.json();
-    const mapped = (users || []).map((u) => ({
-      id: u.id || u.user_id,
-      user_id: u.user_id || u.id,
-      name: [u.first_name, u.last_name].filter(Boolean).join(" ") || u.username,
-      first_name: u.first_name || '',
-      last_name: u.last_name || '',
-      username: u.username,
-      role: u.role || 'employee',
-      email: u.email,
-      dept: u.department,
-      position: u.position,
-      status: u.status || "Active",
-      joinDate: formatJoinDate(u.join_date),
-      address: u.address || '',
-    }));
-    setRows(mapped);
+    return '+63' + digits.slice(0, 10);
   };
 
   // Department -> Positions mapping based on provided positions list
-  const departmentPositions = useMemo(() => ({
+  const defaultDepartmentPositions = useMemo(() => ({
     HR: [
       'HR Manager',
     ],
@@ -380,7 +124,102 @@ export default function AdminEmployee() {
     ],
   }), []);
 
-  React.useEffect(() => {
+  const departmentPositions = useMemo(() => {
+    const mapping = { ...defaultDepartmentPositions };
+    rows.forEach((user) => {
+      const dept = user.department;
+      if (!dept) return;
+      if (!mapping[dept]) {
+        mapping[dept] = [];
+      }
+      const position = user.position;
+      if (position && !mapping[dept].includes(position)) {
+        mapping[dept] = [...mapping[dept], position];
+      }
+    });
+    return mapping;
+  }, [rows, defaultDepartmentPositions]);
+
+  const availableDepartments = useMemo(() => Object.keys(departmentPositions).sort(), [departmentPositions]);
+
+  // Format date uniformly as MM/DD/YYYY
+  const formatDate = (dateString) => {
+    if (!dateString) {
+      const today = new Date();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const year = today.getFullYear();
+      return `${month}/${day}/${year}`;
+    }
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return dateString; // Return original if invalid
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${month}/${day}/${year}`;
+    } catch {
+      return dateString;
+    }
+  };
+
+  const updateUserSessionCache = (user) => {
+    if (!user) return;
+    if (user.user_id || user.id) sessionStorage.setItem('userId', String(user.user_id ?? user.id));
+    if (user.username) sessionStorage.setItem('username', user.username);
+    if (user.first_name) sessionStorage.setItem('firstName', user.first_name);
+    else sessionStorage.removeItem('firstName');
+
+    if (user.last_name) sessionStorage.setItem('lastName', user.last_name);
+    else sessionStorage.removeItem('lastName');
+
+    if (user.email) sessionStorage.setItem('email', user.email);
+    else sessionStorage.removeItem('email');
+
+    if (user.profile_picture) sessionStorage.setItem('profilePicture', user.profile_picture);
+    else sessionStorage.removeItem('profilePicture');
+
+    if (user.department) sessionStorage.setItem('department', user.department);
+    else sessionStorage.removeItem('department');
+
+    if (user.position) sessionStorage.setItem('position', user.position);
+    else sessionStorage.removeItem('position');
+
+    notifyProfileUpdated();
+  };
+
+  useEffect(() => {
+    loadCurrentUser();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToProfileUpdates(setProfileSession);
+    return unsubscribe;
+  }, []);
+
+  async function loadCurrentUser() {
+    try {
+      const username = sessionStorage.getItem("username");
+      if (!username) return;
+
+      const res = await fetch(`${API_BASE_URL}/users?username=${username}`, {
+        credentials: "include",
+      });
+      if (!res.ok) return;
+      const users = await res.json();
+      const user = Array.isArray(users) ? users.find(u => u.username === username) : users;
+      if (user) {
+        setCurrentUser(user);
+        updateUserSessionCache(user);
+      }
+    } catch (err) {
+      console.error("Failed to load current user:", err);
+    }
+  }
+
+  const getInitials = () => profileSession.initials;
+
+  useEffect(() => {
     let aborted = false;
     async function loadEmployees() {
       try {
@@ -398,11 +237,12 @@ export default function AdminEmployee() {
           username: u.username,
           role: u.role || 'employee',
           email: u.email,
+          phone: formatPhoneDisplay(u.phone),
+          address: u.address || '',
           dept: u.department,
           position: u.position,
           status: u.status || "Active",
-          joinDate: formatJoinDate(u.join_date),
-          address: u.address || '',
+          joinDate: formatDate(u.join_date),
         }));
         setRows(mapped);
         setOpenActionsId(null); // Reset dropdown state when data loads
@@ -443,7 +283,11 @@ export default function AdminEmployee() {
     setEditPosition(row.position || '');
     setEditFirstName(row.first_name || '');
     setEditLastName(row.last_name || '');
+    setEditPhone(formatPhoneDisplay(row.phone));
     setEditAddress(row.address || '');
+    setEditEmail(row.email || '');
+    setEditStatus(row.status || 'Active');
+    setEditFormErrors({});
     setIsEditOpen(true);
   }
 
@@ -452,64 +296,109 @@ export default function AdminEmployee() {
     setIsViewOpen(true);
   }
 
+  function validateEditForm() {
+    const errors = {};
+    
+    const firstNameError = validateFirstName(editFirstName);
+    if (firstNameError) errors.first_name = firstNameError;
+    
+    const lastNameError = validateLastName(editLastName);
+    if (lastNameError) errors.last_name = lastNameError;
+    
+    const emailError = validateEmail(editEmail);
+    if (emailError) errors.email = emailError;
+    
+    const phoneError = validatePhone(editPhone);
+    if (phoneError) errors.phone = phoneError;
+    
+    if (!editDept) errors.dept = "Department is required";
+    if (!editPosition) errors.position = "Position is required";
+    
+    return errors;
+  }
+
   async function handleUpdate(e) {
     e.preventDefault();
-    const data = new FormData(e.currentTarget);
+
+    const errors = validateEditForm();
+    setEditFormErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      console.log('Validation errors:', errors);
+      return;
+    }
 
     const body = {
       first_name: editFirstName.trim(),
       last_name: editLastName.trim(),
-      email: data.get("email"),
-      department: editDept,
-      position: editPosition,
-      status: data.get("status"),
-      address: editAddress,
+      email: editEmail.trim(),
+      phone: editPhone.trim() || '',
+      department: editDept || '',
+      position: editPosition || '',
+      status: editStatus,
+      address: editAddress.trim() || '',
     };
 
-    const userId = selected.user_id || selected.id;
+    const userId = selected?.user_id || selected?.id;
+    if (!userId) {
+      setNotification({ type: 'error', message: 'Employee ID is missing' });
+      setTimeout(() => setNotification(null), 4000);
+      return;
+    }
 
     try {
+      console.log('Updating employee:', userId, body);
       const res = await fetch(`${API_BASE_URL}/users/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(body),
       });
+      
       if (!res.ok) {
         const errText = await res.text();
+        console.error('Update failed:', res.status, errText);
         throw new Error(errText || `Failed to update employee (${res.status})`);
       }
+      
       const updatedFromServer = await res.json();
+      console.log('Update successful:', updatedFromServer);
+      
       const updatedRow = {
-        id: updatedFromServer.user_id || updatedFromServer.id,
+        id: updatedFromServer.id || updatedFromServer.user_id,
         user_id: updatedFromServer.user_id || updatedFromServer.id,
         name: [updatedFromServer.first_name, updatedFromServer.last_name].filter(Boolean).join(' ') || updatedFromServer.username,
         first_name: updatedFromServer.first_name || '',
         last_name: updatedFromServer.last_name || '',
         username: updatedFromServer.username,
+        phone: formatPhoneDisplay(updatedFromServer.phone),
+        address: updatedFromServer.address || '',
         role: updatedFromServer.role || 'employee',
         email: updatedFromServer.email,
         dept: updatedFromServer.department,
         position: updatedFromServer.position,
         status: updatedFromServer.status || 'Active',
-        joinDate: formatJoinDate(updatedFromServer.join_date),
-        address: updatedFromServer.address || '',
+        joinDate: formatDate(updatedFromServer.join_date),
       };
+      
       setRows(prev => prev.map(r => (r.user_id === updatedRow.user_id || r.id === updatedRow.id ? updatedRow : r)));
-      setNotification({ type: 'success', message: 'Employee updated successfully' });
-      setTimeout(() => setNotification(null), 3000);
-    } catch (err) {
-      console.error(err);
-      setNotification({ type: 'error', message: err.message || 'Failed to update employee' });
-      setTimeout(() => setNotification(null), 4000);
-    } finally {
       setIsEditOpen(false);
       setSelected(null);
       setEditDept('');
       setEditPosition('');
       setEditFirstName('');
       setEditLastName('');
+      setEditPhone('');
+      setEditAddress('');
+      setEditEmail('');
+      setEditStatus('Active');
+      setEditFormErrors({});
       setOpenActionsId(null);
+      setNotification({ type: 'success', message: 'Employee updated successfully' });
+      setTimeout(() => setNotification(null), 3000);
+    } catch (err) {
+      console.error('Update error:', err);
+      setNotification({ type: 'error', message: err.message || 'Failed to update employee' });
+      setTimeout(() => setNotification(null), 4000);
     }
   }
 
@@ -538,9 +427,11 @@ export default function AdminEmployee() {
   };
 
   const validatePhone = (value) => {
-    if (!value.trim()) return null; // Phone is optional
+    if (!value) return null; // Phone is optional
+    const normalized = typeof value === 'string' ? value.trim() : String(value).trim();
+    if (!normalized) return null;
     const phoneRegex = /^\+63\d{10}$/;
-    if (!phoneRegex.test(value.trim())) return "Phone must start with +63 followed by 10 digits";
+    if (!phoneRegex.test(normalized)) return "Phone must start with +63 followed by 10 digits";
     return null;
   };
 
@@ -637,6 +528,79 @@ export default function AdminEmployee() {
     setFormErrors(errors);
   };
 
+  const handleEditInputChange = (field, value) => {
+    let processedValue = value;
+    
+    // Auto-capitalize first letter for names and remove numbers/special characters
+    if (field === 'first_name' || field === 'last_name') {
+      // Remove all non-letter characters (keep only letters and spaces)
+      processedValue = value.replace(/[^a-zA-Z\s]/g, '');
+      // Auto-capitalize first letter
+      if (processedValue.length > 0) {
+        processedValue = processedValue.charAt(0).toUpperCase() + processedValue.slice(1);
+      }
+    }
+    
+    // Auto-add +63 prefix for phone and only allow numbers
+    if (field === 'phone') {
+      // Remove all non-numeric characters
+      const numbersOnly = value.replace(/\D/g, '');
+      // If it doesn't start with 63, add it
+      if (numbersOnly && !numbersOnly.startsWith('63')) {
+        processedValue = '+63' + numbersOnly.slice(0, 10);
+      } else if (numbersOnly.startsWith('63')) {
+        processedValue = '+' + numbersOnly.slice(0, 12); // +63 + 10 digits
+      } else {
+        processedValue = '+63' + numbersOnly.slice(0, 10);
+      }
+    }
+    
+    // Update the appropriate state
+    switch (field) {
+      case 'first_name':
+        setEditFirstName(processedValue);
+        setEditFormErrors(prev => {
+          const errors = { ...prev };
+          const err = validateFirstName(processedValue);
+          if (err) errors.first_name = err; else delete errors.first_name;
+          return errors;
+        });
+        break;
+      case 'last_name':
+        setEditLastName(processedValue);
+        setEditFormErrors(prev => {
+          const errors = { ...prev };
+          const err = validateLastName(processedValue);
+          if (err) errors.last_name = err; else delete errors.last_name;
+          return errors;
+        });
+        break;
+      case 'email':
+        setEditEmail(processedValue);
+        setEditFormErrors(prev => {
+          const errors = { ...prev };
+          const err = validateEmail(processedValue);
+          if (err) errors.email = err; else delete errors.email;
+          return errors;
+        });
+        break;
+      case 'phone':
+        setEditPhone(processedValue);
+        setEditFormErrors(prev => {
+          const errors = { ...prev };
+          const err = validatePhone(processedValue);
+          if (err) errors.phone = err; else delete errors.phone;
+          return errors;
+        });
+        break;
+      case 'address':
+        setEditAddress(processedValue);
+        break;
+      default:
+        break;
+    }
+  };
+
   function validateAddForm() {
     const errors = {};
     const normalize = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
@@ -726,11 +690,12 @@ export default function AdminEmployee() {
         username: created.username,
         role: created.role || 'employee',
         email: created.email,
+        phone: formatPhoneDisplay(created.phone),
+        address: created.address || '',
         dept: created.department,
         position: created.position,
         status: created.status || "Active",
-        joinDate: formatJoinDate(created.join_date),
-        address: created.address || '',
+        joinDate: formatDate(created.join_date),
       };
       setRows(prev => [...prev, newRow]);
       setIsAddOpen(false);
@@ -768,12 +733,23 @@ export default function AdminEmployee() {
     ));
   }
 
-  async function deleteEmployee(id) {
-    if (!window.confirm("Are you sure you want to delete this employee?")) {
-      return;
-    }
+  function openDeleteConfirmation(employee) {
+    setEmployeeToDelete(employee);
+    setIsDeleteOpen(true);
+  }
+
+  function closeDeleteConfirmation() {
+    setIsDeleteOpen(false);
+    setEmployeeToDelete(null);
+  }
+
+  async function confirmDelete() {
+    if (!employeeToDelete) return;
+    
+    const id = employeeToDelete.user_id || employeeToDelete.id;
     
     try {
+      setDeleteLoading(true);
       const res = await fetch(`${API_BASE_URL}/users/${id}`, {
         method: 'DELETE',
         credentials: 'include',
@@ -785,16 +761,20 @@ export default function AdminEmployee() {
       }
       
       setRows(prev => prev.filter(x => (x.user_id || x.id) !== id));
-      setNotification({ type: 'success', message: 'Employee deleted successfully' });
+      setIsDeleteOpen(false);
+      setEmployeeToDelete(null);
+      setNotification({ type: 'success', message: `Employee "${employeeToDelete.name}" has been deleted successfully` });
       setTimeout(() => setNotification(null), 3000);
     } catch (err) {
       console.error(err);
       setNotification({ type: 'error', message: err.message || 'Failed to delete employee' });
       setTimeout(() => setNotification(null), 4000);
+    } finally {
+      setDeleteLoading(false);
     }
   }
 
-  React.useEffect(() => {
+  useEffect(() => {
     function handleClickOutside(event) {
       if (openActionsId && !event.target.closest('.actions-dropdown')) {
         setOpenActionsId(null);
@@ -827,12 +807,22 @@ export default function AdminEmployee() {
           <h1>Employees</h1>
           <div className="top-actions">
             <button className="profile-btn" onClick={() => setIsProfileOpen(v => !v)}>
-              <span className="profile-avatar">AU</span>
-              <span>Admin User</span>
+              <span className="profile-avatar">
+                {(profileSession.profilePicture) ? (
+                  <img 
+                    src={profileSession.profilePicture} 
+                    alt="Profile" 
+                    style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
+                  />
+                ) : (
+                  getInitials()
+                )}
+              </span>
+              <span>{profileSession.displayName}</span>
             </button>
             <div className={`profile-popover${isProfileOpen ? " open" : ""}`}>
-              <div className="profile-row">Profile</div>
-              <div className="profile-row" onClick={() => navigate("/")}>Log out</div>
+              <div className="profile-row" onClick={() => { setIsProfileOpen(false); navigate('/admin/profile'); }}>Profile</div>
+              <div className="profile-row" onClick={() => { setIsProfileOpen(false); logout(); }}>Log out</div>
             </div>
           </div>
         </header>
@@ -847,8 +837,6 @@ export default function AdminEmployee() {
             />
             <div className="header-actions">
               <button className="btn outline" onClick={() => setFilterOpen(v => !v)}>Filter</button>
-              <button className="btn outline" onClick={handleDownloadCSV}>Export CSV</button>
-              <button className="btn outline" onClick={() => setIsBatchAddOpen(true)}>Batch Add</button>
               <button className="btn primary" onClick={() => setIsAddOpen(true)} disabled={loading}>Add Employee</button>
             </div>
           </div>
@@ -857,7 +845,7 @@ export default function AdminEmployee() {
             <div className="filters">
               <select value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)}>
                 <option>All Departments</option>
-                {Object.keys(departmentPositions).map((dept) => (
+                {availableDepartments.map((dept) => (
                   <option key={dept} value={dept}>{dept}</option>
                 ))}
               </select>
@@ -872,18 +860,18 @@ export default function AdminEmployee() {
           <div className="table">
             <div className="thead">
               <div>Full Name</div>
-              <div>Username</div>
-              <div>Role</div>
-              <div>Status</div>
-              <div>Join Date</div>
-              
+              <div className="username-header">Username</div>
+              <div className="center">Role</div>
+              <div className="center">Status</div>
+              <div className="right">Join Date</div>
+              <div className="actions-header right"></div>
             </div>
             <div className="tbody">
               {loading ? (
                 <div className="tr"><div>Loading...</div></div>
               ) : (
                 filteredRows.map(r => (
-                  <div key={r.user_id || r.id} className="tr">
+                  <div key={r.id} className="tr">
                     <div>
                       <div className="emp">
                         <div className="emp-avatar">{r.name?.[0]}</div>
@@ -893,14 +881,16 @@ export default function AdminEmployee() {
                         </div>
                       </div>
                     </div>
-                    <div>{r.username}</div>
-                    <div>
+                    <div className="username-cell">{r.username}</div>
+                    <div className="center">
                       <span className={`role-badge ${r.role === 'admin' ? 'admin' : 'employee'}`}>
                         {r.role === 'admin' ? 'Admin' : 'Employee'}
                       </span>
                     </div>
-                    <div><span className={`status ${r.status === 'Inactive' ? 'danger' : 'success'}`}>{r.status}</span></div>
-                    <div>{r.joinDate}</div>
+                    <div className="center">
+                      <span className={`status ${r.status === 'Inactive' ? 'danger' : 'success'}`}>{r.status}</span>
+                    </div>
+                    <div className="right">{r.joinDate}</div>
                     <div className="right">
                       <div className="actions-dropdown">
                         <button 
@@ -941,114 +931,172 @@ export default function AdminEmployee() {
                 </div>
 
                 <form onSubmit={handleUpdate} className="details-grid">
+                  {/* === PERSONAL INFORMATION === */}
                   <div className="detail-section">
                     <h3>Personal Information</h3>
+
                     <div className="detail-row two">
                       <div className="detail-item">
                         <span className="detail-label">First Name</span>
                         <input 
                           name="first_name" 
                           value={editFirstName}
-                          onChange={(e) => setEditFirstName(e.target.value)}
-                          className="detail-input"
+                          onChange={(e) => handleEditInputChange('first_name', e.target.value)}
+                          className={`detail-input ${editFormErrors.first_name ? 'error' : ''}`}
                           required 
                         />
+                        {editFormErrors.first_name && <div className="field-error">{editFormErrors.first_name}</div>}
                       </div>
                       <div className="detail-item">
                         <span className="detail-label">Last Name</span>
                         <input 
                           name="last_name" 
                           value={editLastName}
-                          onChange={(e) => setEditLastName(e.target.value)}
-                          className="detail-input"
+                          onChange={(e) => handleEditInputChange('last_name', e.target.value)}
+                          className={`detail-input ${editFormErrors.last_name ? 'error' : ''}`}
                           required 
                         />
+                        {editFormErrors.last_name && <div className="field-error">{editFormErrors.last_name}</div>}
                       </div>
                     </div>
+
                     <div className="detail-item">
                       <span className="detail-label">Email Address</span>
                       <input 
                         type="email" 
                         name="email" 
-                        defaultValue={selected.email} 
-                        className="detail-input"
+                        value={editEmail}
+                        onChange={(e) => handleEditInputChange('email', e.target.value)}
+                        className={`detail-input ${editFormErrors.email ? 'error' : ''}`}
                         required 
                       />
+                      {editFormErrors.email && <div className="field-error">{editFormErrors.email}</div>}
                     </div>
+
+                    <div className="detail-item">
+                      <span className="detail-label">Phone</span>
+                      <input 
+                        type="text"
+                        name="phone" 
+                        value={editPhone}
+                        onChange={(e) => handleEditInputChange('phone', e.target.value)}
+                        placeholder="+63XXXXXXXXXX"
+                        className={`detail-input ${editFormErrors.phone ? 'error' : ''}`}
+                      />
+                      {editFormErrors.phone && <div className="field-error">{editFormErrors.phone}</div>}
+                    </div>
+
                     <div className="detail-item">
                       <span className="detail-label">Address</span>
                       <input
+                        type="text"
                         name="address"
                         value={editAddress}
-                        onChange={(e) => setEditAddress(e.target.value)}
-                        className="detail-input"
+                        onChange={(e) => handleEditInputChange('address', e.target.value)}
                         placeholder="Enter address"
+                        className="detail-input"
+                        required
                       />
                     </div>
+
                     <div className="detail-item">
                       <span className="detail-label">Employee ID</span>
-                      <span className="detail-value">EMP{String(selected.user_id || selected.id).padStart(3, '0')}</span>
+                      <span className="detail-value">
+                        EMP{String(selected.user_id || selected.id).padStart(3, '0')}
+                      </span>
                     </div>
                   </div>
 
+                  {/* === WORK INFORMATION === */}
                   <div className="detail-section">
                     <h3>Work Information</h3>
+
                     <div className="detail-item">
                       <span className="detail-label">Department</span>
                       <select
                         name="dept"
-                        className="detail-select"
+                        className={`detail-select ${editFormErrors.dept ? 'error' : ''}`}
                         value={editDept}
                         onChange={(e) => {
                           setEditDept(e.target.value);
                           setEditPosition('');
+                          const errors = { ...editFormErrors };
+                          if (e.target.value) {
+                            delete errors.dept;
+                          } else {
+                            errors.dept = "Department is required";
+                          }
+                          delete errors.position; // Clear position error when department changes
+                          setEditFormErrors(errors);
                         }}
                         required
                       >
                         <option value="">Select Department</option>
-                        {Object.keys(departmentPositions).map((dept) => (
+                        {availableDepartments.map((dept) => (
                           <option key={dept} value={dept}>{dept}</option>
                         ))}
                       </select>
+                      {editFormErrors.dept && <div className="field-error">{editFormErrors.dept}</div>}
                     </div>
+
                     <div className="detail-item">
                       <span className="detail-label">Position</span>
                       <select
                         name="position"
-                        className="detail-select"
+                        className={`detail-select ${editFormErrors.position ? 'error' : ''}`}
                         value={editPosition}
-                        onChange={(e) => setEditPosition(e.target.value)}
+                        onChange={(e) => {
+                          setEditPosition(e.target.value);
+                          const errors = { ...editFormErrors };
+                          if (e.target.value) {
+                            delete errors.position;
+                          } else {
+                            errors.position = "Position is required";
+                          }
+                          setEditFormErrors(errors);
+                        }}
                         required
                         disabled={!editDept}
                       >
                         <option value="">{editDept ? 'Select Position' : 'Select a department first'}</option>
-                        {(departmentPositions[editDept] || []).map((pos) => (
+                        {(departmentPositions[editDept] || (editPosition ? [editPosition] : [])).map((pos) => (
                           <option key={pos} value={pos}>{pos}</option>
                         ))}
                       </select>
+                      {editFormErrors.position && <div className="field-error">{editFormErrors.position}</div>}
                     </div>
+
                     <div className="detail-item">
                       <span className="detail-label">Status</span>
-                      <select name="status" defaultValue={selected.status} className="detail-select" required>
+                      <select 
+                        name="status" 
+                        value={editStatus}
+                        onChange={(e) => setEditStatus(e.target.value)}
+                        className="detail-select" 
+                        required
+                      >
                         <option value="Active">Active</option>
                         <option value="Inactive">Inactive</option>
                       </select>
                     </div>
+
                     <div className="detail-item">
                       <span className="detail-label">Join Date</span>
                       <span className="detail-value">{selected.joinDate}</span>
                     </div>
                   </div>
 
+                  {/* === ACTIONS === */}
                   <div className="modal-actions">
                     <button type="button" className="btn" onClick={() => setIsEditOpen(false)}>Cancel</button>
                     <button className="btn primary" type="submit">Update Employee</button>
-                  </div>
+                  </div>  
                 </form>
               </div>
             </div>
           </div>
         )}
+
 
         {isAddOpen && (
           <div className="modal" role="dialog">
@@ -1137,7 +1185,10 @@ export default function AdminEmployee() {
                         value={formData.dept}
                         onChange={(e) => {
                           const nextDept = e.target.value;
-                          setFormData(prev => ({ ...prev, dept: nextDept, position: '' }));
+                          // Automatically set role to employee if department doesn't allow admin
+                          const allowedAdmin = adminAllowedDepartments.includes(nextDept);
+                          const newRole = allowedAdmin ? formData.role : 'employee';
+                          setFormData(prev => ({ ...prev, dept: nextDept, position: '', role: newRole }));
                           const errors = { ...formErrors };
                           if (nextDept) {
                             delete errors.dept;
@@ -1151,7 +1202,7 @@ export default function AdminEmployee() {
                         required
                       >
                         <option value="">Select Department</option>
-                        {Object.keys(departmentPositions).map((dept) => (
+                        {availableDepartments.map((dept) => (
                           <option key={dept} value={dept}>{dept}</option>
                         ))}
                       </select>
@@ -1177,7 +1228,7 @@ export default function AdminEmployee() {
                         disabled={!formData.dept}
                       >
                         <option value="">{formData.dept ? 'Select Position' : 'Select a department first'}</option>
-                        {(departmentPositions[formData.dept] || []).map((pos) => (
+                        {(departmentPositions[formData.dept] || (formData.position ? [formData.position] : [])).map((pos) => (
                           <option key={pos} value={pos}>{pos}</option>
                         ))}
                       </select>
@@ -1214,10 +1265,18 @@ export default function AdminEmployee() {
                         value={formData.role}
                         onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value }))}
                         required
+                        disabled={!formData.dept || !adminAllowedDepartments.includes(formData.dept)}
                       >
                         <option value="employee">User/Employee</option>
-                        <option value="admin">Admin</option>
+                        {formData.dept && adminAllowedDepartments.includes(formData.dept) && (
+                          <option value="admin">Admin</option>
+                        )}
                       </select>
+                      {formData.dept && !adminAllowedDepartments.includes(formData.dept) && (
+                        <div className="field-info" style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                          Admin role is only available for HR, Management, Accounting, and Branch departments
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1296,32 +1355,6 @@ export default function AdminEmployee() {
           </div>
         )}
 
-        {isBatchAddOpen && (
-          <div className="modal" role="dialog">
-            <div className="modal-body">
-              <div className="modal-header">
-                <div className="modal-title">Batch Add Employees</div>
-                <button className="icon-btn" onClick={() => setIsBatchAddOpen(false)}>✖</button>
-              </div>
-              <div className="batch-add-content">
-                <p>Upload a CSV file with new employee data. Please use the provided template to ensure correct formatting.</p>
-                <button className="btn outline" onClick={handleDownloadTemplate}>Download Template</button>
-                <div className="batch-add-upload-area">
-                  <label htmlFor="batch-csv-upload" className="btn primary">Upload CSV File</label>
-                  <input type="file" id="batch-csv-upload" style={{ display: 'none' }} accept=".csv" onChange={handleBatchFileSelect} />
-                  <span>{batchAddFileName || "No file chosen"}</span>
-                </div>
-              </div>
-              <div className="modal-actions">
-                <button type="button" className="btn" onClick={() => setIsBatchAddOpen(false)} disabled={submitLoading}>Cancel</button>
-                <button className="btn primary" onClick={handleProcessBatchAdd} disabled={submitLoading || batchAddData.length === 0}>
-                  {submitLoading ? 'Adding...' : `Add ${batchAddData.length} Employees`}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {isViewOpen && viewEmployee && (
           <div className="modal" role="dialog">
             <div className="modal-body view-modal">
@@ -1359,6 +1392,7 @@ export default function AdminEmployee() {
                       <span className="detail-label">Username</span>
                       <span className="detail-value">{viewEmployee.username}</span>
                     </div>
+                    
                     <div className="detail-item">
                       <span className="detail-label">Employee ID</span>
                       <span className="detail-value">EMP{String(viewEmployee.user_id || viewEmployee.id).padStart(3, '0')}</span>
@@ -1401,18 +1435,18 @@ export default function AdminEmployee() {
                     </div>
                     <div className="detail-item">
                       <span className="detail-label">Phone</span>
-                      <span className="detail-value">+63 912 345 6789</span>
+                      <span className="detail-value">{viewEmployee.phone || 'N/A'}</span>
                     </div>
                     <div className="detail-item">
                       <span className="detail-label">Address</span>
-                      <span className="detail-value">{viewEmployee.address || '—'}</span>
+                      <span className="detail-value">{viewEmployee.address || 'N/A'}</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="modal-actions">
                   <button className="btn" onClick={() => setIsViewOpen(false)}>Cancel</button>
-                  <button className="btn" onClick={() => { setIsViewOpen(false); deleteEmployee(viewEmployee.user_id || viewEmployee.id); }}>Delete</button>
+                  <button className="btn btn-danger" onClick={() => { setIsViewOpen(false); openDeleteConfirmation(viewEmployee); }}>Delete</button>
                   <button className="btn primary" onClick={() => { setIsViewOpen(false); openEdit(viewEmployee); }}>Edit</button>
                 </div>
               </div>
@@ -1420,9 +1454,41 @@ export default function AdminEmployee() {
           </div>
         )}
 
+        {isDeleteOpen && employeeToDelete && (
+          <div className="modal" role="dialog">
+            <div className="modal-body delete-confirmation-modal">
+              <div className="delete-modal-header">
+                <div className="delete-icon">⚠️</div>
+                <h2 className="delete-modal-title">Delete Employee</h2>
+                <p className="delete-modal-message">
+                  Are you sure you want to delete <strong>{employeeToDelete.name}</strong>? This action cannot be undone.
+                </p>
+              </div>
+              <div className="delete-modal-actions">
+                <button 
+                  className="btn" 
+                  onClick={closeDeleteConfirmation}
+                  disabled={deleteLoading}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="btn btn-danger" 
+                  onClick={confirmDelete}
+                  disabled={deleteLoading}
+                >
+                  {deleteLoading ? 'Deleting...' : 'Delete Employee'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {notification && (
           <div className={`notification notification-${notification.type}`}>
-            <div className="notification-icon">✓</div>
+            <div className="notification-icon">
+              {notification.type === 'success' ? '✓' : '✕'}
+            </div>
             <div className="notification-content">
               <div className="notification-message">{notification.message}</div>
               <div className="notification-timestamp">{new Date().toLocaleTimeString()}</div>

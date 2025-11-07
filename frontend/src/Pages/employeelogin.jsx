@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import "../Pages/employeecss/employeeLogin.css";
+import { notifyProfileUpdated } from "../utils/currentUser";
 
 export default function EmployeeLogin() {
   const navigate = useNavigate();
@@ -93,6 +94,22 @@ export default function EmployeeLogin() {
       sessionStorage.setItem("userRole", result.user.role);
       sessionStorage.setItem("username", result.user.username);
       sessionStorage.setItem("loginTime", new Date().toISOString());
+      if (result.user.first_name) sessionStorage.setItem("firstName", result.user.first_name);
+      else sessionStorage.removeItem("firstName");
+
+      if (result.user.last_name) sessionStorage.setItem("lastName", result.user.last_name);
+      else sessionStorage.removeItem("lastName");
+
+      if (result.user.email) sessionStorage.setItem("email", result.user.email);
+      else sessionStorage.removeItem("email");
+
+      if (result.user.profile_picture) sessionStorage.setItem("profilePicture", result.user.profile_picture);
+      else sessionStorage.removeItem("profilePicture");
+
+      if (result.user.id) sessionStorage.setItem("userId", String(result.user.id));
+      else sessionStorage.removeItem("userId");
+
+      notifyProfileUpdated();
 
       // Redirect based on role
       if (result.user.role === "admin") {

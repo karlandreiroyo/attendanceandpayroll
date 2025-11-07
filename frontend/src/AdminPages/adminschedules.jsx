@@ -1,7 +1,9 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import "../AdminPages/admincss/adminDashboard.css";
 import "../AdminPages/admincss/adminSchedules.css";
+import { handleLogout as logout } from "../utils/logout";
+import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
 
 // Simple helpers for month navigation
 function getMonthMatrix(year, month) {
@@ -18,6 +20,7 @@ export default function AdminSchedules() {
   const location = useLocation();
   const isActive = (path) => location.pathname.startsWith(path);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [profileData, setProfileData] = useState(() => getSessionUserProfile());
   const [current, setCurrent] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
@@ -107,6 +110,11 @@ export default function AdminSchedules() {
     alert(`Template "${templateName}" created successfully!`);
   }
 
+  useEffect(() => {
+    const unsubscribe = subscribeToProfileUpdates(setProfileData);
+    return unsubscribe;
+  }, []);
+
   // Load saved schedule when month changes
   React.useEffect(() => {
     loadSchedule();
@@ -135,12 +143,22 @@ export default function AdminSchedules() {
           <h1>Schedules</h1>
           <div className="top-actions">
             <button className="profile-btn" onClick={() => setIsProfileOpen(v => !v)}>
-              <span className="profile-avatar">AU</span>
-              <span>Admin User</span>
+              <span className="profile-avatar">
+                {profileData.profilePicture ? (
+                  <img
+                    src={profileData.profilePicture}
+                    alt="Profile"
+                    style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  profileData.initials
+                )}
+              </span>
+              <span>{profileData.displayName}</span>
             </button>
             <div className={`profile-popover${isProfileOpen ? " open" : ""}`}>
-              <div className="profile-row">Profile</div>
-              <div className="profile-row" onClick={() => navigate("/")}>Log out</div>
+              <div className="profile-row" onClick={() => { setIsProfileOpen(false); navigate('/admin/profile'); }}>Profile</div>
+              <div className="profile-row" onClick={() => { setIsProfileOpen(false); logout(); }}>Log out</div>
             </div>
           </div>
         </header>

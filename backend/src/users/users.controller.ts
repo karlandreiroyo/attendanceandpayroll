@@ -9,6 +9,7 @@ import {
   BadRequestException,
   UsePipes,
   ValidationPipe,
+  Query,
 } from '@nestjs/common';
 import { UsersService, User } from './users.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
@@ -19,8 +20,15 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) { }
 
   @Get()
-  async findAll(): Promise<User[]> {
+  async findAll(@Query('username') username?: string): Promise<User | User[]> {
     try {
+      if (username) {
+        const user = await this.usersService.findByUsername(username);
+        if (!user) {
+          throw new BadRequestException('User not found');
+        }
+        return user;
+      }
       return await this.usersService.findAll();
     } catch (error) {
       throw new BadRequestException(error.message);

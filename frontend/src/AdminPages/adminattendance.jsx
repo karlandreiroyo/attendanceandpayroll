@@ -1,13 +1,20 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import "../AdminPages/admincss/adminDashboard.css";
 import "../AdminPages/admincss/adminAttendance.css";
+import { handleLogout as logout } from "../utils/logout";
+import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
 
 export default function AdminAttendance() {
   const navigate = useNavigate();
   const location = useLocation();
   const isActive = (path) => location.pathname.startsWith(path);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [profileData, setProfileData] = useState(() => getSessionUserProfile());
+  useEffect(() => {
+    const unsubscribe = subscribeToProfileUpdates(setProfileData);
+    return unsubscribe;
+  }, []);
   const [query, setQuery] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [statusFilter, setStatusFilter] = useState("All Status");
@@ -49,7 +56,7 @@ export default function AdminAttendance() {
       ["Employee", "Employee ID", "Department", "Date", "Time In", "Time Out", "Status", "Total Hours", "Overtime"],
       ...filtered.map(row => [
         row.name,
-        row.empId,
+        row.empId, 
         row.dept,
         row.date,
         row.in,
@@ -116,12 +123,22 @@ export default function AdminAttendance() {
           <h1>Attendance</h1>
           <div className="top-actions">
             <button className="profile-btn" onClick={() => setIsProfileOpen(v => !v)}>
-              <span className="profile-avatar">AU</span>
-              <span>Admin User</span>
+              <span className="profile-avatar">
+                {profileData.profilePicture ? (
+                  <img
+                    src={profileData.profilePicture}
+                    alt="Profile"
+                    style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  profileData.initials
+                )}
+              </span>
+              <span>{profileData.displayName}</span>
             </button>
             <div className={`profile-popover${isProfileOpen ? " open" : ""}`}>
-              <div className="profile-row">Profile</div>
-              <div className="profile-row" onClick={() => navigate("/")}>Log out</div>
+              <div className="profile-row" onClick={() => { setIsProfileOpen(false); navigate('/admin/profile'); }}>Profile</div>
+              <div className="profile-row" onClick={() => { setIsProfileOpen(false); logout(); }}>Log out</div>
             </div>
           </div>
         </header>

@@ -9,6 +9,7 @@ import AdminAttendance from "./AdminPages/adminAttendance";
 import AdminOvertime from "./AdminPages/adminOvertime";
 import AdminPayroll from "./AdminPages/adminPayroll";
 import AdminReports from "./AdminPages/adminReports";
+import AdminProfile from "./AdminPages/adminProfile";
 
 // Unified login is used for both admin and employee
 import EmployeeDashboard from "./Pages/employeeDashboard";
@@ -81,6 +82,14 @@ function App() {
           element={
             <ProtectedRoute requiredRole="admin">
               <AdminReports />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/admin/profile" 
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminProfile />
             </ProtectedRoute>
           } 
         />

@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import "../AdminPages/admincss/adminDashboard.css"; // Use admin layout CSS
 import "../Pages/employeecss/employeeLeaveRequest.css"; // Keep employee-specific styles
+import { handleLogout } from "../utils/logout";
 
 export default function EmployeeLeaveRequest() {
   const [type, setType] = useState("");
@@ -79,7 +80,7 @@ export default function EmployeeLeaveRequest() {
             </button>
             <div id="user-popover-lr" className="profile-popover">
               <div className="profile-row">Profile</div>
-              <div className="profile-row" onClick={() => (window.location.href = "/")}>Log out</div>
+              <div className="profile-row" onClick={handleLogout}>Log out</div>
             </div>
           </div>
         </header>

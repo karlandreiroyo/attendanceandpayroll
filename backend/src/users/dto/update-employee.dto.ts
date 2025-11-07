@@ -48,4 +48,8 @@ export class UpdateEmployeeDto {
   @IsOptional()
   @IsString()
   join_date?: string;
+
+  @IsOptional()
+  @IsString()
+  profile_picture?: string;
 }
