@@ -1,51 +1,37 @@
-import React, { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import "../AdminPages/admincss/adminDashboard.css"; // Use admin layout CSS
 import "../Pages/employeecss/employeeLeaveRequest.css"; // Keep employee-specific styles
-import { handleLogout } from "../utils/logout";
+import { handleLogout as logout } from "../utils/logout";
+import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
 
 export default function EmployeeLeaveRequest() {
+  const navigate = useNavigate();
+  const [isTopUserOpen, setIsTopUserOpen] = useState(false);
+  const [profileInfo, setProfileInfo] = useState(getSessionUserProfile());
   const [type, setType] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [reason, setReason] = useState("");
 
-  const balances = useMemo(
-    () => [
-      { key: "sick", label: "Sick Leave", used: 2, remaining: 13 },
-      { key: "vacation", label: "Vacation", used: 5, remaining: 10 },
-      { key: "personal", label: "Personal Leave", used: 1, remaining: 4 }
-    ],
-    []
-  );
+  const handleLogout = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsTopUserOpen(false);
+    logout();
+  };
 
-  const history = [
-    {
-      type: "Sick Leave",
-      range: "6/5/2023 - 6/6/2023",
-      duration: "2 day(s)",
-      requestedOn: "5/30/2023",
-      status: "Approved"
-    },
-    {
-      type: "Vacation",
-      range: "5/15/2023 - 5/19/2023",
-      duration: "5 day(s)",
-      requestedOn: "4/25/2023",
-      status: "Approved"
-    },
-    {
-      type: "Personal Leave",
-      range: "4/10/2023 - 4/10/2023",
-      duration: "1 day(s)",
-      requestedOn: "4/3/2023",
-      status: "Approved"
-    }
-  ];
+  useEffect(() => {
+    const unsubscribe = subscribeToProfileUpdates(setProfileInfo);
+    return () => unsubscribe();
+  }, []);
+
+  const [balances] = useState([]);
+  const [history] = useState([]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    alert(`Submitted: ${type} from ${startDate} to ${endDate}\nReason: ${reason}`);
+    // TODO: integrate with API
   };
 
   return (
@@ -70,38 +56,79 @@ export default function EmployeeLeaveRequest() {
           <div className="top-actions">
             <button
               className="profile-btn"
-              onClick={() => {
-                const el = document.getElementById("user-popover-lr");
-                if (el) el.classList.toggle("open");
-              }}
+              onClick={() => setIsTopUserOpen((open) => !open)}
             >
-              <span className="profile-avatar">U</span>
-              <span>User</span>
+              <span className="profile-avatar">{profileInfo.initials}</span>
+              <span>{profileInfo.displayName}</span>
             </button>
-            <div id="user-popover-lr" className="profile-popover">
-              <div className="profile-row">Profile</div>
-              <div className="profile-row" onClick={handleLogout}>Log out</div>
+            <div className={`profile-popover${isTopUserOpen ? " open" : ""}`}>
+              <div
+                className="profile-row"
+                onClick={() => {
+                  navigate("/employee/profile");
+                  setIsTopUserOpen(false);
+                }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    navigate("/employee/profile");
+                    setIsTopUserOpen(false);
+                  }
+                }}
+              >
+                Profile
+              </div>
+              <div
+                className="profile-row"
+                onClick={handleLogout}
+                style={{ cursor: "pointer" }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleLogout(e);
+                  }
+                }}
+              >
+                Log out
+              </div>
             </div>
           </div>
         </header>
 
         <section className="grid-3 lr-grid">
-          {balances.map((b) => {
-            const total = b.used + b.remaining;
-            const pct = Math.round((b.used / total) * 100);
-            return (
-              <div key={b.key} className="lr-card">
-                <div className="lr-title">{b.label}</div>
-                <div className="lr-progress">
-                  <div className="lr-progress-fill" style={{ width: `${pct}%` }}></div>
-                </div>
-                <div className="lr-legend">
-                  <span>Used: {b.used} days</span>
-                  <span>Remaining: {b.remaining} days</span>
-                </div>
+          {balances.length === 0 ? (
+            <div className="lr-card lr-card--empty">
+              <div className="lr-title">Leave Balances</div>
+              <div className="lr-empty">
+                Leave balances will appear here once your account is synced.
               </div>
-            );
-          })}
+            </div>
+          ) : (
+            balances.map((b) => {
+              const total = (b.used ?? 0) + (b.remaining ?? 0);
+              const pct =
+                total > 0 ? Math.round(((b.used ?? 0) / total) * 100) : 0;
+              return (
+                <div key={b.key || b.label} className="lr-card">
+                  <div className="lr-title">{b.label}</div>
+                  <div className="lr-progress">
+                    <div
+                      className="lr-progress-fill"
+                      style={{ width: `${pct}%` }}
+                    ></div>
+                  </div>
+                  <div className="lr-legend">
+                    <span>Used: {b.used ?? 0} days</span>
+                    <span>Remaining: {b.remaining ?? 0} days</span>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </section>
 
         <section className="card lr-request">
@@ -139,24 +166,34 @@ export default function EmployeeLeaveRequest() {
 
         <section className="card lr-history">
           <div className="card-title">Leave History</div>
-          <div className="table">
-            <div className="thead">
-              <div>Type</div>
-              <div>Date Range</div>
-              <div>Duration</div>
-              <div>Requested On</div>
-              <div>Status</div>
+          {history.length === 0 ? (
+            <div className="lr-empty">
+              Leave requests will be listed here after you submit one.
             </div>
-            {history.map((h, i) => (
-              <div key={i} className="trow">
-                <div>{h.type}</div>
-                <div>{h.range}</div>
-                <div>{h.duration}</div>
-                <div>{h.requestedOn}</div>
-                <div><span className="badge success">{h.status}</span></div>
+          ) : (
+            <div className="table">
+              <div className="thead">
+                <div>Type</div>
+                <div>Date Range</div>
+                <div>Duration</div>
+                <div>Requested On</div>
+                <div>Status</div>
               </div>
-            ))}
-          </div>
+              {history.map((h, i) => (
+                <div key={h.id || i} className="trow">
+                  <div>{h.type}</div>
+                  <div>{h.range}</div>
+                  <div>{h.duration}</div>
+                  <div>{h.requestedOn}</div>
+                  <div>
+                    <span className={`badge ${h.statusClass || "neutral"}`}>
+                      {h.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       </main>
     </div>

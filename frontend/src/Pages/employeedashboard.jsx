@@ -1,14 +1,24 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import "../AdminPages/admincss/adminDashboard.css"; // Use admin layout CSS
 import "../Pages/employeecss/employeeDashboard.css";
 import { handleLogout as logout } from "../utils/logout";
+import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
 
 export default function EmployeeDashboard() {
   const navigate = useNavigate();
-  const [view, setView] = useState("Monthly");
-  const [currentDate] = useState(new Date());
   const [isTopUserOpen, setIsTopUserOpen] = useState(false);
+  const [profileInfo, setProfileInfo] = useState(getSessionUserProfile());
+  const [todayLabel] = useState(() =>
+    new Date().toLocaleString(undefined, {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    })
+  );
+  const [leaveBalances] = useState([]);
+  const [announcements] = useState([]);
 
   // Session destroyer function
   const handleLogout = (e) => {
@@ -21,57 +31,9 @@ export default function EmployeeDashboard() {
   };
 
   useEffect(() => {
-    const today = new Date();
-    const todayElement = document.getElementById("today");
-    if (todayElement) {
-      todayElement.textContent = today.toDateString();
-    }
-
-    const leaveBars = document.getElementById("leaveBars");
-    if (leaveBars) {
-      leaveBars.innerHTML = `
-        <div class="bar-row"><span>Vacation Leave</span><div class="bar"><div class="bar-fill" style="width: 70%"></div></div></div>
-        <div class="bar-row"><span>Sick Leave</span><div class="bar"><div class="bar-fill" style="width: 50%"></div></div></div>
-        <div class="bar-row"><span>Emergency Leave</span><div class="bar"><div class="bar-fill" style="width: 30%"></div></div></div>
-      `;
-    }
+    const unsubscribe = subscribeToProfileUpdates(setProfileInfo);
+    return () => unsubscribe();
   }, []);
-
-  const attendanceDays = useMemo(() => {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    const lastDay = new Date(year, month + 1, 0).getDate();
-    const days = [];
-    for (let d = 1; d <= lastDay; d++) {
-      const date = new Date(year, month, d);
-      const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-      let status = "Present";
-      if (isWeekend) status = "Weekend";
-      if ([4, 12, 18, 26].includes(d)) status = "Absent";
-      days.push({ day: d, status });
-    }
-    return days;
-  }, [currentDate]);
-
-  const attendancePercentage = useMemo(() => {
-    const present = attendanceDays.filter((d) => d.status === "Present").length;
-    const workingDays = attendanceDays.filter((d) => d.status !== "Weekend").length;
-    if (workingDays === 0) return 0;
-    return Math.round((present / workingDays) * 100);
-  }, [attendanceDays]);
-
-  const monthName = useMemo(() =>
-    currentDate.toLocaleString("default", { month: "long" }),
-  [currentDate]);
-
-  const dailySummary = useMemo(() => {
-    const today = currentDate.getDate();
-    const todayRec = attendanceDays.find((d) => d.day === today);
-    if (!todayRec) return { label: "No Data", percentage: 0 };
-    if (todayRec.status === "Present") return { label: "Present", percentage: 100 };
-    if (todayRec.status === "Weekend") return { label: "Weekend", percentage: 100 };
-    return { label: "Absent", percentage: 0 };
-  }, [attendanceDays, currentDate]);
 
   return (
     <div className="admin-layout">
@@ -98,13 +60,30 @@ export default function EmployeeDashboard() {
               className="profile-btn"
               onClick={() => setIsTopUserOpen((v) => !v)}
             >
-              <span className="profile-avatar">U</span>
-              <span>User</span>
+              <span className="profile-avatar">{profileInfo.initials}</span>
+              <span>{profileInfo.displayName}</span>
             </button>
             <div
               className={`profile-popover${isTopUserOpen ? " open" : ""}`}
             >
-              <div className="profile-row">Profile</div>
+              <div
+                className="profile-row"
+                onClick={() => {
+                  navigate("/employee/profile");
+                  setIsTopUserOpen(false);
+                }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    navigate("/employee/profile");
+                    setIsTopUserOpen(false);
+                  }
+                }}
+              >
+                Profile
+              </div>
               <div 
                 className="profile-row" 
                 onClick={handleLogout}
@@ -126,9 +105,9 @@ export default function EmployeeDashboard() {
 
         <section className="welcome-card">
           <div className="welcome-title">
-            Welcome, <strong>User</strong>
+            Welcome, <strong>{profileInfo.displayName}</strong>
           </div>
-          <div className="welcome-sub" id="today"></div>
+          <div className="welcome-sub">{todayLabel}</div>
         </section>
 
         <section className="quick-grid">
@@ -169,113 +148,59 @@ export default function EmployeeDashboard() {
         <section className="grid-2">
           <div className="card">
             <div className="card-title">Leave Balance</div>
-            <div className="bars" id="leaveBars"></div>
-            <div className="bar-legend">
-              <div className="legend-row">
-                <span className="legend-label">Sick Leave</span>
-                <span className="legend-value">13 | 15 days</span>
+            {leaveBalances.length === 0 ? (
+              <div className="empty-state">
+                Leave balance data will appear here once available.
               </div>
-              <div className="legend-row">
-                <span className="legend-label">Vacation</span>
-                <span className="legend-value">10 | 15 days</span>
+            ) : (
+              <div className="bars">
+                {leaveBalances.map((leave) => (
+                  <div className="bar-row" key={leave.type || leave.label}>
+                    <span>{leave.label || leave.type}</span>
+                    <div className="bar">
+                      <div
+                        className="bar-fill"
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            Number.isFinite((leave.used / leave.total) * 100)
+                              ? Math.round((leave.used / leave.total) * 100)
+                              : 0
+                          )}%`,
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="legend-row">
-                <span className="legend-label">Personal Leave</span>
-                <span className="legend-value">4 | 5 days</span>
-              </div>
-            </div>
+            )}
             <Link className="link" to="/employee/leave-requests">Request leave →</Link>
           </div>
 
           <div className="card">
             <div className="card-title">Recent Announcements</div>
-            <div className="announcement">
-              <div className="ann-title">Company Holiday</div>
-              <div className="ann-body">
-                Office closed on June 12 for Independence Day.
+            {announcements.length === 0 ? (
+              <div className="empty-state">
+                Announcements will appear here once they are published.
               </div>
-              <div className="ann-date">Posted on June 1, 2023</div>
-            </div>
+            ) : (
+              announcements.map((item) => (
+                <div className="announcement" key={item.id}>
+                  <div className="ann-title">{item.title}</div>
+                  <div className="ann-body">{item.body}</div>
+                  <div className="ann-date">{item.date}</div>
+                </div>
+              ))
+            )}
           </div>
         </section>
 
         <section className="card">
           <div className="section-head">
-            <div className="section-title">
-              Your Attendance {view === "Monthly" ? `- ${monthName}` : view === "Daily" ? "- Daily" : "- Yearly"}
-            </div>
-            <div className="seg">
-              {[
-                "Daily",
-                "Monthly",
-                "Yearly"
-              ].map((label) => (
-                <button
-                  key={label}
-                  className={`seg-btn${view === label ? " active" : ""}`}
-                  onClick={() => setView(label)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <div className="section-title">Your Attendance</div>
           </div>
-
-          <div className="grid-2">
-            <div className="card flat">
-              <div className="subtle-title">
-                {view === "Daily"
-                  ? "This Week's Status"
-                  : view === "Monthly"
-                  ? `This Month's Status — ${monthName}`
-                  : `This Year's Status — ${currentDate.getFullYear()}`}
-              </div>
-              <div className="att-grid">
-                {attendanceDays.map((d) => (
-                  <div
-                    key={d.day}
-                    className={`att-cell ${
-                      d.status === "Present"
-                        ? "att-present"
-                        : d.status === "Absent"
-                        ? "att-absent"
-                        : "att-weekend"
-                    }`}
-                  >
-                    <div className="att-day">{d.day}</div>
-                    <div className="att-status">{d.status}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="card flat">
-              <div className="subtle-title">
-                {view === "Daily" ? `Today: ${dailySummary.label}` : "Attendance Summary"}
-              </div>
-              <div className="summary-wrap">
-                <div className="summary-pie">
-                  <svg viewBox="0 0 36 36" className="circular-chart">
-                    <path
-                      className="circle-bg"
-                      d="M18 2.0845
-                         a 15.9155 15.9155 0 0 1 0 31.831
-                         a 15.9155 15.9155 0 0 1 0 -31.831"
-                    />
-                    <path
-                      className="circle"
-                      strokeDasharray={`${view === "Daily" ? dailySummary.percentage : attendancePercentage}, 100`}
-                      d="M18 2.0845
-                         a 15.9155 15.9155 0 0 1 0 31.831
-                         a 15.9155 15.9155 0 0 1 0 -31.831"
-                    />
-                    <text x="18" y="20.35" className="percentage">
-                      {view === "Daily" ? `${dailySummary.percentage}%` : `${attendancePercentage}%`}
-                    </text>
-                  </svg>
-                </div>
-              </div>
-            </div>
+          <div className="empty-state">
+            Attendance analytics will appear here once your records are available.
           </div>
         </section>
       </main>

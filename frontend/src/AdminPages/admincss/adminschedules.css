@@ -148,16 +148,30 @@
 
 /* ----- Action Buttons ----- */
 .icon-btn {
-  background: transparent;
-  border: 0;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
   cursor: pointer;
-  padding: 6px;
-  border-radius: 6px;
-  transition: background 0.2s ease;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  color: #0f172a;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
 .icon-btn:hover {
-  background: #f3f4f6;
+  background: #f9fafb;
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+}
+
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
 }
 
 /* ----- Status Tag ----- */
@@ -334,7 +348,30 @@
 }
 
 .month-nav { display: flex; align-items: center; gap: 8px; }
-.month-label { font-weight: 700; color: #111827; min-width: 180px; text-align: center; }
+.month-picker {
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 6px 12px;
+  font-weight: 600;
+  color: #111827;
+  min-width: 180px;
+  text-align: center;
+  background: #ffffff;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+.month-picker:focus {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+.month-picker::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(25%) sepia(58%) saturate(457%) hue-rotate(88deg) brightness(94%) contrast(90%);
+  opacity: 1;
+}
+.month-picker::-webkit-clear-button,
+.month-picker::-webkit-inner-spin-button {
+  display: none;
+}
 
 .btn.warn { 
   background: #f97316; 
@@ -357,15 +394,19 @@
 
 .schedule-grid { 
   overflow-x: auto; 
+  overflow-y: auto;
   border: 1px solid #e5e7eb; 
   border-radius: 12px; 
   max-width: calc(100% - 40px);
+  max-height: 520px;
   position: relative;
   margin-left: 20px;
+  background: #fff;
 }
 
 .schedule-grid::-webkit-scrollbar {
   height: 8px;
+  width: 8px;
 }
 
 .schedule-grid::-webkit-scrollbar-track {
@@ -428,6 +469,13 @@
   gap: 2px; 
   min-width: 200px;
 }
+.emp-indicator {
+  width: 18px;
+  height: 4px;
+  border-radius: 999px;
+  display: inline-block;
+  margin-bottom: 6px;
+}
 .emp-name { 
   font-weight: 600; 
   color: #111827; 
@@ -461,4 +509,48 @@
 .dot-A { background: #facc1533; border: 1px solid #eab30855; }
 .dot-N { background: #60a5fa33; border: 1px solid #3b82f655; }
 .dot-O { background: #e5e7eb; border: 1px solid #e5e7eb; }
+
+.department-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 4px 0;
+  color: #4b5563;
+  font-size: 12px;
+}
+
+.department-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+.dept-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.grid-empty {
+  padding: 48px 24px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.95rem;
+  min-height: 160px;
+}
+
+.schedule-notice {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px dashed #d1fae5;
+  background: #ecfdf5;
+  color: #047857;
+  font-size: 0.95rem;
+}
 

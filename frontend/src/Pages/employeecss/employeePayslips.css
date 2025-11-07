@@ -166,6 +166,25 @@
   width: 100%;
 }
 
+.ps-empty {
+  padding: 24px;
+  text-align: center;
+  color: #6b7280;
+  background: #f9fafb;
+  border: 1px dashed #d1d5db;
+  border-radius: 12px;
+}
+
+.ps-empty-inline {
+  padding: 12px;
+  margin-top: 8px;
+  border-radius: 10px;
+  background: #f9fafb;
+  color: #6b7280;
+  border: 1px dashed #d1d5db;
+  text-align: center;
+}
+
 /* Table Head & Row */
 .ps-head,
 .ps-row {

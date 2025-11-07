@@ -167,6 +167,22 @@
 }
 .legend .legend-row { color: #374151; }
 
+.empty-state {
+  margin: 12px 0;
+  padding: 16px;
+  border: 1px dashed #d1d5db;
+  border-radius: 12px;
+  background: #f9fafb;
+  color: #6b7280;
+  font-size: 0.95rem;
+  text-align: center;
+  width: 100%;
+}
+
+.calendar-empty {
+  grid-column: 1 / -1;
+}
+
 /* Overtime Table */
 .overtime-table table {
   width: 100%;

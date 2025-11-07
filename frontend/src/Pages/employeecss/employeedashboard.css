@@ -538,6 +538,17 @@ html, body {
   text-decoration: underline;
 }
 
+.empty-state {
+  margin-top: 10px;
+  padding: 16px;
+  border: 1px dashed #d1d5db;
+  border-radius: 12px;
+  background: #f9fafb;
+  color: #6b7280;
+  font-size: 0.95rem;
+  text-align: center;
+}
+
 /* Attendance Section */
 .calendar {
   height: 180px;

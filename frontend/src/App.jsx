@@ -16,6 +16,7 @@ import EmployeeDashboard from "./Pages/employeeDashboard";
 import EmployeeSchedules from "./Pages/employeeSchedules";
 import EmployeeLeaveRequest from "./Pages/employeeLeaveRequest";
 import EmployeePayslips from "./Pages/employeePayslips";
+import EmployeeProfile from "./Pages/employeeProfile";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
@@ -124,6 +125,14 @@ function App() {
           element={
             <ProtectedRoute requiredRole="employee">
               <EmployeePayslips />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/employee/profile" 
+          element={
+            <ProtectedRoute requiredRole="employee">
+              <EmployeeProfile />
             </ProtectedRoute>
           } 
         />

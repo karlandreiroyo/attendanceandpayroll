@@ -1,12 +1,14 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import "../AdminPages/admincss/adminDashboard.css";
+import { API_BASE_URL } from "../config/api";
 import { handleLogout as logout } from "../utils/logout";
 import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
 
 export default function AdminDashboard() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [profileData, setProfileData] = useState(() => getSessionUserProfile());
+  const [employeeCount, setEmployeeCount] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
   const isActive = (path) => location.pathname.startsWith(path);
@@ -14,6 +16,33 @@ export default function AdminDashboard() {
   useEffect(() => {
     const unsubscribe = subscribeToProfileUpdates(setProfileData);
     return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadEmployeeCount = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/users`, { credentials: "include" });
+        if (!res.ok) return;
+        const users = await res.json();
+        if (isMounted) {
+          setEmployeeCount(Array.isArray(users) ? users.length : 0);
+        }
+      } catch (err) {
+        console.error("Failed to load employee count:", err);
+      }
+    };
+
+    loadEmployeeCount();
+
+    const handler = () => loadEmployeeCount();
+    window.addEventListener('employees-refresh', handler);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('employees-refresh', handler);
+    };
   }, []);
 
   // Session destroyer function
@@ -24,15 +53,12 @@ export default function AdminDashboard() {
     logout();
   };
 
-  // Employee data will be fetched from API
-  const employees = useMemo(() => [], []);
-
   const attendanceData = useMemo(() => [], []);
 
   const overtimeRequests = useMemo(() => [], []);
 
   const dashboardStats = useMemo(() => {
-    const totalEmployees = employees.length;
+    const totalEmployees = employeeCount;
     const presentToday = attendanceData.filter(a => a.status === "Present").length;
     const lateToday = attendanceData.filter(a => a.status === "Late").length;
     const absentToday = attendanceData.filter(a => a.status === "Absent").length;
@@ -45,7 +71,7 @@ export default function AdminDashboard() {
       absentToday,
       pendingOvertime
     };
-  }, [employees, attendanceData, overtimeRequests]);
+  }, [employeeCount, attendanceData, overtimeRequests]);
 
   const recentActivities = useMemo(() => [], []);
 

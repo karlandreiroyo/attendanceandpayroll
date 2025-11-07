@@ -1,25 +1,32 @@
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import "../AdminPages/admincss/adminDashboard.css"; // Use admin layout CSS
 import "../Pages/employeecss/employeePayslips.css";
-import { handleLogout } from "../utils/logout";
+import { handleLogout as logout } from "../utils/logout";
+import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
 
 export default function EmployeePayslips() {
-  // DEMO: Replace this with real API data
-  const payslips = [
-    {
-      period: 'Oct 1 – Oct 15, 2025',
-      issueDate: '2025-10-16',
-      netPay: '₱10,500.00',
-    },
-    {
-      period: 'Sep 16 – Sep 30, 2025',
-      issueDate: '2025-10-01',
-      netPay: '₱10,200.00',
-    }
-  ];
+  const navigate = useNavigate();
+  const [isTopUserOpen, setIsTopUserOpen] = useState(false);
+  const [profileInfo, setProfileInfo] = useState(() => getSessionUserProfile());
+  const [payslips] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const selected = payslips[selectedIndex] ?? payslips[0];
+  const selected = useMemo(() => {
+    if (!payslips || payslips.length === 0) return null;
+    return payslips[selectedIndex] ?? payslips[0];
+  }, [payslips, selectedIndex]);
+
+  const handleLogout = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsTopUserOpen(false);
+    logout();
+  };
+
+  useEffect(() => {
+    const unsubscribe = subscribeToProfileUpdates(setProfileInfo);
+    return () => unsubscribe();
+  }, []);
 
   return (
     <div className="admin-layout">
@@ -44,17 +51,45 @@ export default function EmployeePayslips() {
           <div className="top-actions">
             <button
               className="profile-btn"
-              onClick={() => {
-                const el = document.getElementById("user-popover-pay");
-                if (el) el.classList.toggle("open");
-              }}
+              onClick={() => setIsTopUserOpen((open) => !open)}
             >
-              <span className="profile-avatar">U</span>
-              <span>User</span>
+              <span className="profile-avatar">{profileInfo.initials}</span>
+              <span>{profileInfo.displayName}</span>
             </button>
-            <div id="user-popover-pay" className="profile-popover">
-              <div className="profile-row">Profile</div>
-              <div className="profile-row" onClick={handleLogout}>Log out</div>
+            <div className={`profile-popover${isTopUserOpen ? " open" : ""}`}>
+              <div
+                className="profile-row"
+                onClick={() => {
+                  navigate("/employee/profile");
+                  setIsTopUserOpen(false);
+                }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    navigate("/employee/profile");
+                    setIsTopUserOpen(false);
+                  }
+                }}
+              >
+                Profile
+              </div>
+              <div
+                className="profile-row"
+                onClick={handleLogout}
+                style={{ cursor: "pointer" }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleLogout(e);
+                  }
+                }}
+              >
+                Log out
+              </div>
             </div>
           </div>
         </header>
@@ -62,15 +97,18 @@ export default function EmployeePayslips() {
         <section className="card ps-list">
           <div className="card-title">Recent Payslips</div>
           <div className="ps-table">
-            <div className="ps-head">
-              <div>Pay Period</div>
-              <div>Issue Date</div>
-              <div className="right">Net Pay</div>
-            </div>
             {payslips.length === 0 ? (
-              <div style={{padding: '24px', textAlign: 'center', color: '#999'}}>No payslips available</div>
+              <div className="ps-empty">
+                Payslips will appear here once payroll issues them.
+              </div>
             ) : (
-              payslips.map((p, i) => (
+              <>
+                <div className="ps-head">
+                  <div>Pay Period</div>
+                  <div>Issue Date</div>
+                  <div className="right">Net Pay</div>
+                </div>
+                {payslips.map((p, i) => (
                 <div
                   key={i}
                   className={`ps-row${selectedIndex === i ? " active" : ""}`}
@@ -88,49 +126,109 @@ export default function EmployeePayslips() {
                   <div>{p.issueDate}</div>
                   <div className="right">{p.netPay}</div>
                 </div>
-              ))
+                ))}
+              </>
             )}
           </div>
         </section>
 
         <section className="card ps-detail">
           <div className="card-title">Payslip Details</div>
-          <div className="ps-period-label">{selected.period}</div>
-          <div className="ps-actions">
-            <button className="ps-btn" onClick={() => window.print()}>Download / Print</button>
-          </div>
-          <div className="ps-detail-grid">
-            <div className="ps-block">
-              <div className="ps-subtitle">Employee Information</div>
-              <div className="ps-kv"><span>Name:</span> <span>User</span></div>
-              <div className="ps-kv"><span>Employee ID:</span> <span>EMP-000</span></div>
-              <div className="ps-kv"><span>Position:</span> <span>Employee</span></div>
-              <div className="ps-kv"><span>Department:</span> <span>General</span></div>
+          {selected ? (
+            <>
+              <div className="ps-period-label">{selected.period}</div>
+              <div className="ps-actions">
+                <button className="ps-btn" type="button">
+                  Download / Print
+                </button>
+              </div>
+              <div className="ps-detail-grid">
+                <div className="ps-block">
+                  <div className="ps-subtitle">Employee Information</div>
+                  <div className="ps-kv">
+                    <span>Name:</span>
+                    <span>{selected.employeeName || profileInfo.displayName}</span>
+                  </div>
+                  <div className="ps-kv">
+                    <span>Employee ID:</span>
+                    <span>{selected.employeeId || "—"}</span>
+                  </div>
+                  <div className="ps-kv">
+                    <span>Position:</span>
+                    <span>{selected.position || profileInfo.position || "—"}</span>
+                  </div>
+                  <div className="ps-kv">
+                    <span>Department:</span>
+                    <span>{selected.department || profileInfo.department || "—"}</span>
+                  </div>
+                </div>
+
+                <div className="ps-block">
+                  <div className="ps-subtitle">Pay Period</div>
+                  <div className="ps-kv">
+                    <span>Period:</span>
+                    <span>{selected.period}</span>
+                  </div>
+                  <div className="ps-kv">
+                    <span>Issue Date:</span>
+                    <span>{selected.issueDate || "—"}</span>
+                  </div>
+                  <div className="ps-kv">
+                    <span>Payment Method:</span>
+                    <span>{selected.paymentMethod || "—"}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="ps-earnings">
+                <div className="ps-subtitle">Earnings</div>
+                {(selected.earnings || []).length === 0 ? (
+                  <div className="ps-empty-inline">
+                    Earnings breakdown will appear once available.
+                  </div>
+                ) : (
+                  (selected.earnings || []).map((item, idx) => (
+                    <div key={item.label || idx} className="ps-kv">
+                      <span>{item.label}</span>
+                      <span>{item.amount}</span>
+                    </div>
+                  ))
+                )}
+                {selected.grossPay && (
+                  <div className="ps-kv total">
+                    <span>Gross Pay</span>
+                    <span>{selected.grossPay}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="ps-deductions">
+                <div className="ps-subtitle">Deductions</div>
+                {(selected.deductions || []).length === 0 ? (
+                  <div className="ps-empty-inline">
+                    Deductions will appear here when available.
+                  </div>
+                ) : (
+                  (selected.deductions || []).map((item, idx) => (
+                    <div key={item.label || idx} className="ps-kv">
+                      <span>{item.label}</span>
+                      <span>{item.amount}</span>
+                    </div>
+                  ))
+                )}
+                {selected.netPay && (
+                  <div className="ps-kv total">
+                    <span>Net Pay</span>
+                    <span>{selected.netPay}</span>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="ps-empty">
+              Select a payslip to view its details once they are available.
             </div>
-
-            <div className="ps-block">
-              <div className="ps-subtitle">Pay Period</div>
-              <div className="ps-kv"><span>Period:</span> <span>{selected.period}</span></div>
-              <div className="ps-kv"><span>Issue Date:</span> <span>{selected.issueDate}</span></div>
-              <div className="ps-kv"><span>Payment Method:</span> <span>Direct Deposit</span></div>
-            </div>
-          </div>
-
-          <div className="ps-earnings">
-            <div className="ps-subtitle">Earnings</div>
-            <div className="ps-kv"><span>Basic Salary</span><span>₱11,000.00</span></div>
-            <div className="ps-kv"><span>Overtime Pay</span><span>₱2,000.00</span></div>
-            <div className="ps-kv"><span>Allowance</span><span>₱500.00</span></div>
-            <div className="ps-kv total"><span>Gross Pay</span><span>₱13,500.00</span></div>
-          </div>
-
-          <div className="ps-deductions">
-            <div className="ps-subtitle">Deductions</div>
-            <div className="ps-kv"><span>Tax</span><span>₱1,500.00</span></div>
-            <div className="ps-kv"><span>SSS</span><span>₱300.00</span></div>
-            <div className="ps-kv"><span>PhilHealth</span><span>₱200.00</span></div>
-            <div className="ps-kv total"><span>Net Pay</span><span>{selected.netPay}</span></div>
-          </div>
+          )}
         </section>
       </main>
     </div>

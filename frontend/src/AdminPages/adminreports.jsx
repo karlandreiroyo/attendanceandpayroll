@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import "../AdminPages/admincss/adminDashboard.css";
 import "../AdminPages/admincss/adminReports.css";
@@ -22,28 +22,11 @@ export default function AdminReports() {
   const location = useLocation();
   const isActive = (path) => location.pathname.startsWith(path);
 
-  // Sample data for reports
-  const attendanceData = useMemo(() => [
-    { dept: "IT", total: 10, present: 8, late: 1, absent: 1, rate: "90%" },
-    { dept: "HR", total: 5, present: 5, late: 0, absent: 0, rate: "100%" },
-    { dept: "Finance", total: 8, present: 7, late: 0, absent: 1, rate: "87.5%" },
-    { dept: "Marketing", total: 12, present: 10, late: 1, absent: 1, rate: "91.7%" },
-    { dept: "Operations", total: 15, present: 12, late: 2, absent: 1, rate: "93.3%" },
-  ], []);
-
-  const overtimeData = useMemo(() => [
-    { dept: "IT", requests: 5, approved: 3, rejected: 1, pending: 1, totalHours: 12 },
-    { dept: "HR", requests: 2, approved: 2, rejected: 0, pending: 0, totalHours: 6 },
-    { dept: "Finance", requests: 3, approved: 1, rejected: 1, pending: 1, totalHours: 8 },
-    { dept: "Marketing", requests: 4, approved: 2, rejected: 1, pending: 1, totalHours: 10 },
-    { dept: "Operations", requests: 6, approved: 4, rejected: 1, pending: 1, totalHours: 15 },
-  ], []);
-
-  const payrollData = useMemo(() => [], []);
-
-  const employeeListData = useMemo(() => [], []);
-
-  const leaveData = useMemo(() => [], []);
+  const [attendanceData] = useState([]);
+  const [overtimeData] = useState([]);
+  const [payrollData] = useState([]);
+  const [employeeListData] = useState([]);
+  const [leaveData] = useState([]);
 
   function generateReport() {
     const reportData = getReportData();
@@ -53,28 +36,55 @@ export default function AdminReports() {
   function getReportData() {
     switch (selectedReport) {
       case "Attendance Summary":
-        return {
-          summary: `Attendance Summary Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nTotal Employees: ${attendanceData.reduce((sum, d) => sum + d.total, 0)}\nOverall Attendance Rate: 92%`
-        };
+        return attendanceData.length === 0
+          ? {
+              summary: `Attendance Summary Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nNo attendance data available for the selected range.`,
+            }
+          : {
+              summary: `Attendance Summary Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nTotal Employees: ${attendanceData.reduce((sum, d) => sum + d.total, 0)}\nOverall Attendance Rate: ${Math.round(
+                (attendanceData.reduce((sum, d) => sum + d.present, 0) /
+                  Math.max(attendanceData.reduce((sum, d) => sum + d.total, 0), 1)) *
+                  100
+              )}%`,
+            };
       case "Overtime Summary":
-        return {
-          summary: `Overtime Summary Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nTotal Requests: ${overtimeData.reduce((sum, d) => sum + d.requests, 0)}\nTotal Hours: ${overtimeData.reduce((sum, d) => sum + d.totalHours, 0)}`
-        };
+        return overtimeData.length === 0
+          ? {
+              summary: `Overtime Summary Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nNo overtime data available for the selected range.`,
+            }
+          : {
+              summary: `Overtime Summary Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nTotal Requests: ${overtimeData.reduce((sum, d) => sum + d.requests, 0)}\nTotal Hours: ${overtimeData.reduce((sum, d) => sum + d.totalHours, 0)}`,
+            };
       case "Payroll Summary":
-        return {
-          summary: `Payroll Summary Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nTotal Gross Pay: ₱${payrollData.reduce((sum, d) => sum + d.grossPay, 0).toLocaleString()}\nTotal Net Pay: ₱${payrollData.reduce((sum, d) => sum + d.netPay, 0).toLocaleString()}`
-        };
+        return payrollData.length === 0
+          ? {
+              summary: `Payroll Summary Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nNo payroll data available.`,
+            }
+          : {
+              summary: `Payroll Summary Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nTotal Gross Pay: ₱${payrollData.reduce((sum, d) => sum + d.grossPay, 0).toLocaleString()}\nTotal Net Pay: ₱${payrollData.reduce((sum, d) => sum + d.netPay, 0).toLocaleString()}`,
+            };
       case "Employee List":
-        return {
-          summary: `Employee List Report\nTotal Employees: ${employeeListData.length}\nActive Employees: ${employeeListData.filter(e => e.status === "Active").length}\nDepartments: ${[...new Set(employeeListData.map(e => e.dept))].join(", ")}`
-        };
+        return employeeListData.length === 0
+          ? {
+              summary: "Employee List Report\nNo employee data available.",
+            }
+          : {
+              summary: `Employee List Report\nTotal Employees: ${employeeListData.length}\nActive Employees: ${employeeListData.filter(e => e.status === "Active").length}\nDepartments: ${[...new Set(employeeListData.map(e => e.dept))].join(", ")}`,
+            };
       case "Leave Summary":
-        return {
-          summary: `Leave Summary Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nTotal Leave Requests: ${leaveData.reduce((sum, d) => sum + d.pendingLeaves + d.approvedLeaves + d.rejectedLeaves, 0)}\nTotal Leave Days: ${leaveData.reduce((sum, d) => sum + d.totalDays, 0)}`
-        };
+        return leaveData.length === 0
+          ? {
+              summary: `Leave Summary Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nNo leave data available.`,
+            }
+          : {
+              summary: `Leave Summary Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nTotal Leave Requests: ${leaveData.reduce(
+                (sum, d) => sum + d.pendingLeaves + d.approvedLeaves + d.rejectedLeaves,
+                0
+              )}\nTotal Leave Days: ${leaveData.reduce((sum, d) => sum + d.totalDays, 0)}`,
+            };
       case "Custom Report":
         return {
-          summary: `Custom Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nDepartment: ${dept}\nThis is a customizable report that can be configured based on specific requirements.`
+          summary: `Custom Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nDepartment: ${dept}\nConfigure filters and data sources to generate your custom report once available.`,
         };
       default:
         return { summary: "Report generated successfully!" };
@@ -224,100 +234,122 @@ export default function AdminReports() {
 
               {selectedReport === "Attendance Summary" && (
                 <div className="summary-table">
-                  <div className="t-head">
-                    <div>Department</div>
-                    <div>Total Employees</div>
-                    <div>Present</div>
-                    <div>Late</div>
-                    <div>Absent</div>
-                    <div>Attendance Rate</div>
-                  </div>
-                  {attendanceData.map((d, i) => (
-                    <div key={d.dept} className="t-row">
-                      <div>{d.dept}</div>
-                      <div>{d.total}</div>
-                      <div>{d.present}</div>
-                      <div>{d.late}</div>
-                      <div>{d.absent}</div>
-                      <div>{d.rate}</div>
+                  {attendanceData.length === 0 ? (
+                    <div className="table-empty">
+                      Attendance records will appear here once data is available.
                     </div>
-                  ))}
-                  <div className="t-row total-row">
-                    <div>Total</div>
-                    <div>{attendanceData.reduce((sum, d) => sum + d.total, 0)}</div>
-                    <div>{attendanceData.reduce((sum, d) => sum + d.present, 0)}</div>
-                    <div>{attendanceData.reduce((sum, d) => sum + d.late, 0)}</div>
-                    <div>{attendanceData.reduce((sum, d) => sum + d.absent, 0)}</div>
-                    <div>92%</div>
-                  </div>
+                  ) : (
+                    <>
+                      <div className="t-head">
+                        <div>Department</div>
+                        <div>Total Employees</div>
+                        <div>Present</div>
+                        <div>Late</div>
+                        <div>Absent</div>
+                        <div>Attendance Rate</div>
+                      </div>
+                      {attendanceData.map((d) => (
+                        <div key={d.dept} className="t-row">
+                          <div>{d.dept}</div>
+                          <div>{d.total}</div>
+                          <div>{d.present}</div>
+                          <div>{d.late}</div>
+                          <div>{d.absent}</div>
+                          <div>{d.rate}</div>
+                        </div>
+                      ))}
+                      <div className="t-row total-row">
+                        <div>Total</div>
+                        <div>{attendanceData.reduce((sum, d) => sum + d.total, 0)}</div>
+                        <div>{attendanceData.reduce((sum, d) => sum + d.present, 0)}</div>
+                        <div>{attendanceData.reduce((sum, d) => sum + d.late, 0)}</div>
+                        <div>{attendanceData.reduce((sum, d) => sum + d.absent, 0)}</div>
+                        <div>
+                          {Math.round(
+                            (attendanceData.reduce((sum, d) => sum + d.present, 0) /
+                              Math.max(attendanceData.reduce((sum, d) => sum + d.total, 0), 1)) *
+                              100
+                          )}
+                          %
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
               {selectedReport === "Employee List" && (
                 <div className="summary-table">
-                  <div className="t-head">
-                    <div>Employee</div>
-                    <div>Department</div>
-                    <div>Position</div>
-                    <div>Status</div>
-                    <div>Join Date</div>
-                    <div>Email</div>
-                  </div>
-                  {employeeListData.map((emp) => (
-                    <div key={emp.id} className="t-row">
-                      <div>{emp.name}</div>
-                      <div>{emp.dept}</div>
-                      <div>{emp.position}</div>
-                      <div><span className="status-badge active">{emp.status}</span></div>
-                      <div>{emp.joinDate}</div>
-                      <div>{emp.email}</div>
+                  {employeeListData.length === 0 ? (
+                    <div className="table-empty">
+                      Employee records will appear here once present.
                     </div>
-                  ))}
+                  ) : (
+                    <>
+                      <div className="t-head">
+                        <div>Employee</div>
+                        <div>Department</div>
+                        <div>Position</div>
+                        <div>Status</div>
+                        <div>Join Date</div>
+                        <div>Email</div>
+                      </div>
+                      {employeeListData.map((emp) => (
+                        <div key={emp.id} className="t-row">
+                          <div>{emp.name}</div>
+                          <div>{emp.dept}</div>
+                          <div>{emp.position}</div>
+                          <div>
+                            <span className={`status-badge ${emp.status === "Active" ? "active" : ""}`}>
+                              {emp.status}
+                            </span>
+                          </div>
+                          <div>{emp.joinDate}</div>
+                          <div>{emp.email}</div>
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </div>
               )}
 
               {selectedReport === "Leave Summary" && (
                 <div className="summary-table">
-                  <div className="t-head">
-                    <div>Department</div>
-                    <div>Total Employees</div>
-                    <div>Pending Leaves</div>
-                    <div>Approved Leaves</div>
-                    <div>Rejected Leaves</div>
-                    <div>Total Days</div>
-                  </div>
-                  {leaveData.map((d, i) => (
-                    <div key={d.dept} className="t-row">
-                      <div>{d.dept}</div>
-                      <div>{d.totalEmployees}</div>
-                      <div>{d.pendingLeaves}</div>
-                      <div>{d.approvedLeaves}</div>
-                      <div>{d.rejectedLeaves}</div>
-                      <div>{d.totalDays}</div>
+                  {leaveData.length === 0 ? (
+                    <div className="table-empty">
+                      Leave activity will appear here once data is available.
                     </div>
-                  ))}
+                  ) : (
+                    <>
+                      <div className="t-head">
+                        <div>Department</div>
+                        <div>Total Employees</div>
+                        <div>Pending Leaves</div>
+                        <div>Approved Leaves</div>
+                        <div>Rejected Leaves</div>
+                        <div>Total Days</div>
+                      </div>
+                      {leaveData.map((d) => (
+                        <div key={d.dept} className="t-row">
+                          <div>{d.dept}</div>
+                          <div>{d.totalEmployees}</div>
+                          <div>{d.pendingLeaves}</div>
+                          <div>{d.approvedLeaves}</div>
+                          <div>{d.rejectedLeaves}</div>
+                          <div>{d.totalDays}</div>
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </div>
               )}
 
               {selectedReport === "Custom Report" && (
                 <div className="custom-report-content">
-                  <div className="custom-section">
-                    <h3>Report Configuration</h3>
-                    <p>This is a customizable report that can be configured based on specific requirements.</p>
-                    <div className="config-options">
-                      <div className="config-item">
-                        <label>Include Employee Details</label>
-                        <input type="checkbox" defaultChecked />
-                      </div>
-                      <div className="config-item">
-                        <label>Include Financial Data</label>
-                        <input type="checkbox" />
-                      </div>
-                      <div className="config-item">
-                        <label>Include Attendance Data</label>
-                        <input type="checkbox" defaultChecked />
-                      </div>
-                    </div>
+                  <div className="custom-placeholder">
+                    Custom report configuration will be available once reporting
+                    templates are defined. Select a date range and department to
+                    prepare your filters.
                   </div>
                 </div>
               )}

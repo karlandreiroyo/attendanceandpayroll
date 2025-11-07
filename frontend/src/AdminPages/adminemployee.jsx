@@ -142,6 +142,10 @@ export default function AdminEmployee() {
 
   const availableDepartments = useMemo(() => Object.keys(departmentPositions).sort(), [departmentPositions]);
 
+  const notifyEmployeesUpdated = () => {
+    window.dispatchEvent(new Event('employees-refresh'));
+  };
+
   // Format date uniformly as MM/DD/YYYY
   const formatDate = (dateString) => {
     if (!dateString) {
@@ -381,6 +385,7 @@ export default function AdminEmployee() {
       };
       
       setRows(prev => prev.map(r => (r.user_id === updatedRow.user_id || r.id === updatedRow.id ? updatedRow : r)));
+      notifyEmployeesUpdated();
       setIsEditOpen(false);
       setSelected(null);
       setEditDept('');
@@ -473,16 +478,7 @@ export default function AdminEmployee() {
     
     // Auto-add +63 prefix for phone and only allow numbers
     if (field === 'phone') {
-      // Remove all non-numeric characters
-      const numbersOnly = value.replace(/\D/g, '');
-      // If it doesn't start with 63, add it
-      if (numbersOnly && !numbersOnly.startsWith('63')) {
-        processedValue = '+63' + numbersOnly.slice(0, 10);
-      } else if (numbersOnly.startsWith('63')) {
-        processedValue = '+' + numbersOnly.slice(0, 12); // +63 + 10 digits
-      } else {
-        processedValue = '+63' + numbersOnly.slice(0, 10);
-      }
+      processedValue = formatPhoneDisplay(value);
     }
     
     setFormData(prev => ({ ...prev, [field]: processedValue }));
@@ -543,16 +539,7 @@ export default function AdminEmployee() {
     
     // Auto-add +63 prefix for phone and only allow numbers
     if (field === 'phone') {
-      // Remove all non-numeric characters
-      const numbersOnly = value.replace(/\D/g, '');
-      // If it doesn't start with 63, add it
-      if (numbersOnly && !numbersOnly.startsWith('63')) {
-        processedValue = '+63' + numbersOnly.slice(0, 10);
-      } else if (numbersOnly.startsWith('63')) {
-        processedValue = '+' + numbersOnly.slice(0, 12); // +63 + 10 digits
-      } else {
-        processedValue = '+63' + numbersOnly.slice(0, 10);
-      }
+      processedValue = formatPhoneDisplay(value);
     }
     
     // Update the appropriate state
@@ -698,6 +685,7 @@ export default function AdminEmployee() {
         joinDate: formatDate(created.join_date),
       };
       setRows(prev => [...prev, newRow]);
+      notifyEmployeesUpdated();
       setIsAddOpen(false);
       setFormData({
         first_name: '',
@@ -734,6 +722,16 @@ export default function AdminEmployee() {
   }
 
   function openDeleteConfirmation(employee) {
+    const currentId = currentUser?.user_id || currentUser?.id;
+    const currentUsername = currentUser?.username;
+    if (
+      (currentId && (employee.user_id === currentId || employee.id === currentId)) ||
+      (currentUsername && employee.username === currentUsername)
+    ) {
+      setNotification({ type: 'error', message: "You cannot delete your own account while you're logged in." });
+      setTimeout(() => setNotification(null), 4000);
+      return;
+    }
     setEmployeeToDelete(employee);
     setIsDeleteOpen(true);
   }
@@ -761,6 +759,7 @@ export default function AdminEmployee() {
       }
       
       setRows(prev => prev.filter(x => (x.user_id || x.id) !== id));
+      notifyEmployeesUpdated();
       setIsDeleteOpen(false);
       setEmployeeToDelete(null);
       setNotification({ type: 'success', message: `Employee "${employeeToDelete.name}" has been deleted successfully` });

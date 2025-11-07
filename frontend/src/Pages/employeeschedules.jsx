@@ -1,11 +1,29 @@
-import React, { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import "../AdminPages/admincss/adminDashboard.css"; // Use admin layout CSS
 import "../Pages/employeecss/employeeSchedules.css";
-import { handleLogout } from "../utils/logout";
+import { handleLogout as logout } from "../utils/logout";
+import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
 
 export default function EmployeeSchedules() {
+  const navigate = useNavigate();
+  const [isTopUserOpen, setIsTopUserOpen] = useState(false);
+  const [profileInfo, setProfileInfo] = useState(getSessionUserProfile());
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [scheduleEntries] = useState([]);
+  const [legendItems] = useState([]);
+
+  const handleLogout = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsTopUserOpen(false);
+    logout();
+  };
+
+  useEffect(() => {
+    const unsubscribe = subscribeToProfileUpdates(setProfileInfo);
+    return () => unsubscribe();
+  }, []);
 
   const monthName = currentDate.toLocaleString("default", { month: "long" });
   const year = currentDate.getFullYear();
@@ -22,14 +40,6 @@ export default function EmployeeSchedules() {
     setCurrentDate(nextMonth);
   };
 
-  // Sample shift assignments
-  const shifts = {
-    morning: [1, 3, 5, 7, 9, 11, 13],
-    afternoon: [2, 4, 6, 8, 10, 12, 14],
-    night: [15, 17, 19, 21, 23, 25, 27],
-    dayoff: [16, 22, 28]
-  };
-
   const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   const daysInMonth = useMemo(() => {
@@ -40,11 +50,24 @@ export default function EmployeeSchedules() {
     return [...blanks, ...days];
   }, [currentDate]);
 
-  const renderShiftPill = (d) => {
-    if (shifts.morning.includes(d)) return <div className="shift-pill">Morning (8:00 AM - 4:00 PM)</div>;
-    if (shifts.afternoon.includes(d)) return <div className="shift-pill">Afternoon (2:00 PM - 10:00 PM)</div>;
-    if (shifts.night.includes(d)) return <div className="shift-pill">Night (10:00 PM - 6:00 AM)</div>;
-    return null;
+  const scheduleLookup = useMemo(() => {
+    const map = new Map();
+    scheduleEntries.forEach((entry) => {
+      if (entry && typeof entry.day === "number") {
+        map.set(entry.day, entry);
+      }
+    });
+    return map;
+  }, [scheduleEntries]);
+
+  const renderShiftPill = (day) => {
+    const entry = scheduleLookup.get(day);
+    if (!entry) return null;
+
+    const label = entry.label || entry.shift || "Scheduled";
+    const time = entry.time ? ` (${entry.time})` : "";
+
+    return <div className="shift-pill">{`${label}${time}`}</div>;
   };
 
   return (
@@ -70,34 +93,61 @@ export default function EmployeeSchedules() {
           <div className="top-actions">
             <button
               className="profile-btn"
-              onClick={() => {
-                const el = document.getElementById("user-popover-sch");
-                if (el) el.classList.toggle("open");
-              }}
+              onClick={() => setIsTopUserOpen((open) => !open)}
             >
-              <span className="profile-avatar">U</span>
-              <span>User</span>
+              <span className="profile-avatar">{profileInfo.initials}</span>
+              <span>{profileInfo.displayName}</span>
             </button>
-            <div id="user-popover-sch" className="profile-popover">
-              <div className="profile-row">Profile</div>
-              <div className="profile-row" onClick={handleLogout}>Log out</div>
+            <div className={`profile-popover${isTopUserOpen ? " open" : ""}`}>
+              <div
+                className="profile-row"
+                onClick={() => {
+                  navigate("/employee/profile");
+                  setIsTopUserOpen(false);
+                }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    navigate("/employee/profile");
+                    setIsTopUserOpen(false);
+                  }
+                }}
+              >
+                Profile
+              </div>
+              <div
+                className="profile-row"
+                onClick={handleLogout}
+                style={{ cursor: "pointer" }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleLogout(e);
+                  }
+                }}
+              >
+                Log out
+              </div>
             </div>
           </div>
         </header>
 
         <section className="card legend">
-          <div className="legend-row">
-            <span className="dot morning"></span> Morning Shift (8:00 AM - 4:00 PM)
-          </div>
-          <div className="legend-row">
-            <span className="dot afternoon"></span> Afternoon Shift (2:00 PM - 10:00 PM)
-          </div>
-          <div className="legend-row">
-            <span className="dot night"></span> Night Shift (10:00 PM - 6:00 AM)
-          </div>
-          <div className="legend-row">
-            <span className="dot dayoff"></span> Day Off
-          </div>
+          {legendItems.length === 0 ? (
+            <div className="empty-state">
+              Shift legend will appear here once your manager assigns schedules.
+            </div>
+          ) : (
+            legendItems.map((item) => (
+              <div className="legend-row" key={item.key || item.label}>
+                <span className={`dot ${item.className || ""}`}></span>{item.label}
+              </div>
+            ))
+          )}
         </section>
 
         <section className="card">
@@ -117,18 +167,24 @@ export default function EmployeeSchedules() {
           </div>
 
           <div className="calendar-grid">
-            {daysInMonth.map((d) => (
-              d.empty ? (
-                <div key={d.key} className="calendar-cell empty"></div>
-              ) : (
-                <div key={d.day} className="calendar-cell day">
-                  <div className="cell-head">
-                    <span className="cell-day-number">{d.day}</span>
+            {scheduleEntries.length === 0 ? (
+              <div className="empty-state calendar-empty">
+                Your assigned shifts will appear on this calendar once they are available.
+              </div>
+            ) : (
+              daysInMonth.map((d) =>
+                d.empty ? (
+                  <div key={d.key} className="calendar-cell empty"></div>
+                ) : (
+                  <div key={d.day} className="calendar-cell day">
+                    <div className="cell-head">
+                      <span className="cell-day-number">{d.day}</span>
+                    </div>
+                    {renderShiftPill(d.day)}
                   </div>
-                  {renderShiftPill(d.day)}
-                </div>
+                )
               )
-            ))}
+            )}
           </div>
         </section>
       </main>

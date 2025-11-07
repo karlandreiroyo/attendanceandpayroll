@@ -4,6 +4,27 @@ import "../AdminPages/admincss/adminDashboard.css";
 import "../AdminPages/admincss/adminSchedules.css";
 import { handleLogout as logout } from "../utils/logout";
 import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
+import { API_BASE_URL } from "../config/api";
+
+const SHIFT_DEFINITIONS = {
+  M: { label: "Morning", hours: "8:00 AM - 4:00 PM" },
+  A: { label: "Afternoon", hours: "2:00 PM - 10:00 PM" },
+  N: { label: "Night", hours: "10:00 PM - 6:00 AM" },
+  O: { label: "Day Off", hours: "" },
+};
+
+const DEPARTMENT_COLOR_PALETTE = [
+  "#93c5fd",
+  "#fda4af",
+  "#c4b5fd",
+  "#fdba74",
+  "#99f6e4",
+  "#f9a8d4",
+  "#bef264",
+  "#fbcfe8",
+  "#fbbf24",
+  "#86efac",
+];
 
 // Simple helpers for month navigation
 function getMonthMatrix(year, month) {
@@ -25,8 +46,9 @@ export default function AdminSchedules() {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
   });
-
-  const employees = useMemo(() => [], []);
+  const [employees, setEmployees] = useState([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
+  const [scheduleNotice, setScheduleNotice] = useState(null);
 
   const days = useMemo(() => getMonthMatrix(current.year, current.month), [current]);
 
@@ -35,11 +57,26 @@ export default function AdminSchedules() {
   , [current]);
 
   const [shifts, setShifts] = useState({}); // key: `${empId}-${day}` -> 'M' | 'A' | 'N' | 'O'
-  const [templates, setTemplates] = useState([
-    { id: 1, name: "Standard 8-5", shifts: { "M": "8:00-17:00", "A": "14:00-22:00", "N": "22:00-6:00" } },
-    { id: 2, name: "Flexible Hours", shifts: { "M": "9:00-18:00", "A": "15:00-23:00", "N": "23:00-7:00" } },
-  ]);
-  const [selectedTemplate, setSelectedTemplate] = useState(null);
+
+  const departmentColors = useMemo(() => {
+    const map = {};
+    let index = 0;
+    employees.forEach(emp => {
+      const dept = emp.dept || "Unassigned";
+      if (!map[dept]) {
+        map[dept] = DEPARTMENT_COLOR_PALETTE[index % DEPARTMENT_COLOR_PALETTE.length];
+        index += 1;
+      }
+    });
+    return map;
+  }, [employees]);
+
+  const today = useMemo(() => new Date(), []);
+  const minYear = today.getFullYear();
+  const minMonth = today.getMonth();
+  const minMonthValue = `${minYear}-${String(minMonth + 1).padStart(2, "0")}`;
+  const canGoPrevious =
+    current.year > minYear || (current.year === minYear && current.month > minMonth);
 
   function toggleShift(empId, day) {
     const key = `${empId}-${day}`;
@@ -58,7 +95,7 @@ export default function AdminSchedules() {
     
     // In a real app, this would save to a database
     localStorage.setItem(`schedule-${current.year}-${current.month}`, JSON.stringify(scheduleData));
-    alert("Schedule saved successfully!");
+    setScheduleNotice("Schedule saved locally. Connect a backend service to persist it for everyone.");
   }
 
   function loadSchedule() {
@@ -69,51 +106,53 @@ export default function AdminSchedules() {
     }
   }
 
-  function applyTemplate(templateId) {
-    const template = templates.find(t => t.id === templateId);
-    if (!template) return;
+  useEffect(() => {
+    async function loadEmployees() {
+      try {
+        setLoadingEmployees(true);
+        const res = await fetch(`${API_BASE_URL}/users`, { credentials: "include" });
+        if (!res.ok) throw new Error("Failed to load employees");
+        const data = await res.json();
+        const mapped = (Array.isArray(data) ? data : [])
+          .filter(emp => (emp.role || "").toLowerCase() !== "admin")
+          .map(emp => ({
+            id: emp.user_id ?? emp.id,
+            name: `${emp.first_name || ""} ${emp.last_name || ""}`.trim() || emp.username || "Unnamed",
+            dept: emp.department || "Unassigned",
+            position: emp.position || "",
+          }));
+        setEmployees(mapped);
+      } catch (err) {
+        console.error(err);
+        setScheduleNotice(err.message || "Unable to load employees.");
+      } finally {
+        setLoadingEmployees(false);
+      }
+    }
+    loadEmployees();
+  }, []);
 
-    const newShifts = {};
-    employees.forEach(emp => {
-      days.forEach(day => {
-        // Apply template logic - for example, alternating shifts
-        const dayOfWeek = new Date(current.year, current.month, day.day).getDay();
-        let shiftType = "";
-        
-        if (dayOfWeek >= 1 && dayOfWeek <= 5) { // Weekdays
-          shiftType = emp.id % 2 === 0 ? "M" : "A";
-        } else if (dayOfWeek === 0) { // Sunday
-          shiftType = "O"; // Day off
-        } else { // Saturday
-          shiftType = "N";
-        }
-        
-        newShifts[`${emp.id}-${day.day}`] = shiftType;
+  function autoAssignSchedule() {
+    if (!employees.length) {
+      setScheduleNotice("No employees available to schedule yet.");
+      return;
+    }
+    if (!days.length) return;
+
+    const rotations = ["M", "A", "N"];
+    const generated = {};
+
+    employees.forEach((emp, empIndex) => {
+      days.forEach((day) => {
+        const key = `${emp.id}-${day.day}`;
+        const rotationIndex = (empIndex + day.day - 1) % rotations.length;
+        generated[key] = rotations[rotationIndex];
       });
     });
-    
-    setShifts(newShifts);
-    alert(`Template "${template.name}" applied successfully!`);
+
+    setShifts(generated);
+    setScheduleNotice("Auto-assigned shifts generated for all employees. Review and save to keep them.");
   }
-
-  function createTemplate() {
-    const templateName = prompt("Enter template name:");
-    if (!templateName) return;
-
-    const newTemplate = {
-      id: Math.max(...templates.map(t => t.id)) + 1,
-      name: templateName,
-      shifts: shifts
-    };
-    
-    setTemplates(prev => [...prev, newTemplate]);
-    alert(`Template "${templateName}" created successfully!`);
-  }
-
-  useEffect(() => {
-    const unsubscribe = subscribeToProfileUpdates(setProfileData);
-    return unsubscribe;
-  }, []);
 
   // Load saved schedule when month changes
   React.useEffect(() => {
@@ -166,30 +205,56 @@ export default function AdminSchedules() {
         <section className="schedule-card">
           <div className="schedule-toolbar">
             <div className="month-nav">
-              <button className="icon-btn" onClick={() => setCurrent(c => ({ year: c.month === 0 ? c.year - 1 : c.year, month: (c.month + 11) % 12 }))}>◀</button>
-              <div className="month-label">{monthLabel}</div>
-              <button className="icon-btn" onClick={() => setCurrent(c => ({ year: c.month === 11 ? c.year + 1 : c.year, month: (c.month + 1) % 12 }))}>▶</button>
+              <button
+                className="icon-btn"
+                onClick={() => {
+                  if (!canGoPrevious) return;
+                  setCurrent((c) => ({
+                    year: c.month === 0 ? c.year - 1 : c.year,
+                    month: (c.month + 11) % 12,
+                  }));
+                }}
+                aria-label="Previous month"
+                disabled={!canGoPrevious}
+              >
+                ◀
+              </button>
+              <input
+                className="month-picker"
+                type="month"
+                value={`${current.year}-${String(current.month + 1).padStart(2, "0")}`}
+                min={minMonthValue}
+                onChange={(e) => {
+                  const [year, month] = e.target.value.split("-").map(Number);
+                  if (!Number.isNaN(year) && !Number.isNaN(month)) {
+                    if (
+                      year < minYear ||
+                      (year === minYear && month - 1 < minMonth)
+                    ) {
+                      return;
+                    }
+                    setCurrent({ year, month: month - 1 });
+                  }
+                }}
+              />
+              <button
+                className="icon-btn"
+                onClick={() =>
+                  setCurrent((c) => ({
+                    year: c.month === 11 ? c.year + 1 : c.year,
+                    month: (c.month + 1) % 12,
+                  }))
+                }
+                aria-label="Next month"
+              >
+                ▶
+              </button>
             </div>
             <div className="toolbar-actions">
-              <select 
-                value={selectedTemplate || ""} 
-                onChange={(e) => setSelectedTemplate(e.target.value)}
-                className="template-select"
-              >
-                <option value="">Select Template</option>
-                {templates.map(template => (
-                  <option key={template.id} value={template.id}>{template.name}</option>
-                ))}
-              </select>
-              <button 
-                className="btn outline" 
-                onClick={() => selectedTemplate && applyTemplate(parseInt(selectedTemplate))}
-                disabled={!selectedTemplate}
-              >
-                Apply Template
+              <button className="btn" onClick={autoAssignSchedule} disabled={!employees.length}>
+                Auto Assign
               </button>
               <button className="btn warn" onClick={saveSchedule}>Save Schedule</button>
-              <button className="btn primary" onClick={createTemplate}>Create Template</button>
             </div>
           </div>
 
@@ -204,21 +269,39 @@ export default function AdminSchedules() {
               ))}
             </div>
 
-            {employees.map(emp => (
-              <div key={emp.id} className="grid-row">
-                <div className="emp-col sticky-col">
-                  <div className="emp-name">{emp.name}</div>
-                  <div className="emp-dept">{emp.dept}</div>
-                </div>
-                {days.map(d => {
-                  const key = `${emp.id}-${d.day}`;
-                  const val = shifts[key] || "";
-                  return (
-                    <button key={key} className={`cell ${val ? `cell-${val}` : ""}`} onClick={() => toggleShift(emp.id, d.day)} />
-                  );
-                })}
+            {loadingEmployees ? (
+              <div className="grid-empty">Loading employees...</div>
+            ) : employees.length === 0 ? (
+              <div className="grid-empty">
+                Employee list is empty. Add employees first to start scheduling.
               </div>
-            ))}
+            ) : (
+              employees.map(emp => (
+                <div key={emp.id} className="grid-row">
+                  <div className="emp-col sticky-col">
+                    <span
+                      className="emp-indicator"
+                      style={{ backgroundColor: departmentColors[emp.dept || "Unassigned"] || "#d1d5db" }}
+                    />
+                    <div className="emp-name">{emp.name}</div>
+                    <div className="emp-dept">{emp.dept}</div>
+                  </div>
+                  {days.map(d => {
+                    const key = `${emp.id}-${d.day}`;
+                    const val = shifts[key] || "";
+                    const shiftInfo = SHIFT_DEFINITIONS[val];
+                    return (
+                      <button
+                        key={key}
+                        className={`cell ${val ? `cell-${val}` : ""}`}
+                        onClick={() => toggleShift(emp.id, d.day)}
+                        title={shiftInfo ? `${shiftInfo.label}${shiftInfo.hours ? ` (${shiftInfo.hours})` : ""}` : ""}
+                      />
+                    );
+                  })}
+                </div>
+              ))
+            )}
           </div>
 
           <div className="legend">
@@ -227,6 +310,21 @@ export default function AdminSchedules() {
             <span className="legend-item"><span className="dot dot-N" />Night (10:00 PM - 6:00 AM)</span>
             <span className="legend-item"><span className="dot dot-O" />Day Off</span>
           </div>
+          {!!Object.keys(departmentColors).length && (
+            <div className="department-legend">
+              {Object.entries(departmentColors).map(([dept, color]) => (
+                <span key={dept} className="department-legend-item">
+                  <span className="dept-dot" style={{ backgroundColor: color }} />
+                  {dept}
+                </span>
+              ))}
+            </div>
+          )}
+          {scheduleNotice && (
+            <div className="schedule-notice">
+              {scheduleNotice}
+            </div>
+          )}
         </section>
       </main>
     </div>

@@ -2,7 +2,7 @@ export const getSessionUserProfile = () => {
   const firstName = sessionStorage.getItem('firstName') || '';
   const lastName = sessionStorage.getItem('lastName') || '';
   const username = sessionStorage.getItem('username') || '';
-  const profilePicture = sessionStorage.getItem('profilePicture') || '';
+  
 
   const displayName = firstName && lastName
     ? `${firstName} ${lastName}`
@@ -20,7 +20,6 @@ export const getSessionUserProfile = () => {
     firstName,
     lastName,
     username,
-    profilePicture,
     displayName,
     initials,
   };
