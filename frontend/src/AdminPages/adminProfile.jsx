@@ -333,14 +333,12 @@ const getInitials = () => {
         <header className="admin-topbar">
           <h1>My Profile</h1>
           <div className="top-actions">
-            <button className="profile-btn" onClick={() => setIsProfileOpen(v => !v)}>
-              <span className="profile-avatar">{getInitials()}</span>
+            <button className="profile-btn" onClick={() => navigate(-1)}>
+              <span className="profile-avatar">
+                {getInitials()}
+              </span>
               <span>{getDisplayName()}</span>
             </button>
-            <div className={`profile-popover${isProfileOpen ? " open" : ""}`}>
-              <div className="profile-row" onClick={() => setIsProfileOpen(false)}>Profile</div>
-              <div className="profile-row" onClick={() => { setIsProfileOpen(false); logout(); }}>Log out</div>
-            </div>
           </div>
         </header>
 
