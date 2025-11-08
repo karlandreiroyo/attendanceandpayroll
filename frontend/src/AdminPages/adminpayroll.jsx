@@ -1,9 +1,23 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useCallback, useMemo, useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import "../AdminPages/admincss/adminDashboard.css";
 import "../AdminPages/admincss/adminPayroll.css";
 import { handleLogout as logout } from "../utils/logout";
 import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
+import { API_BASE_URL } from "../config/api";
+
+function peso(value) {
+  return `₱${Number(value || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function recalcEntry(entry) {
+  const daysWorked = Number(entry.daysWorked) || 0;
+  const dailyRate = Number(entry.dailyRate) || 0;
+  const deductions = Number(entry.deductions) || 0;
+  const grossPay = Math.round((daysWorked * dailyRate + Number.EPSILON) * 100) / 100;
+  const netPay = Math.round((grossPay - deductions + Number.EPSILON) * 100) / 100;
+  return { ...entry, daysWorked, dailyRate, deductions, grossPay, netPay };
+}
 
 export default function AdminPayroll() {
   const navigate = useNavigate();
@@ -11,99 +25,207 @@ export default function AdminPayroll() {
   const isActive = (path) => location.pathname.startsWith(path);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [profileData, setProfileData] = useState(() => getSessionUserProfile());
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
   useEffect(() => {
     const unsubscribe = subscribeToProfileUpdates(setProfileData);
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    setIsProfileOpen(false);
+  }, [location.pathname]);
+
+  const initialPeriod = useMemo(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() + 1 };
+  }, []);
+
+  const [period, setPeriod] = useState(initialPeriod);
+  const [entries, setEntries] = useState([]);
+  const [runInfo, setRunInfo] = useState(null);
+  const [processed, setProcessed] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState(null);
   const [query, setQuery] = useState("");
-  const [period, setPeriod] = useState({ start: "2023-06-01", end: "2023-06-15" });
-  const [statusFilter, setStatusFilter] = useState("All Status");
   const [deptFilter, setDeptFilter] = useState("All Departments");
-  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("All Status");
   const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
-  const [rows, setRows] = useState([]);
+  const sessionUserId = useMemo(() => sessionStorage.getItem("userId"), []);
+  const monthValue = `${period.year}-${String(period.month).padStart(2, "0")}`;
 
-  const filtered = useMemo(() => {
-    let filtered = rows;
-    
-    // Text search filter
+  const loadPayroll = useCallback(async () => {
+    setLoading(true);
+    setNotice(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/payroll?year=${period.year}&month=${period.month}`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const message = await res.text();
+        throw new Error(message || "Failed to load payroll data");
+      }
+      const data = await res.json();
+      const mapped = (data.entries || []).map((entry) => ({
+        ...entry,
+        status: data.processed ? "Processed" : "Pending",
+      }));
+      setEntries(mapped.map(recalcEntry));
+      setProcessed(Boolean(data.processed));
+      setRunInfo(data.run);
+    } catch (error) {
+      console.error(error);
+      setNotice(error.message || "Unable to load payroll data");
+      setEntries([]);
+      setProcessed(false);
+      setRunInfo(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [period.year, period.month]);
+
+  useEffect(() => {
+    loadPayroll();
+  }, [loadPayroll]);
+
+  const departmentOptions = useMemo(() => {
+    const set = new Set(entries.map((entry) => entry.department).filter(Boolean));
+    return ["All Departments", ...Array.from(set).sort()];
+  }, [entries]);
+
+  const filteredEntries = useMemo(() => {
+    let list = entries;
     const q = query.trim().toLowerCase();
     if (q) {
-      filtered = filtered.filter(r => `${r.name} ${r.empId} ${r.position}`.toLowerCase().includes(q));
+      list = list.filter((entry) => `${entry.name} ${entry.position} ${entry.department}`.toLowerCase().includes(q));
     }
-    
-    // Department filter
     if (deptFilter !== "All Departments") {
-      filtered = filtered.filter(r => r.dept === deptFilter);
+      list = list.filter((entry) => entry.department === deptFilter);
     }
-    
-    // Status filter
     if (statusFilter !== "All Status") {
-      filtered = filtered.filter(r => r.status === statusFilter);
+      list = list.filter((entry) => entry.status === statusFilter);
     }
-    
-    return filtered;
-  }, [rows, query, deptFilter, statusFilter]);
+    return list;
+  }, [entries, query, deptFilter, statusFilter]);
 
-  const totals = useMemo(() => ({
-    gross: rows.reduce((t, r) => t + r.gross, 0),
-    deduct: rows.reduce((t, r) => t + r.deduct, 0),
-    net: rows.reduce((t, r) => t + r.net, 0),
-  }), [rows]);
+  const totals = useMemo(() => {
+    return entries.reduce((acc, entry) => {
+      acc.gross += entry.grossPay;
+      acc.deduct += entry.deductions;
+      acc.net += entry.netPay;
+      return acc;
+    }, { gross: 0, deduct: 0, net: 0 });
+  }, [entries]);
 
-  function peso(n) {
-    return `₱${n.toLocaleString("en-PH", { maximumFractionDigits: 0 })}`;
-  }
+  const handleEntryChange = (userId, field, value) => {
+    if (processed) return;
+    setEntries((prev) => prev.map((entry) => {
+      if (entry.userId !== userId) return entry;
+      const updated = recalcEntry({ ...entry, [field]: value });
+      return updated;
+    }));
+  };
 
-  function processPayroll() {
-    if (window.confirm("Are you sure you want to process payroll for this period?")) {
-      setRows(prev => prev.map(r => ({ ...r, status: "Processed" })));
-      alert("Payroll processed successfully!");
+  const processPayroll = async () => {
+    if (processed) {
+      if (!window.confirm("Payroll for this month is already processed. Do you want to overwrite it?")) {
+        return;
+      }
     }
-  }
 
-  function exportPayroll() {
+    if (!window.confirm("Process payroll and save these amounts?")) {
+      return;
+    }
+
+    setSaving(true);
+    setNotice(null);
+    try {
+      const payload = {
+        year: period.year,
+        month: period.month,
+        processedBy: sessionUserId ?? null,
+        entries: entries.map((entry) => ({
+          userId: entry.userId,
+          daysWorked: entry.daysWorked,
+          dailyRate: entry.dailyRate,
+          deductions: entry.deductions,
+          remarks: entry.remarks ?? null,
+        })),
+      };
+
+      const res = await fetch(`${API_BASE_URL}/payroll`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const message = await res.text();
+        throw new Error(message || "Failed to save payroll");
+      }
+
+      const data = await res.json();
+      const mapped = (data.entries || []).map((entry) => ({
+        ...entry,
+        status: "Processed",
+      }));
+      setEntries(mapped.map(recalcEntry));
+      setProcessed(true);
+      setRunInfo(data.run);
+      setNotice("Payroll processed successfully.");
+    } catch (error) {
+      console.error(error);
+      setNotice(error.message || "Unable to process payroll.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const exportPayroll = () => {
+    if (!entries.length) {
+      setNotice("Nothing to export.");
+      return;
+    }
     const csvContent = [
-      ["Employee", "Employee ID", "Position", "Department", "Basic Salary", "Allowances", "Overtime", "Gross Pay", "Deductions", "Net Pay", "Status"],
-      ...filtered.map(row => [
-        row.name,
-        row.empId,
-        row.position,
-        row.dept,
-        row.basic,
-        row.allow,
-        row.ot,
-        row.gross,
-        row.deduct,
-        row.net,
-        row.status
-      ])
-    ].map(row => row.join(",")).join("\n");
+      ["Employee", "Position", "Department", "Daily Rate", "Days Worked", "Gross Pay", "Deductions", "Net Pay"],
+      ...filteredEntries.map((entry) => [
+        entry.name,
+        entry.position,
+        entry.department,
+        entry.dailyRate,
+        entry.daysWorked,
+        entry.grossPay,
+        entry.deductions,
+        entry.netPay,
+      ]),
+    ].map((row) => row.join(",")).join("\n");
 
     const blob = new Blob([csvContent], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `payroll-${period.start}-to-${period.end}.csv`;
+    a.download = `payroll-${monthValue}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
-  }
+  };
 
-  function updatePeriod(newPeriod) {
-    setPeriod(newPeriod);
-    // In a real app, this would fetch payroll data for the new period
-    alert(`Payroll period updated to ${newPeriod.start} - ${newPeriod.end}`);
-  }
-
-  function openPayrollDetails(employee) {
-    setSelectedEmployee(employee);
+  const openPayrollDetails = (entry) => {
+    setSelectedEmployee(entry);
     setIsDetailsOpen(true);
-  }
+  };
+
+  const periodLabel = useMemo(() => {
+    const date = new Date(period.year, period.month - 1, 1);
+    return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  }, [period]);
 
   return (
     <div className="admin-layout">
-      <aside className="admin-sidebar">
+      <aside className={`admin-sidebar${isSidebarOpen ? " open" : ""}`}>
         <div className="brand">
           <div className="brand-avatar">TI</div>
           <div className="brand-name">Tatay Ilio</div>
@@ -119,12 +241,23 @@ export default function AdminPayroll() {
           <Link className={`nav-item${isActive('/admin/reports') ? ' active' : ''}`} to="/admin/reports">Reports</Link>
         </nav>
       </aside>
+      {isSidebarOpen && <div className="sidebar-backdrop open" onClick={() => setIsSidebarOpen(false)} />}
 
       <main className="admin-content">
         <header className="admin-topbar">
-          <h1>Payroll</h1>
+          <div className="topbar-left">
+            <button
+              className="mobile-nav-toggle"
+              type="button"
+              aria-label="Toggle navigation"
+              onClick={() => setIsSidebarOpen((open) => !open)}
+            >
+              ☰
+            </button>
+            <h1>Payroll</h1>
+          </div>
           <div className="top-actions">
-            <button className="profile-btn" onClick={() => setIsProfileOpen(v => !v)}>
+            <button className="profile-btn" onClick={() => setIsProfileOpen((v) => !v)}>
               <span className="profile-avatar">
                 {profileData.profilePicture ? (
                   <img
@@ -149,10 +282,34 @@ export default function AdminPayroll() {
           <div className="pay-period">
             <div className="period-left">
               <span className="calendar-icon">📅</span>
-              <div className="period-range">{new Date(period.start).toLocaleDateString("en-US", { month: "short", day: "numeric" })} - {new Date(period.end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}, 2023</div>
+              <div className="period-range">{periodLabel}</div>
             </div>
-            <button className="btn warn" onClick={processPayroll}>Process Payroll</button>
+            <div className="period-controls">
+              <input
+                type="month"
+                value={monthValue}
+                onChange={(e) => {
+                  const [yr, mo] = e.target.value.split("-").map(Number);
+                  if (!Number.isNaN(yr) && !Number.isNaN(mo)) {
+                    setPeriod({ year: yr, month: mo });
+                  }
+                }}
+              />
+              <button className="btn" type="button" onClick={loadPayroll} disabled={loading}>
+                Refresh Preview
+              </button>
+              <button className="btn warn" onClick={processPayroll} disabled={saving}>
+                {saving ? "Saving..." : processed ? "Reprocess Payroll" : "Process Payroll"}
+              </button>
+            </div>
           </div>
+
+          {notice && <div className="payroll-notice">{notice}</div>}
+          {runInfo && processed && (
+            <div className="payroll-run-info">
+              Processed on {new Date(runInfo.processedAt).toLocaleString()} {runInfo.notes ? `• ${runInfo.notes}` : ""}
+            </div>
+          )}
 
           <div className="totals">
             <div className="total-card">
@@ -173,12 +330,9 @@ export default function AdminPayroll() {
             <input className="search" placeholder="Search employees..." value={query} onChange={(e) => setQuery(e.target.value)} />
             <div className="toolbar-right">
               <select value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)}>
-                <option>All Departments</option>
-                <option>IT</option>
-                <option>HR</option>
-                <option>Finance</option>
-                <option>Marketing</option>
-                <option>Operations</option>
+                {departmentOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
               </select>
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                 <option>All Status</option>
@@ -193,9 +347,8 @@ export default function AdminPayroll() {
             <div className="p-head">
               <div>Employee</div>
               <div>Position</div>
-              <div>Basic Salary</div>
-              <div>Allowances</div>
-              <div>Overtime</div>
+              <div>Daily Rate</div>
+              <div>Days Worked</div>
               <div>Gross Pay</div>
               <div>Deductions</div>
               <div>Net Pay</div>
@@ -203,31 +356,58 @@ export default function AdminPayroll() {
               <div>Actions</div>
             </div>
             <div className="p-body">
-              {filtered.map(r => (
-                <div key={r.id} className="p-row">
-                  <div>
-                    <div className="emp">
-                      <div className="emp-avatar">{r.name[0]}</div>
-                      <div className="emp-meta">
-                        <div className="emp-name">{r.name}</div>
-                        <div className="emp-email">{r.empId}</div>
+              {loading ? (
+                <div className="p-row">
+                  <div>Loading payroll data…</div>
+                </div>
+              ) : filteredEntries.length === 0 ? (
+                <div className="p-row">
+                  <div>No employees found for this period.</div>
+                </div>
+              ) : (
+                filteredEntries.map((entry) => (
+                  <div key={entry.userId} className="p-row">
+                    <div>
+                      <div className="emp">
+                        <div className="emp-avatar">{entry.name[0] || '?'}</div>
+                        <div className="emp-meta">
+                          <div className="emp-name">{entry.name}</div>
+                          <div className="emp-email">{entry.department}</div>
+                        </div>
                       </div>
                     </div>
+                    <div>
+                      <div>{entry.position || '—'}</div>
+                      <div className="sub">{entry.department}</div>
+                    </div>
+                    <div>{peso(entry.dailyRate)}</div>
+                    <div>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        value={entry.daysWorked}
+                        disabled={processed}
+                        onChange={(e) => handleEntryChange(entry.userId, 'daysWorked', e.target.value)}
+                      />
+                    </div>
+                    <div>{peso(entry.grossPay)}</div>
+                    <div>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={entry.deductions}
+                        disabled={processed}
+                        onChange={(e) => handleEntryChange(entry.userId, 'deductions', e.target.value)}
+                      />
+                    </div>
+                    <div>{peso(entry.netPay)}</div>
+                    <div><span className={`pill ${processed ? 'pill-success' : 'pill-warn'}`}>{entry.status}</span></div>
+                    <div className="actions"><button className="link" onClick={() => openPayrollDetails(entry)}>Details</button></div>
                   </div>
-                  <div>
-                    <div>{r.position}</div>
-                    <div className="sub">{r.dept}</div>
-                  </div>
-                  <div>{peso(r.basic)}</div>
-                  <div>{peso(r.allow)}</div>
-                  <div>{peso(r.ot)}</div>
-                  <div>{peso(r.gross)}</div>
-                  <div>{peso(r.deduct)}</div>
-                  <div>{peso(r.net)}</div>
-                  <div><span className="pill pill-warn">{r.status}</span></div>
-                  <div className="actions"><button className="link" onClick={() => openPayrollDetails(r)}>Details</button></div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </section>
@@ -239,16 +419,16 @@ export default function AdminPayroll() {
                 <div className="modal-title">Payroll Details - {selectedEmployee.name}</div>
                 <button className="icon-btn" onClick={() => setIsDetailsOpen(false)}>✖</button>
               </div>
-              
+
               <div className="payroll-details">
                 <div className="employee-header">
                   <div className="employee-avatar-large">
-                    {selectedEmployee.name[0]}
+                    {selectedEmployee.name[0] || '?'}
                   </div>
                   <div className="employee-info">
                     <h2 className="employee-name">{selectedEmployee.name}</h2>
                     <p className="employee-position">{selectedEmployee.position}</p>
-                    <span className="employee-dept">{selectedEmployee.dept}</span>
+                    <span className="employee-dept">{selectedEmployee.department}</span>
                   </div>
                 </div>
 
@@ -256,52 +436,36 @@ export default function AdminPayroll() {
                   <div className="breakdown-section">
                     <h3>Earnings</h3>
                     <div className="breakdown-item">
-                      <span className="breakdown-label">Basic Salary</span>
-                      <span className="breakdown-value">{peso(selectedEmployee.basic)}</span>
+                      <span className="breakdown-label">Daily Rate</span>
+                      <span className="breakdown-value">{peso(selectedEmployee.dailyRate)}</span>
                     </div>
                     <div className="breakdown-item">
-                      <span className="breakdown-label">Allowances</span>
-                      <span className="breakdown-value">{peso(selectedEmployee.allow)}</span>
-                    </div>
-                    <div className="breakdown-item">
-                      <span className="breakdown-label">Overtime Pay</span>
-                      <span className="breakdown-value">{peso(selectedEmployee.ot)}</span>
+                      <span className="breakdown-label">Days Worked</span>
+                      <span className="breakdown-value">{selectedEmployee.daysWorked}</span>
                     </div>
                     <div className="breakdown-item total">
                       <span className="breakdown-label">Gross Pay</span>
-                      <span className="breakdown-value">{peso(selectedEmployee.gross)}</span>
+                      <span className="breakdown-value">{peso(selectedEmployee.grossPay)}</span>
                     </div>
                   </div>
 
                   <div className="breakdown-section">
                     <h3>Deductions</h3>
                     <div className="breakdown-item">
-                      <span className="breakdown-label">Tax (10%)</span>
-                      <span className="breakdown-value">{peso(selectedEmployee.gross * 0.1)}</span>
-                    </div>
-                    <div className="breakdown-item">
-                      <span className="breakdown-label">SSS Contribution</span>
-                      <span className="breakdown-value">{peso(800)}</span>
-                    </div>
-                    <div className="breakdown-item">
-                      <span className="breakdown-label">PhilHealth</span>
-                      <span className="breakdown-value">{peso(400)}</span>
-                    </div>
-                    <div className="breakdown-item">
-                      <span className="breakdown-label">Pag-IBIG</span>
-                      <span className="breakdown-value">{peso(200)}</span>
+                      <span className="breakdown-label">Deductions</span>
+                      <span className="breakdown-value">{peso(selectedEmployee.deductions)}</span>
                     </div>
                     <div className="breakdown-item total">
-                      <span className="breakdown-label">Total Deductions</span>
-                      <span className="breakdown-value">{peso(selectedEmployee.deduct)}</span>
+                      <span className="breakdown-label">Net Pay</span>
+                      <span className="breakdown-value">{peso(selectedEmployee.netPay)}</span>
                     </div>
                   </div>
 
                   <div className="breakdown-section net-pay">
-                    <h3>Net Pay</h3>
+                    <h3>Notes</h3>
                     <div className="net-pay-amount">
-                      <span className="net-pay-label">Take Home Pay</span>
-                      <span className="net-pay-value">{peso(selectedEmployee.net)}</span>
+                      <span className="net-pay-label">Remarks</span>
+                      <span className="net-pay-value">{selectedEmployee.remarks || '—'}</span>
                     </div>
                   </div>
                 </div>
@@ -309,27 +473,25 @@ export default function AdminPayroll() {
                 <div className="payroll-summary">
                   <div className="summary-item">
                     <span className="summary-label">Pay Period</span>
-                    <span className="summary-value">{period.start} to {period.end}</span>
+                    <span className="summary-value">{periodLabel}</span>
                   </div>
                   <div className="summary-item">
                     <span className="summary-label">Status</span>
                     <span className="summary-value">
-                      <span className={`status-badge ${selectedEmployee.status.toLowerCase()}`}>
-                        {selectedEmployee.status}
+                      <span className={`status-badge ${processed ? 'processed' : 'pending'}`}>
+                        {processed ? 'Processed' : 'Pending'}
                       </span>
                     </span>
                   </div>
                   <div className="summary-item">
-                    <span className="summary-label">Employee ID</span>
-                    <span className="summary-value">{selectedEmployee.empId}</span>
+                    <span className="summary-label">Processed On</span>
+                    <span className="summary-value">{runInfo?.processedAt ? new Date(runInfo.processedAt).toLocaleString() : '—'}</span>
                   </div>
                 </div>
 
                 <div className="modal-actions">
                   <button className="btn" onClick={() => setIsDetailsOpen(false)}>Close</button>
-                  <button className="btn primary" onClick={() => {
-                    alert(`Printing payroll details for ${selectedEmployee.name}`);
-                  }}>Print Payslip</button>
+                  <button className="btn primary" onClick={() => window.print()}>Print Payslip</button>
                 </div>
               </div>
             </div>

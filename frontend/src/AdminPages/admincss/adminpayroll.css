@@ -7,7 +7,7 @@
   border-radius: 12px;
   padding: 16px;
   display: grid;
-  gap: 12px;
+  gap: 16px;
 }
 
 /* === Pay Period Header === */
@@ -15,12 +15,40 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .period-left {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.period-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.period-controls input[type="month"] {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.payroll-notice {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-size: 0.9rem;
+}
+
+.payroll-run-info {
+  font-size: 0.85rem;
+  color: #6b7280;
 }
 
 .calendar-icon {
@@ -30,7 +58,7 @@
 /* === Totals Summary === */
 .totals {
   display: grid;
-  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 12px;
 }
 
@@ -62,6 +90,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .search {
@@ -117,8 +146,9 @@
 .p-head,
 .p-row {
   display: grid;
-  grid-template-columns: 2.2fr 1.4fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 0.8fr;
+  grid-template-columns: 2.2fr 1.4fr 1fr 1fr 1fr 1fr 1fr 0.8fr 0.8fr;
   align-items: center;
+  gap: 8px;
 }
 
 .p-head {
@@ -133,6 +163,19 @@
   padding: 14px;
   border-top: 1px solid #f1f5f9;
   background: #fff;
+}
+
+.p-row input[type="number"] {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 6px 8px;
+  text-align: right;
+}
+
+.p-row input[type="number"]:disabled {
+  background: #f3f4f6;
+  cursor: not-allowed;
 }
 
 /* === Employee Info === */
@@ -174,6 +217,11 @@
 .pill-warn {
   background: #fff7cc;
   color: #92400e;
+}
+
+.pill-success {
+  background: #dcfce7;
+  color: #166534;
 }
 
 .link {
@@ -383,7 +431,7 @@
 
   .p-head,
   .p-row {
-    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr 0.8fr;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr 0.8fr 0.8fr;
   }
 
   .payroll-breakdown {
@@ -392,5 +440,49 @@
 
   .payroll-summary {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .payroll-card {
+    padding: 14px;
+  }
+
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .toolbar-right {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .toolbar-right select,
+  .toolbar-right .btn {
+    flex: 1;
+  }
+
+  .p-head,
+  .p-row {
+    grid-template-columns: 1.8fr 1fr 1fr 1fr 1fr 1fr 1fr 0.8fr 0.8fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .pay-period {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .period-controls {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .p-head,
+  .p-row {
+    grid-template-columns: 1.5fr 1fr 0.9fr 0.9fr 1fr 1fr 1fr 0.8fr 0.8fr;
   }
 }

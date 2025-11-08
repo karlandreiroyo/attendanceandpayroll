@@ -300,6 +300,32 @@
   background: #0f7a2a;
 }
 
+.ps-notice {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  margin: 0 24px;
+}
+
+.ps-notes {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.ps-note-text {
+  background: #f9fafb;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  padding: 14px;
+  color: #374151;
+  min-height: 60px;
+}
+
 /* ===== Responsive Design ===== */
 @media (max-width: 800px) {
   .ps-head,
