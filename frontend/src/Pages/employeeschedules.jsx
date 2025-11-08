@@ -1,17 +1,30 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import "../AdminPages/admincss/adminDashboard.css"; // Use admin layout CSS
+import "../AdminPages/admincss/adminDashboard.css";
 import "../Pages/employeecss/employeeSchedules.css";
 import { handleLogout as logout } from "../utils/logout";
 import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
+import { API_BASE_URL } from "../config/api";
+
+const SHIFT_DEFINITIONS = {
+  M: { label: "Morning", hours: "8:00 AM - 4:00 PM" },
+  A: { label: "Afternoon", hours: "2:00 PM - 10:00 PM" },
+  N: { label: "Night", hours: "10:00 PM - 6:00 AM" },
+  O: { label: "Day Off", hours: "" },
+};
 
 export default function EmployeeSchedules() {
   const navigate = useNavigate();
   const [isTopUserOpen, setIsTopUserOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [profileInfo, setProfileInfo] = useState(getSessionUserProfile());
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [scheduleEntries] = useState([]);
-  const [legendItems] = useState([]);
+  const [scheduleEntries, setScheduleEntries] = useState([]);
+  const [legendItems, setLegendItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState(null);
+
+  const userId = useMemo(() => sessionStorage.getItem("userId"), []);
 
   const handleLogout = (e) => {
     e.preventDefault();
@@ -25,8 +38,9 @@ export default function EmployeeSchedules() {
     return () => unsubscribe();
   }, []);
 
-  const monthName = currentDate.toLocaleString("default", { month: "long" });
   const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+  const monthName = currentDate.toLocaleString("default", { month: "long" });
 
   const handlePrev = () => {
     const prevMonth = new Date(currentDate);
@@ -43,12 +57,72 @@ export default function EmployeeSchedules() {
   const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   const daysInMonth = useMemo(() => {
-    const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-    const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
     const blanks = Array.from({ length: firstDay.getDay() }, (_, i) => ({ key: `b-${i}`, empty: true }));
     const days = Array.from({ length: lastDay.getDate() }, (_, i) => ({ day: i + 1 }));
     return [...blanks, ...days];
-  }, [currentDate]);
+  }, [year, month]);
+
+  const loadSchedule = useCallback(async () => {
+    if (!userId) {
+      setScheduleEntries([]);
+      setLegendItems([]);
+      return;
+    }
+
+    setLoading(true);
+    setNotice(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/schedules?year=${year}&month=${month}`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const message = await res.text();
+        throw new Error(message || "Failed to load schedule");
+      }
+      const data = await res.json();
+      const shiftMap = (data && data.shifts) || {};
+      const legendMap = new Map();
+      const entries = [];
+      const daysCount = new Date(year, month + 1, 0).getDate();
+
+      for (let day = 1; day <= daysCount; day += 1) {
+        const code = shiftMap[`${userId}-${day}`];
+        if (!code) continue;
+        const definition = SHIFT_DEFINITIONS[code] || { label: code, hours: "" };
+        entries.push({
+          day,
+          shift: code,
+          label: definition.label,
+          time: definition.hours,
+        });
+        if (!legendMap.has(code)) {
+          legendMap.set(code, definition);
+        }
+      }
+
+      setScheduleEntries(entries);
+      setLegendItems(
+        Array.from(legendMap.entries()).map(([code, def]) => ({
+          key: code,
+          label: `${def.label}${def.hours ? ` (${def.hours})` : ""}`,
+          className: `dot-${code}`,
+        }))
+      );
+    } catch (error) {
+      console.error(error);
+      setScheduleEntries([]);
+      setLegendItems([]);
+      setNotice(error.message || "Unable to load schedule.");
+    } finally {
+      setLoading(false);
+    }
+  }, [userId, year, month]);
+
+  useEffect(() => {
+    loadSchedule();
+  }, [loadSchedule]);
 
   const scheduleLookup = useMemo(() => {
     const map = new Map();
@@ -64,16 +138,16 @@ export default function EmployeeSchedules() {
     const entry = scheduleLookup.get(day);
     if (!entry) return null;
 
-    const label = entry.label || entry.shift || "Scheduled";
-    const time = entry.time ? ` (${entry.time})` : "";
+    const definition = SHIFT_DEFINITIONS[entry.shift] || {};
+    const label = definition.label || entry.label || entry.shift || "Scheduled";
+    const time = definition.hours ? ` (${definition.hours})` : entry.time ? ` (${entry.time})` : "";
 
-    return <div className="shift-pill">{`${label}${time}`}</div>;
+    return <div className={`shift-pill shift-${entry.shift}`}>{`${label}${time}`}</div>;
   };
 
   return (
     <div className="admin-layout">
-      {/* Sidebar - matches admin layout */}
-      <aside className="admin-sidebar">
+      <aside className={`admin-sidebar employee-sidebar${isSidebarOpen ? " open" : ""}`}>
         <div className="brand">
           <div className="brand-avatar">TI</div>
           <div className="brand-name">Tatay Ilio</div>
@@ -85,11 +159,21 @@ export default function EmployeeSchedules() {
           <Link className="nav-item" to="/employee/payslips">Payslips</Link>
         </nav>
       </aside>
+      {isSidebarOpen && <div className="sidebar-backdrop open" onClick={() => setIsSidebarOpen(false)} />}
 
-      {/* Main Content - matches admin layout */}
       <main className="admin-content">
         <header className="admin-topbar">
-          <h1>Schedules</h1>
+          <div className="topbar-left">
+            <button
+              className="mobile-nav-toggle"
+              type="button"
+              aria-label="Toggle navigation"
+              onClick={() => setIsSidebarOpen((open) => !open)}
+            >
+              ☰
+            </button>
+            <h1>Schedules</h1>
+          </div>
           <div className="top-actions">
             <button
               className="profile-btn"
@@ -120,7 +204,6 @@ export default function EmployeeSchedules() {
               <div
                 className="profile-row"
                 onClick={handleLogout}
-                style={{ cursor: "pointer" }}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
@@ -139,12 +222,12 @@ export default function EmployeeSchedules() {
         <section className="card legend">
           {legendItems.length === 0 ? (
             <div className="empty-state">
-              Shift legend will appear here once your manager assigns schedules.
+              {loading ? "Loading shifts..." : "Shift legend will appear here once your manager assigns schedules."}
             </div>
           ) : (
             legendItems.map((item) => (
-              <div className="legend-row" key={item.key || item.label}>
-                <span className={`dot ${item.className || ""}`}></span>{item.label}
+              <div className="legend-row" key={item.key}>
+                <span className={`dot ${item.className}`}></span>{item.label}
               </div>
             ))
           )}
@@ -154,11 +237,13 @@ export default function EmployeeSchedules() {
           <div className="calendar-head">
             <div className="title">Work Schedule</div>
             <div className="nav">
-              <button onClick={handlePrev}>‹</button>
+              <button onClick={handlePrev} aria-label="Previous month">‹</button>
               <div id="monthLabel">{`${monthName} ${year}`}</div>
-              <button onClick={handleNext}>›</button>
+              <button onClick={handleNext} aria-label="Next month">›</button>
             </div>
           </div>
+
+          {notice && <div className="schedule-notice">{notice}</div>}
 
           <div className="weekday-grid">
             {weekdayLabels.map((w) => (
@@ -167,7 +252,9 @@ export default function EmployeeSchedules() {
           </div>
 
           <div className="calendar-grid">
-            {scheduleEntries.length === 0 ? (
+            {loading ? (
+              <div className="empty-state calendar-empty">Loading your shifts…</div>
+            ) : scheduleEntries.length === 0 ? (
               <div className="empty-state calendar-empty">
                 Your assigned shifts will appear on this calendar once they are available.
               </div>

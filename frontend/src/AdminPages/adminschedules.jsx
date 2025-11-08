@@ -1,7 +1,7 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import "../AdminPages/admincss/adminDashboard.css";
-import "../AdminPages/admincss/adminSchedules.css";
+import "./admincss/adminDashboard.css";
+import "./admincss/adminSchedules.css";
 import { handleLogout as logout } from "../utils/logout";
 import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
 import { API_BASE_URL } from "../config/api";
@@ -26,14 +26,13 @@ const DEPARTMENT_COLOR_PALETTE = [
   "#86efac",
 ];
 
-// Simple helpers for month navigation
 function getMonthMatrix(year, month) {
   const first = new Date(year, month, 1);
   const last = new Date(year, month + 1, 0);
   const days = last.getDate();
   const matrix = [];
   for (let d = 1; d <= days; d++) matrix.push({ day: d, dow: new Date(year, month, d).getDay() });
-  return matrix; // [{day, dow}]
+  return matrix;
 }
 
 export default function AdminSchedules() {
@@ -41,6 +40,7 @@ export default function AdminSchedules() {
   const location = useLocation();
   const isActive = (path) => location.pathname.startsWith(path);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [profileData, setProfileData] = useState(() => getSessionUserProfile());
   const [current, setCurrent] = useState(() => {
     const now = new Date();
@@ -49,6 +49,7 @@ export default function AdminSchedules() {
   const [employees, setEmployees] = useState([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [scheduleNotice, setScheduleNotice] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   const days = useMemo(() => getMonthMatrix(current.year, current.month), [current]);
 
@@ -56,7 +57,7 @@ export default function AdminSchedules() {
     new Date(current.year, current.month, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" })
   , [current]);
 
-  const [shifts, setShifts] = useState({}); // key: `${empId}-${day}` -> 'M' | 'A' | 'N' | 'O'
+  const [shifts, setShifts] = useState({});
 
   const departmentColors = useMemo(() => {
     const map = {};
@@ -78,33 +79,19 @@ export default function AdminSchedules() {
   const canGoPrevious =
     current.year > minYear || (current.year === minYear && current.month > minMonth);
 
-  function toggleShift(empId, day) {
-    const key = `${empId}-${day}`;
-    const order = ["", "M", "A", "N", "O"]; // Morning, Afternoon, Night, Day Off
-    const next = order[(order.indexOf(shifts[key] || "") + 1) % order.length];
-    setShifts(prev => ({ ...prev, [key]: next }));
-  }
+  const handleLogout = () => {
+    setIsProfileOpen(false);
+    logout();
+  };
 
-  function saveSchedule() {
-    const scheduleData = {
-      month: current.month,
-      year: current.year,
-      shifts: shifts,
-      savedAt: new Date().toISOString()
-    };
-    
-    // In a real app, this would save to a database
-    localStorage.setItem(`schedule-${current.year}-${current.month}`, JSON.stringify(scheduleData));
-    setScheduleNotice("Schedule saved locally. Connect a backend service to persist it for everyone.");
-  }
+  useEffect(() => {
+    const unsubscribe = subscribeToProfileUpdates(setProfileData);
+    return unsubscribe;
+  }, []);
 
-  function loadSchedule() {
-    const saved = localStorage.getItem(`schedule-${current.year}-${current.month}`);
-    if (saved) {
-      const scheduleData = JSON.parse(saved);
-      setShifts(scheduleData.shifts || {});
-    }
-  }
+  useEffect(() => {
+    setIsSidebarOpen(false);
+  }, [location.pathname]);
 
   useEffect(() => {
     async function loadEmployees() {
@@ -132,6 +119,67 @@ export default function AdminSchedules() {
     loadEmployees();
   }, []);
 
+  const loadSchedule = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/schedules?year=${current.year}&month=${current.month}`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        throw new Error("Failed to load schedule");
+      }
+      const data = await res.json();
+      setShifts((data && data.shifts) || {});
+    } catch (error) {
+      console.error(error);
+      setShifts({});
+      setScheduleNotice(error.message || "Unable to load schedule for this month.");
+    }
+  }, [current]);
+
+  useEffect(() => {
+    loadSchedule();
+  }, [loadSchedule]);
+
+  const departmentColorsMemo = departmentColors;
+
+  function toggleShift(empId, day) {
+    const key = `${empId}-${day}`;
+    const order = ["", "M", "A", "N", "O"];
+    const next = order[(order.indexOf(shifts[key] || "") + 1) % order.length];
+    setShifts(prev => ({ ...prev, [key]: next }));
+  }
+
+  async function saveSchedule() {
+    setScheduleNotice(null);
+    setSaving(true);
+    try {
+      const payload = {
+        year: current.year,
+        month: current.month,
+        shifts,
+        savedBy: sessionStorage.getItem('userId') ?? null,
+      };
+      const res = await fetch(`${API_BASE_URL}/schedules`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const message = await res.text();
+        throw new Error(message || "Failed to save schedule");
+      }
+      const saved = await res.json();
+      setShifts(saved.shifts || {});
+      setScheduleNotice("Schedule saved successfully.");
+    } catch (error) {
+      console.error(error);
+      setScheduleNotice(error.message || "Unable to save schedule.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function autoAssignSchedule() {
     if (!employees.length) {
       setScheduleNotice("No employees available to schedule yet.");
@@ -154,14 +202,11 @@ export default function AdminSchedules() {
     setScheduleNotice("Auto-assigned shifts generated for all employees. Review and save to keep them.");
   }
 
-  // Load saved schedule when month changes
-  React.useEffect(() => {
-    loadSchedule();
-  }, [current]);
+  const monthNumberLabel = `${current.year}-${String(current.month + 1).padStart(2, "0")}`;
 
   return (
     <div className="admin-layout">
-      <aside className="admin-sidebar">
+      <aside className={`admin-sidebar${isSidebarOpen ? " open" : ""}`}>
         <div className="brand">
           <div className="brand-avatar">TI</div>
           <div className="brand-name">Tatay Ilio</div>
@@ -177,10 +222,21 @@ export default function AdminSchedules() {
           <Link className={`nav-item${isActive('/admin/reports') ? ' active' : ''}`} to="/admin/reports">Reports</Link>
         </nav>
       </aside>
+      {isSidebarOpen && <div className="sidebar-backdrop open" onClick={() => setIsSidebarOpen(false)} />}
 
       <main className="admin-content">
         <header className="admin-topbar">
-          <h1>Schedules</h1>
+          <div className="topbar-left">
+            <button
+              className="mobile-nav-toggle"
+              type="button"
+              aria-label="Toggle navigation"
+              onClick={() => setIsSidebarOpen((open) => !open)}
+            >
+              ☰
+            </button>
+            <h1>Schedules</h1>
+          </div>
           <div className="top-actions">
             <button className="profile-btn" onClick={() => setIsProfileOpen(v => !v)}>
               <span className="profile-avatar">
@@ -198,7 +254,7 @@ export default function AdminSchedules() {
             </button>
             <div className={`profile-popover${isProfileOpen ? " open" : ""}`}>
               <div className="profile-row" onClick={() => { setIsProfileOpen(false); navigate('/admin/profile'); }}>Profile</div>
-              <div className="profile-row" onClick={() => { setIsProfileOpen(false); logout(); }}>Log out</div>
+              <div className="profile-row" onClick={handleLogout}>Log out</div>
             </div>
           </div>
         </header>
@@ -223,7 +279,7 @@ export default function AdminSchedules() {
               <input
                 className="month-picker"
                 type="month"
-                value={`${current.year}-${String(current.month + 1).padStart(2, "0")}`}
+                value={monthNumberLabel}
                 min={minMonthValue}
                 onChange={(e) => {
                   const [year, month] = e.target.value.split("-").map(Number);
@@ -255,7 +311,9 @@ export default function AdminSchedules() {
               <button className="btn" onClick={autoAssignSchedule} disabled={!employees.length}>
                 Auto Assign
               </button>
-              <button className="btn warn" onClick={saveSchedule}>Save Schedule</button>
+              <button className="btn warn" onClick={saveSchedule} disabled={saving}>
+                {saving ? "Saving..." : "Save Schedule"}
+              </button>
             </div>
           </div>
 
@@ -282,7 +340,7 @@ export default function AdminSchedules() {
                   <div className="emp-col sticky-col">
                     <span
                       className="emp-indicator"
-                      style={{ backgroundColor: departmentColors[emp.dept || "Unassigned"] || "#d1d5db" }}
+                      style={{ backgroundColor: departmentColorsMemo[emp.dept || "Unassigned"] || "#d1d5db" }}
                     />
                     <div className="emp-name">{emp.name}</div>
                     <div className="emp-dept">{emp.dept}</div>
@@ -294,7 +352,7 @@ export default function AdminSchedules() {
                     return (
                       <button
                         key={key}
-                        className={`cell ${val ? `cell-${val}` : ""}`}
+                        className={`cell ${val ? 'cell-' + val : ''}`}
                         onClick={() => toggleShift(emp.id, d.day)}
                         title={shiftInfo ? `${shiftInfo.label}${shiftInfo.hours ? ` (${shiftInfo.hours})` : ""}` : ""}
                       />
@@ -311,9 +369,9 @@ export default function AdminSchedules() {
             <span className="legend-item"><span className="dot dot-N" />Night (10:00 PM - 6:00 AM)</span>
             <span className="legend-item"><span className="dot dot-O" />Day Off</span>
           </div>
-          {!!Object.keys(departmentColors).length && (
+          {!!Object.keys(departmentColorsMemo).length && (
             <div className="department-legend">
-              {Object.entries(departmentColors).map(([dept, color]) => (
+              {Object.entries(departmentColorsMemo).map(([dept, color]) => (
                 <span key={dept} className="department-legend-item">
                   <span className="dept-dot" style={{ backgroundColor: color }} />
                   {dept}
