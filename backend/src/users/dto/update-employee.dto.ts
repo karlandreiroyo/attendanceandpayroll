@@ -52,4 +52,8 @@ export class UpdateEmployeeDto {
   @IsOptional()
   @IsString()
   profile_picture?: string;
+
+  @IsOptional()
+  @IsString()
+  finger_template_id?: string;
 }

@@ -40,18 +40,21 @@ export default function AdminEmployee() {
   const [editAddress, setEditAddress] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editStatus, setEditStatus] = useState('Active');
+  const [editFingerprint, setEditFingerprint] = useState('');
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
     email: '',
     phone: '',
+    address: '',
     dept: '',
     position: '',
     status: 'Active',
     role: 'employee',
     username: '',
     password: '',
-    confirm_password: ''
+    confirm_password: '',
+    finger_template_id: ''
   });
 
   const [rows, setRows] = useState([]);
@@ -257,6 +260,7 @@ export default function AdminEmployee() {
           position: u.position,
           status: u.status || "Active",
           joinDate: formatDate(u.join_date),
+          finger_template_id: u.finger_template_id || '',
         }));
         setRows(mapped);
         setOpenActionsId(null); // Reset dropdown state when data loads
@@ -301,6 +305,7 @@ export default function AdminEmployee() {
     setEditAddress(row.address || '');
     setEditEmail(row.email || '');
     setEditStatus(row.status || 'Active');
+    setEditFingerprint(row.finger_template_id || '');
     setEditFormErrors({});
     setIsEditOpen(true);
   }
@@ -352,6 +357,9 @@ export default function AdminEmployee() {
       address: editAddress.trim() || '',
     };
 
+    const trimmedFingerprint = editFingerprint.trim();
+    body.finger_template_id = trimmedFingerprint ? trimmedFingerprint : null;
+
     const userId = selected?.user_id || selected?.id;
     if (!userId) {
       setNotification({ type: 'error', message: 'Employee ID is missing' });
@@ -392,6 +400,7 @@ export default function AdminEmployee() {
         position: updatedFromServer.position,
         status: updatedFromServer.status || 'Active',
         joinDate: formatDate(updatedFromServer.join_date),
+      finger_template_id: updatedFromServer.finger_template_id || '',
       };
       
       setRows(prev => prev.map(r => (r.user_id === updatedRow.user_id || r.id === updatedRow.id ? updatedRow : r)));
@@ -406,6 +415,7 @@ export default function AdminEmployee() {
       setEditAddress('');
       setEditEmail('');
       setEditStatus('Active');
+      setEditFingerprint('');
       setEditFormErrors({});
       setOpenActionsId(null);
       setNotification({ type: 'success', message: 'Employee updated successfully' });
@@ -663,6 +673,7 @@ export default function AdminEmployee() {
       phone: formData.phone || undefined,
       address: formData.address || undefined,
       role: formData.role === 'user/employee' ? 'employee' : formData.role,
+      finger_template_id: formData.finger_template_id?.trim() || undefined,
     };
 
     try {
@@ -693,6 +704,7 @@ export default function AdminEmployee() {
         position: created.position,
         status: created.status || "Active",
         joinDate: formatDate(created.join_date),
+      finger_template_id: created.finger_template_id || '',
       };
       setRows(prev => [...prev, newRow]);
       notifyEmployeesUpdated();
@@ -702,13 +714,15 @@ export default function AdminEmployee() {
         last_name: '',
         email: '',
         phone: '',
+        address: '',
         dept: '',
         position: '',
         status: 'Active',
         role: 'employee',
         username: '',
         password: '',
-        confirm_password: ''
+        confirm_password: '',
+        finger_template_id: ''
       });
       setFormErrors({});
       setShowPassword(false);
@@ -806,7 +820,6 @@ export default function AdminEmployee() {
           <Link className={`nav-item${isActive('/admin/schedules') ? ' active' : ''}`} to="/admin/schedules">Schedules</Link>
           <Link className={`nav-item${isActive('/admin/attendance') ? ' active' : ''}`} to="/admin/attendance">Attendance</Link>
           <Link className={`nav-item${isActive('/admin/leave-requests') ? ' active' : ''}`} to="/admin/leave-requests">Leave Requests</Link>
-          <Link className={`nav-item${isActive('/admin/overtime') ? ' active' : ''}`} to="/admin/overtime">Overtime</Link>
           <Link className={`nav-item${isActive('/admin/payroll') ? ' active' : ''}`} to="/admin/payroll">Payroll</Link>
           <Link className={`nav-item${isActive('/admin/reports') ? ' active' : ''}`} to="/admin/reports">Reports</Link>
         </nav>
@@ -1107,6 +1120,23 @@ export default function AdminEmployee() {
                     </div>
                   </div>
 
+                <div className="detail-section">
+                  <h3>Biometrics</h3>
+                  <div className="detail-item">
+                    <span className="detail-label">Fingerprint Template ID</span>
+                    <input
+                      name="finger_template_id"
+                      value={editFingerprint}
+                      onChange={(e) => setEditFingerprint(e.target.value)}
+                      placeholder="Enter template ID from the fingerprint scanner (optional)"
+                      className="detail-input"
+                    />
+                    <div className="field-info" style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                      Update this if the employee re-enrolls on a fingerprint device.
+                    </div>
+                  </div>
+                </div>
+
                   {/* === ACTIONS === */}
                   <div className="modal-actions">
                     <button type="button" className="btn" onClick={() => setIsEditOpen(false)}>Cancel</button>
@@ -1301,6 +1331,23 @@ export default function AdminEmployee() {
                     </div>
                   </div>
 
+                <div className="detail-section">
+                  <h3>Biometrics</h3>
+                  <div className="detail-item">
+                    <span className="detail-label">Fingerprint Template ID</span>
+                    <input
+                      name="finger_template_id"
+                      placeholder="Enter template ID from the fingerprint scanner (optional)"
+                      className="detail-input"
+                      value={formData.finger_template_id}
+                      onChange={(e) => handleInputChange('finger_template_id', e.target.value)}
+                    />
+                    <div className="field-info" style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                      Use this to link the employee to their biometric enrollment. You can leave it blank for now.
+                    </div>
+                  </div>
+                </div>
+
                   <div className="detail-section">
                     <h3>Account</h3>
                     <div className="detail-item">
@@ -1443,6 +1490,16 @@ export default function AdminEmployee() {
                       </span>
                     </div>
                   </div>
+
+                <div className="detail-section">
+                  <h3>Biometrics</h3>
+                  <div className="detail-item">
+                    <span className="detail-label">Fingerprint Template</span>
+                    <span className="detail-value">
+                      {viewEmployee.finger_template_id ? viewEmployee.finger_template_id : 'Not yet enrolled'}
+                    </span>
+                  </div>
+                </div>
 
                   <div className="detail-section">
                     <h3>Contact Information</h3>

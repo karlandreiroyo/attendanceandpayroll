@@ -12,6 +12,21 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.75.0",
-    "papaparse": "^5.5.3"
-  }
+    "node-fetch": "^3.3.2",
+    "papaparse": "^5.5.3",
+    "serialport": "^13.0.0"
+  },
+  "description": "",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/karlandreiroyo/attendanceandpayroll.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/karlandreiroyo/attendanceandpayroll/issues"
+  },
+  "homepage": "https://github.com/karlandreiroyo/attendanceandpayroll#readme"
 }

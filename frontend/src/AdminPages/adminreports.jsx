@@ -1,9 +1,18 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import "../AdminPages/admincss/adminDashboard.css";
 import "../AdminPages/admincss/adminReports.css";
 import { handleLogout as logout } from "../utils/logout";
 import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
+import { API_BASE_URL } from "../config/api";
+
+const REPORT_TYPES = [
+  { label: "Attendance Summary", value: "attendance" },
+  { label: "Leave Summary", value: "leave" },
+  { label: "Payroll Summary", value: "payroll" },
+  { label: "Employee List", value: "employees" },
+  { label: "Custom Report", value: "custom" },
+];
 
 export default function AdminReports() {
   const navigate = useNavigate();
@@ -19,81 +28,271 @@ export default function AdminReports() {
     start: new Date().toISOString().slice(0, 10),
     end: new Date().toISOString().slice(0, 10)
   });
+  const [departments, setDepartments] = useState(["All Departments"]);
   const location = useLocation();
   const isActive = (path) => location.pathname.startsWith(path);
 
-  const [attendanceData] = useState([]);
-  const [overtimeData] = useState([]);
-  const [payrollData] = useState([]);
-  const [employeeListData] = useState([]);
-  const [leaveData] = useState([]);
+  const [reportData, setReportData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  function generateReport() {
-    const reportData = getReportData();
-    alert(`Report generated successfully!\n\n${reportData.summary}`);
+  const selectedType = useMemo(
+    () => REPORT_TYPES.find((type) => type.label === selectedReport),
+    [selectedReport]
+  );
+
+  useEffect(() => {
+    async function loadDepartments() {
+      try {
+        const res = await fetch(`${API_BASE_URL}/users`, { credentials: "include" });
+        if (!res.ok) return;
+        const data = await res.json();
+        const unique = new Set(["All Departments"]);
+        (Array.isArray(data) ? data : []).forEach((user) => {
+          const department = user.department || user.dept || "Unassigned";
+          unique.add(department);
+        });
+        setDepartments(Array.from(unique));
+      } catch (err) {
+        console.error("Failed to load departments", err);
+      }
+    }
+    loadDepartments();
+  }, []);
+
+  function buildQueryParams() {
+    const params = new URLSearchParams();
+    if (dateRange.start) params.set("start", dateRange.start);
+    if (dateRange.end) params.set("end", dateRange.end);
+    if (dept && dept !== "All Departments") params.set("department", dept);
+    return params;
   }
 
-  function getReportData() {
-    switch (selectedReport) {
-      case "Attendance Summary":
-        return attendanceData.length === 0
-          ? {
-              summary: `Attendance Summary Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nNo attendance data available for the selected range.`,
-            }
-          : {
-              summary: `Attendance Summary Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nTotal Employees: ${attendanceData.reduce((sum, d) => sum + d.total, 0)}\nOverall Attendance Rate: ${Math.round(
-                (attendanceData.reduce((sum, d) => sum + d.present, 0) /
-                  Math.max(attendanceData.reduce((sum, d) => sum + d.total, 0), 1)) *
-                  100
-              )}%`,
-            };
-      case "Overtime Summary":
-        return overtimeData.length === 0
-          ? {
-              summary: `Overtime Summary Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nNo overtime data available for the selected range.`,
-            }
-          : {
-              summary: `Overtime Summary Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nTotal Requests: ${overtimeData.reduce((sum, d) => sum + d.requests, 0)}\nTotal Hours: ${overtimeData.reduce((sum, d) => sum + d.totalHours, 0)}`,
-            };
-      case "Payroll Summary":
-        return payrollData.length === 0
-          ? {
-              summary: `Payroll Summary Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nNo payroll data available.`,
-            }
-          : {
-              summary: `Payroll Summary Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nTotal Gross Pay: ₱${payrollData.reduce((sum, d) => sum + d.grossPay, 0).toLocaleString()}\nTotal Net Pay: ₱${payrollData.reduce((sum, d) => sum + d.netPay, 0).toLocaleString()}`,
-            };
-      case "Employee List":
-        return employeeListData.length === 0
-          ? {
-              summary: "Employee List Report\nNo employee data available.",
-            }
-          : {
-              summary: `Employee List Report\nTotal Employees: ${employeeListData.length}\nActive Employees: ${employeeListData.filter(e => e.status === "Active").length}\nDepartments: ${[...new Set(employeeListData.map(e => e.dept))].join(", ")}`,
-            };
-      case "Leave Summary":
-        return leaveData.length === 0
-          ? {
-              summary: `Leave Summary Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nNo leave data available.`,
-            }
-          : {
-              summary: `Leave Summary Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nTotal Leave Requests: ${leaveData.reduce(
-                (sum, d) => sum + d.pendingLeaves + d.approvedLeaves + d.rejectedLeaves,
-                0
-              )}\nTotal Leave Days: ${leaveData.reduce((sum, d) => sum + d.totalDays, 0)}`,
-            };
-      case "Custom Report":
-        return {
-          summary: `Custom Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nDepartment: ${dept}\nConfigure filters and data sources to generate your custom report once available.`,
-        };
+  useEffect(() => {
+    if (!selectedType || selectedType.value === "custom") {
+      setReportData(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    async function fetchReport() {
+      setLoading(true);
+      setError(null);
+      try {
+        const params = buildQueryParams();
+        const res = await fetch(`${API_BASE_URL}/reports/${selectedType.value}?${params.toString()}`, {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          const message = await res.text();
+          throw new Error(message || "Failed to load report data.");
+        }
+        const payload = await res.json();
+        setReportData(payload);
+      } catch (err) {
+        if (err.name === "AbortError") return;
+        console.error(err);
+        setReportData(null);
+        setError(err.message || "Unable to load report data.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchReport();
+
+    return () => controller.abort();
+  }, [selectedType, dateRange.start, dateRange.end, dept]);
+
+  function generateReport() {
+    const summary = buildReportSummary();
+    alert(`Report generated successfully!\n\n${summary}`);
+  }
+
+  function buildReportSummary() {
+    const header = `${selectedReport} Report\nPeriod: ${dateRange.start} to ${dateRange.end}\nDepartment: ${dept}`;
+
+    if (!selectedType || selectedType.value === "custom") {
+      return `${header}\nCustom report configuration will be available soon.`;
+    }
+
+    if (loading) {
+      return `${header}\nReport is still loading.`;
+    }
+
+    if (error) {
+      return `${header}\nError: ${error}`;
+    }
+
+    if (!reportData) {
+      return `${header}\nNo data available.`;
+    }
+
+    switch (selectedType.value) {
+      case "attendance": {
+        const departments = reportData.departments ?? [];
+        const totals = reportData.totals ?? {};
+        if (!departments.length && (!totals || totals.totalEmployees === 0)) {
+          return `${header}\nNo attendance records found for the selected filters.`;
+        }
+        const rate =
+          totals.totalEmployees > 0
+            ? Math.round(((totals.present ?? 0) / Math.max(totals.totalEmployees, 1)) * 100)
+            : 0;
+        return `${header}\nTotal Employees: ${totals.totalEmployees ?? 0}\nPresent: ${totals.present ?? 0}\nLate: ${totals.late ?? 0}\nAbsent: ${totals.absent ?? 0}\nAttendance Rate: ${rate}%`;
+      }
+      case "leave": {
+        const departments = reportData.departments ?? [];
+        const totals = reportData.totals ?? {};
+        if (!departments.length && (totals.pending ?? 0) === 0 && (totals.approved ?? 0) === 0 && (totals.rejected ?? 0) === 0) {
+          return `${header}\nNo leave activity found for the selected filters.`;
+        }
+        const totalRequests = (totals.pending ?? 0) + (totals.approved ?? 0) + (totals.rejected ?? 0) + (totals.cancelled ?? 0);
+        return `${header}\nTotal Leave Requests: ${totalRequests}\nApproved: ${totals.approved ?? 0}\nPending: ${totals.pending ?? 0}\nRejected: ${totals.rejected ?? 0}\nTotal Leave Days: ${totals.totalDays ?? 0}`;
+      }
+      case "payroll": {
+        const totals = reportData.totals ?? {};
+        if ((reportData.periods ?? []).length === 0) {
+          return `${header}\nNo payroll runs found for the selected period.`;
+        }
+        return `${header}\nPayroll Runs: ${(reportData.periods ?? []).length}\nHeadcount (entries): ${totals.headcount ?? 0}\nTotal Gross Pay: ₱${Number(totals.totalGross ?? 0).toLocaleString()}\nTotal Net Pay: ₱${Number(totals.totalNet ?? 0).toLocaleString()}`;
+      }
+      case "employees": {
+        const employees = reportData.employees ?? [];
+        if (!employees.length) {
+          return `${header}\nNo employees found for the selected filters.`;
+        }
+        const activeCount = employees.filter((emp) => (emp.status ?? '').toLowerCase() === "active").length;
+        const departmentsSet = Array.from(new Set(employees.map((emp) => emp.department ?? 'Unassigned')));
+        return `${header}\nTotal Employees: ${employees.length}\nActive Employees: ${activeCount}\nDepartments: ${departmentsSet.join(", ")}`;
+      }
       default:
-        return { summary: "Report generated successfully!" };
+        return `${header}\nNo data available.`;
     }
   }
 
   function exportReport() {
-    const reportData = getReportData();
-    const csvContent = `Report Type,${selectedReport}\nPeriod,${dateRange.start} to ${dateRange.end}\nDepartment,${dept}\n\n${reportData.summary}`;
+    if (!selectedType || selectedType.value === "custom") {
+      const csvContent = `Report Type,${selectedReport}\nPeriod,${dateRange.start} to ${dateRange.end}\nDepartment,${dept}\n\nCustom report configuration will be available soon.`;
+      const blob = new Blob([csvContent], { type: "text/csv" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${selectedReport.toLowerCase().replace(/\s+/g, '-')}-${dateRange.start}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      return;
+    }
+
+    const headerRows = [
+      ["Report Type", selectedReport],
+      ["Period", `${dateRange.start} to ${dateRange.end}`],
+      ["Department", dept],
+      []
+    ];
+
+    let dataRows = [["No data available."]];
+
+    if (!loading && !error && reportData) {
+      switch (selectedType.value) {
+        case "attendance": {
+          const departments = reportData.departments ?? [];
+          const totals = reportData.totals ?? {};
+          dataRows = [
+            ["Department", "Total Employees", "Present", "Late", "Absent"],
+            ...departments.map((item) => [
+              item.department,
+              item.totalEmployees,
+              item.present,
+              item.late,
+              item.absent,
+            ]),
+            [],
+            [
+              "Totals",
+              totals.totalEmployees ?? 0,
+              totals.present ?? 0,
+              totals.late ?? 0,
+              totals.absent ?? 0,
+            ],
+          ];
+          break;
+        }
+        case "leave": {
+          const departments = reportData.departments ?? [];
+          const totals = reportData.totals ?? {};
+          dataRows = [
+            ["Department", "Total Employees", "Pending", "Approved", "Rejected", "Cancelled", "Total Days"],
+            ...departments.map((item) => [
+              item.department,
+              item.totalEmployees,
+              item.pending,
+              item.approved,
+              item.rejected,
+              item.cancelled,
+              item.totalDays,
+            ]),
+            [],
+            [
+              "Totals",
+              totals.totalEmployees ?? 0,
+              totals.pending ?? 0,
+              totals.approved ?? 0,
+              totals.rejected ?? 0,
+              totals.cancelled ?? 0,
+              totals.totalDays ?? 0,
+            ],
+          ];
+          break;
+        }
+        case "payroll": {
+          const periods = reportData.periods ?? [];
+          const totals = reportData.totals ?? {};
+          dataRows = [
+            ["Period", "Headcount", "Total Gross", "Total Net", "Total Deductions"],
+            ...periods.map((item) => [
+              item.label,
+              item.headcount,
+              item.totalGross,
+              item.totalNet,
+              item.totalDeductions,
+            ]),
+            [],
+            [
+              "Totals",
+              totals.headcount ?? 0,
+              totals.totalGross ?? 0,
+              totals.totalNet ?? 0,
+              totals.totalDeductions ?? 0,
+            ],
+          ];
+          break;
+        }
+        case "employees": {
+          const employees = reportData.employees ?? [];
+          dataRows = [
+            ["Employee", "Department", "Position", "Status", "Join Date", "Email"],
+            ...employees.map((emp) => [
+              emp.name,
+              emp.department,
+              emp.position,
+              emp.status,
+              emp.joinDate ?? "",
+              emp.email,
+            ]),
+          ];
+          break;
+        }
+        default:
+          break;
+      }
+    }
+
+    const csvContent = [...headerRows, ...dataRows].map((row) => row.join(",")).join("\n");
     
     const blob = new Blob([csvContent], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
@@ -121,7 +320,6 @@ export default function AdminReports() {
           <Link className={`nav-item${isActive('/admin/schedules') ? ' active' : ''}`} to="/admin/schedules">Schedules</Link>
           <Link className={`nav-item${isActive('/admin/attendance') ? ' active' : ''}`} to="/admin/attendance">Attendance</Link>
           <Link className={`nav-item${isActive('/admin/leave-requests') ? ' active' : ''}`} to="/admin/leave-requests">Leave Requests</Link>
-          <Link className={`nav-item${isActive('/admin/overtime') ? ' active' : ''}`} to="/admin/overtime">Overtime</Link>
           <Link className={`nav-item${isActive('/admin/payroll') ? ' active' : ''}`} to="/admin/payroll">Payroll</Link>
           <Link className={`nav-item${isActive('/admin/reports') ? ' active' : ''}`} to="/admin/reports">Reports</Link>
         </nav>
@@ -155,42 +353,15 @@ export default function AdminReports() {
         <div className="reports-layout">
           <aside className="report-types">
             <div className="rt-title">Report Types</div>
-            <button 
-              className={`rt-item ${selectedReport === "Attendance Summary" ? "active" : ""}`}
-              onClick={() => setSelectedReport("Attendance Summary")}
-            >
-              Attendance Summary
-            </button>
-            <button 
-              className={`rt-item ${selectedReport === "Overtime Summary" ? "active" : ""}`}
-              onClick={() => setSelectedReport("Overtime Summary")}
-            >
-              Overtime Summary
-            </button>
-            <button 
-              className={`rt-item ${selectedReport === "Payroll Summary" ? "active" : ""}`}
-              onClick={() => setSelectedReport("Payroll Summary")}
-            >
-              Payroll Summary
-            </button>
-            <button 
-              className={`rt-item ${selectedReport === "Employee List" ? "active" : ""}`}
-              onClick={() => setSelectedReport("Employee List")}
-            >
-              Employee List
-            </button>
-            <button 
-              className={`rt-item ${selectedReport === "Leave Summary" ? "active" : ""}`}
-              onClick={() => setSelectedReport("Leave Summary")}
-            >
-              Leave Summary
-            </button>
-            <button 
-              className={`rt-item ${selectedReport === "Custom Report" ? "active" : ""}`}
-              onClick={() => setSelectedReport("Custom Report")}
-            >
-              Custom Report
-            </button>
+            {REPORT_TYPES.map((type) => (
+              <button
+                key={type.value}
+                className={`rt-item ${selectedReport === type.label ? "active" : ""}`}
+                onClick={() => setSelectedReport(type.label)}
+              >
+                {type.label}
+              </button>
+            ))}
           </aside>
 
           <section className="report-content">
@@ -214,12 +385,11 @@ export default function AdminReports() {
               <div className="param">
                 <div className="param-title">Department</div>
                 <select className="param-select" value={dept} onChange={e => setDept(e.target.value)}>
-                  <option>All Departments</option>
-                  <option>IT</option>
-                  <option>HR</option>
-                  <option>Finance</option>
-                  <option>Marketing</option>
-                  <option>Operations</option>
+                  {departments.map((departmentOption) => (
+                    <option key={departmentOption} value={departmentOption}>
+                      {departmentOption}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="param-actions">
@@ -232,16 +402,25 @@ export default function AdminReports() {
             <div className="card">
               <div className="card-title">{selectedReport} Report</div>
               <div className="period">Period: {dateRange.start} to {dateRange.end}</div>
+              {dept && <div className="period">Department: {dept}</div>}
+
+              {loading && (
+                <div className="table-empty">Generating report...</div>
+              )}
+
+              {!loading && error && (
+                <div className="table-empty error">Unable to load report data: {error}</div>
+              )}
 
               {selectedReport === "Attendance Summary" && (
                 <div className="summary-table">
-                  {attendanceData.length === 0 ? (
+                  {!loading && !error && (!reportData || !reportData.departments || reportData.departments.length === 0) ? (
                     <div className="table-empty">
                       Attendance records will appear here once data is available.
                     </div>
                   ) : (
                     <>
-                      <div className="t-head">
+                      <div className="t-head columns-6">
                         <div>Department</div>
                         <div>Total Employees</div>
                         <div>Present</div>
@@ -249,31 +428,41 @@ export default function AdminReports() {
                         <div>Absent</div>
                         <div>Attendance Rate</div>
                       </div>
-                      {attendanceData.map((d) => (
-                        <div key={d.dept} className="t-row">
-                          <div>{d.dept}</div>
-                          <div>{d.total}</div>
-                          <div>{d.present}</div>
-                          <div>{d.late}</div>
-                          <div>{d.absent}</div>
-                          <div>{d.rate}</div>
+                      {(reportData?.departments ?? []).map((d) => {
+                        const rate =
+                          d.totalEmployees > 0
+                            ? Math.round((d.present / Math.max(d.totalEmployees, 1)) * 100)
+                            : 0;
+                        return (
+                          <div key={d.department} className="t-row columns-6">
+                            <div>{d.department}</div>
+                            <div>{d.totalEmployees}</div>
+                            <div>{d.present}</div>
+                            <div>{d.late}</div>
+                            <div>{d.absent}</div>
+                            <div>{rate}%</div>
+                          </div>
+                        );
+                      })}
+                      {reportData?.totals && (
+                        <div className="t-row total-row columns-6">
+                          <div>Total</div>
+                          <div>{reportData.totals.totalEmployees}</div>
+                          <div>{reportData.totals.present}</div>
+                          <div>{reportData.totals.late}</div>
+                          <div>{reportData.totals.absent}</div>
+                          <div>
+                            {reportData.totals.totalEmployees > 0
+                              ? Math.round(
+                                  (reportData.totals.present /
+                                    Math.max(reportData.totals.totalEmployees, 1)) *
+                                    100
+                                )
+                              : 0}
+                            %
+                          </div>
                         </div>
-                      ))}
-                      <div className="t-row total-row">
-                        <div>Total</div>
-                        <div>{attendanceData.reduce((sum, d) => sum + d.total, 0)}</div>
-                        <div>{attendanceData.reduce((sum, d) => sum + d.present, 0)}</div>
-                        <div>{attendanceData.reduce((sum, d) => sum + d.late, 0)}</div>
-                        <div>{attendanceData.reduce((sum, d) => sum + d.absent, 0)}</div>
-                        <div>
-                          {Math.round(
-                            (attendanceData.reduce((sum, d) => sum + d.present, 0) /
-                              Math.max(attendanceData.reduce((sum, d) => sum + d.total, 0), 1)) *
-                              100
-                          )}
-                          %
-                        </div>
-                      </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -281,13 +470,13 @@ export default function AdminReports() {
 
               {selectedReport === "Employee List" && (
                 <div className="summary-table">
-                  {employeeListData.length === 0 ? (
+                  {!loading && !error && (!reportData || !reportData.employees || reportData.employees.length === 0) ? (
                     <div className="table-empty">
                       Employee records will appear here once present.
                     </div>
                   ) : (
                     <>
-                      <div className="t-head">
+                      <div className="t-head columns-6">
                         <div>Employee</div>
                         <div>Department</div>
                         <div>Position</div>
@@ -295,17 +484,17 @@ export default function AdminReports() {
                         <div>Join Date</div>
                         <div>Email</div>
                       </div>
-                      {employeeListData.map((emp) => (
-                        <div key={emp.id} className="t-row">
+                      {(reportData?.employees ?? []).map((emp) => (
+                        <div key={emp.id} className="t-row columns-6">
                           <div>{emp.name}</div>
-                          <div>{emp.dept}</div>
+                          <div>{emp.department}</div>
                           <div>{emp.position}</div>
                           <div>
                             <span className={`status-badge ${emp.status === "Active" ? "active" : ""}`}>
                               {emp.status}
                             </span>
                           </div>
-                          <div>{emp.joinDate}</div>
+                          <div>{emp.joinDate ? new Date(emp.joinDate).toLocaleDateString() : "-"}</div>
                           <div>{emp.email}</div>
                         </div>
                       ))}
@@ -316,30 +505,81 @@ export default function AdminReports() {
 
               {selectedReport === "Leave Summary" && (
                 <div className="summary-table">
-                  {leaveData.length === 0 ? (
+                  {!loading && !error && (!reportData || !reportData.departments || reportData.departments.length === 0) ? (
                     <div className="table-empty">
                       Leave activity will appear here once data is available.
                     </div>
                   ) : (
                     <>
-                      <div className="t-head">
+                      <div className="t-head columns-7">
                         <div>Department</div>
                         <div>Total Employees</div>
                         <div>Pending Leaves</div>
                         <div>Approved Leaves</div>
                         <div>Rejected Leaves</div>
+                        <div>Cancelled Leaves</div>
                         <div>Total Days</div>
                       </div>
-                      {leaveData.map((d) => (
-                        <div key={d.dept} className="t-row">
-                          <div>{d.dept}</div>
+                      {(reportData?.departments ?? []).map((d) => (
+                        <div key={d.department} className="t-row columns-7">
+                          <div>{d.department}</div>
                           <div>{d.totalEmployees}</div>
-                          <div>{d.pendingLeaves}</div>
-                          <div>{d.approvedLeaves}</div>
-                          <div>{d.rejectedLeaves}</div>
+                          <div>{d.pending}</div>
+                          <div>{d.approved}</div>
+                          <div>{d.rejected}</div>
+                          <div>{d.cancelled}</div>
                           <div>{d.totalDays}</div>
                         </div>
                       ))}
+                      {reportData?.totals && (
+                        <div className="t-row total-row columns-7">
+                          <div>Total</div>
+                          <div>{reportData.totals.totalEmployees}</div>
+                          <div>{reportData.totals.pending}</div>
+                          <div>{reportData.totals.approved}</div>
+                          <div>{reportData.totals.rejected}</div>
+                          <div>{reportData.totals.cancelled}</div>
+                          <div>{reportData.totals.totalDays}</div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {selectedReport === "Payroll Summary" && (
+                <div className="summary-table">
+                  {!loading && !error && (!reportData || !reportData.periods || reportData.periods.length === 0) ? (
+                    <div className="table-empty">
+                      Payroll runs will appear here after you process payroll for this period.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="t-head columns-5">
+                        <div>Period</div>
+                        <div>Headcount (entries)</div>
+                        <div>Total Gross Pay</div>
+                        <div>Total Net Pay</div>
+                        <div>Total Deductions</div>
+                      </div>
+                      {(reportData?.periods ?? []).map((period) => (
+                        <div key={`${period.year}-${period.month}`} className="t-row columns-5">
+                          <div>{period.label}</div>
+                          <div>{period.headcount}</div>
+                          <div>₱{Number(period.totalGross).toLocaleString()}</div>
+                          <div>₱{Number(period.totalNet).toLocaleString()}</div>
+                          <div>₱{Number(period.totalDeductions).toLocaleString()}</div>
+                        </div>
+                      ))}
+                      {reportData?.totals && (
+                        <div className="t-row total-row columns-5">
+                          <div>Totals</div>
+                          <div>{reportData.totals.headcount}</div>
+                          <div>₱{Number(reportData.totals.totalGross).toLocaleString()}</div>
+                          <div>₱{Number(reportData.totals.totalNet).toLocaleString()}</div>
+                          <div>₱{Number(reportData.totals.totalDeductions).toLocaleString()}</div>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>

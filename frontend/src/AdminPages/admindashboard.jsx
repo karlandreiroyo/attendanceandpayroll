@@ -56,23 +56,20 @@ export default function AdminDashboard() {
   };
 
   const attendanceData = useMemo(() => [], []);
-  const overtimeRequests = useMemo(() => [], []);
 
   const dashboardStats = useMemo(() => {
     const totalEmployees = employeeCount;
     const presentToday = attendanceData.filter(a => a.status === "Present").length;
     const lateToday = attendanceData.filter(a => a.status === "Late").length;
     const absentToday = attendanceData.filter(a => a.status === "Absent").length;
-    const pendingOvertime = overtimeRequests.filter(o => o.status === "Pending").length;
 
     return {
       totalEmployees,
       presentToday,
       lateToday,
-      absentToday,
-      pendingOvertime
+      absentToday
     };
-  }, [employeeCount, attendanceData, overtimeRequests]);
+  }, [employeeCount, attendanceData]);
 
   const recentActivities = useMemo(() => [], []);
 
@@ -89,7 +86,6 @@ export default function AdminDashboard() {
           <Link className={`nav-item${isActive('/admin/schedules') ? ' active' : ''}`} to="/admin/schedules">Schedules</Link>
           <Link className={`nav-item${isActive('/admin/attendance') ? ' active' : ''}`} to="/admin/attendance">Attendance</Link>
           <Link className={`nav-item${isActive('/admin/leave-requests') ? ' active' : ''}`} to="/admin/leave-requests">Leave Requests</Link>
-          <Link className={`nav-item${isActive('/admin/overtime') ? ' active' : ''}`} to="/admin/overtime">Overtime</Link>
           <Link className={`nav-item${isActive('/admin/payroll') ? ' active' : ''}`} to="/admin/payroll">Payroll</Link>
           <Link className={`nav-item${isActive('/admin/reports') ? ' active' : ''}`} to="/admin/reports">Reports</Link>
         </nav>
@@ -176,9 +172,9 @@ export default function AdminDashboard() {
 
         <section className="grid grid-3">
           <div className="card">
-            <div className="card-title">Pending Overtime</div>
-            <div className="muted">{dashboardStats.pendingOvertime} Pending</div>
-            <Link to="/admin/overtime" className="card-link">View Details →</Link>
+            <div className="card-title">Leave Requests</div>
+            <div className="muted">Review pending submissions from employees.</div>
+            <Link to="/admin/leave-requests" className="card-link">Manage Leave Requests →</Link>
           </div>
           <div className="card">
             <div className="card-title">Upcoming Payroll</div>
