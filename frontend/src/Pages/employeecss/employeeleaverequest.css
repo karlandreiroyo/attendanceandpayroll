@@ -292,6 +292,26 @@
   outline: none;
 }
 
+.lr-row input[type="date"] {
+  padding-right: 36px;
+}
+
+.lr-row input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 1;
+  display: block;
+  cursor: pointer;
+  filter: invert(30%) sepia(22%) saturate(556%) hue-rotate(80deg) brightness(95%) contrast(90%);
+}
+
+.lr-row input[type="date"]::-webkit-inner-spin-button,
+.lr-row input[type="date"]::-webkit-clear-button {
+  display: none;
+}
+
+.lr-row input[type="date"]::-moz-focus-inner {
+  border: 0;
+}
+
 /* ===== Actions ===== */
 .lr-actions {
   display: flex;

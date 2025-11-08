@@ -17,34 +17,86 @@ function getDurationInDays(start, end) {
   return Math.max(1, Math.round(diff / (1000 * 60 * 60 * 24)) + 1);
 }
 
-const mapLeaveRequest = (request) => ({
-  id: request.id,
-  employeeId: request.employee_id,
-  employee: request.employee_name || "Unknown",
-  department: request.department || "Unassigned",
-  type: request.type,
-  status: request.status,
-  startDate: request.start_date,
-  endDate: request.end_date,
-  submittedAt: request.submitted_at,
-  adminNote: request.admin_note,
-});
+function formatDate(value, includeTime = false) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, includeTime ? { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" } : { year: "numeric", month: "short", day: "numeric" });
+}
 
 export default function AdminLeaveRequests() {
   const navigate = useNavigate();
   const location = useLocation();
   const isActive = (path) => location.pathname.startsWith(path);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [profileData, setProfileData] = useState(() => getSessionUserProfile());
-  const [requests, setRequests] = useState([]);
+  const [rawRequests, setRawRequests] = useState([]);
+  const [usersById, setUsersById] = useState({});
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState(null);
   const [updating, setUpdating] = useState([]);
+  const [selectedRequestId, setSelectedRequestId] = useState(null);
 
   useEffect(() => {
     const unsubscribe = subscribeToProfileUpdates(setProfileData);
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    setIsSidebarOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    async function loadUsers() {
+      try {
+        const res = await fetch(`${API_BASE_URL}/users`, { credentials: "include" });
+        if (!res.ok) throw new Error("Failed to load users");
+        const data = await res.json();
+        const map = {};
+        (Array.isArray(data) ? data : []).forEach((user) => {
+          const id = user.user_id ?? user.id;
+          if (!id) return;
+          const fullName = `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.username || "";
+          map[String(id)] = {
+            fullName,
+            department: user.department || "",
+          };
+        });
+        setUsersById(map);
+      } catch (error) {
+        console.error(error);
+      }
+    }
+    loadUsers();
+  }, []);
+
+  const requests = useMemo(() => {
+    return rawRequests.map((request) => {
+      const employeeKey = request.employee_id != null ? String(request.employee_id) : "";
+      const user = usersById[employeeKey];
+      const department = (request.department || user?.department || "").trim();
+      const employeeName = (request.employee_name || user?.fullName || "Unknown").trim();
+      return {
+        id: request.id,
+        employeeId: request.employee_id,
+        employee: employeeName || "Unknown",
+        department,
+        type: request.type,
+        status: request.status,
+        startDate: request.start_date,
+        endDate: request.end_date,
+        submittedAt: request.submitted_at,
+        adminNote: request.admin_note,
+        reason: request.reason || "",
+      };
+    });
+  }, [rawRequests, usersById]);
+
+  const selectedRequest = useMemo(
+    () => requests.find((req) => req.id === selectedRequestId) || null,
+    [requests, selectedRequestId]
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -57,8 +109,8 @@ export default function AdminLeaveRequests() {
         }
         const data = await res.json();
         if (isMounted) {
-          const normalised = Array.isArray(data) ? data.map(mapLeaveRequest) : [];
-          setRequests(normalised);
+          const normalised = Array.isArray(data) ? data : [];
+          setRawRequests(normalised);
         }
       } catch (error) {
         if (isMounted) {
@@ -147,8 +199,8 @@ export default function AdminLeaveRequests() {
         const message = await res.text();
         throw new Error(message || "Failed to update status");
       }
-      const updated = mapLeaveRequest(await res.json());
-      setRequests((prev) => prev.map((req) => (req.id === id ? updated : req)));
+      const updated = await res.json();
+      setRawRequests((prev) => prev.map((req) => (req.id === id ? updated : req)));
       setNotice({ type: "success", message: `Request ${id} marked as ${status}.` });
     } catch (error) {
       setNotice({ type: "error", message: error.message || "Failed to update status." });
@@ -157,9 +209,27 @@ export default function AdminLeaveRequests() {
     }
   }
 
+  const closeDetails = () => setSelectedRequestId(null);
+
+  useEffect(() => {
+    if (!selectedRequestId) return;
+    const handler = (event) => {
+      if (event.key === "Escape") {
+        closeDetails();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedRequestId]);
+
+  const handleLogout = () => {
+    setIsProfileOpen(false);
+    logout();
+  };
+
   return (
     <div className="admin-layout">
-      <aside className="admin-sidebar">
+      <aside className={`admin-sidebar${isSidebarOpen ? " open" : ""}`}>
         <div className="brand">
           <div className="brand-avatar">TI</div>
           <div className="brand-name">Tatay Ilio</div>
@@ -175,10 +245,21 @@ export default function AdminLeaveRequests() {
           <Link className={`nav-item${isActive("/admin/reports") ? " active" : ""}`} to="/admin/reports">Reports</Link>
         </nav>
       </aside>
+      {isSidebarOpen && <div className="sidebar-backdrop" onClick={() => setIsSidebarOpen(false)} />}
 
       <main className="admin-content">
         <header className="admin-topbar">
-          <h1>Leave Requests</h1>
+          <div className="topbar-left">
+            <button
+              className="mobile-nav-toggle"
+              type="button"
+              aria-label="Toggle navigation"
+              onClick={() => setIsSidebarOpen((open) => !open)}
+            >
+              ☰
+            </button>
+            <h1>Leave Requests</h1>
+          </div>
           <div className="top-actions">
             <button className="profile-btn" onClick={() => setIsProfileOpen((open) => !open)}>
               <span className="profile-avatar">
@@ -204,15 +285,7 @@ export default function AdminLeaveRequests() {
               >
                 Profile
               </div>
-              <div
-                className="profile-row"
-                onClick={() => {
-                  setIsProfileOpen(false);
-                  logout();
-                }}
-              >
-                Log out
-              </div>
+              <div className="profile-row" onClick={handleLogout}>Log out</div>
             </div>
           </div>
         </header>
@@ -321,11 +394,25 @@ export default function AdminLeaveRequests() {
             </div>
           ) : (
             filteredRequests.map((req) => (
-              <div key={req.id} className="lr-table-row">
+              <div
+                key={req.id}
+                className="lr-table-row"
+                onClick={() => setSelectedRequestId(req.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelectedRequestId(req.id);
+                  }
+                }}
+              >
                 <div className="lr-badge">{req.id}</div>
                 <div>
                   <div className="lr-emp-name">{req.employee}</div>
-                  <div className="lr-emp-meta">{req.department}</div>
+              {req.department ? (
+                <div className="lr-emp-meta">{req.department}</div>
+              ) : null}
                 </div>
                 <div>
                   <div>{new Date(req.startDate).toLocaleDateString()}</div>
@@ -337,7 +424,11 @@ export default function AdminLeaveRequests() {
                   <span className={`pill ${req.status.toLowerCase()}`}>{req.status}</span>
                 </div>
                 <div>{new Date(req.submittedAt).toLocaleDateString()}</div>
-                <div className="lr-actions">
+                <div
+                  className="lr-actions"
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => event.stopPropagation()}
+                >
                   <button
                     type="button"
                     className="btn mini"
@@ -360,6 +451,75 @@ export default function AdminLeaveRequests() {
           )}
         </section>
       </main>
+      {selectedRequest && (
+        <div className="lr-modal-backdrop" role="presentation" onClick={closeDetails}>
+          <div
+            className="lr-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="leave-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="lr-modal-header">
+              <h2 id="leave-modal-title">Leave Request Details</h2>
+              <button type="button" className="lr-modal-close" onClick={closeDetails} aria-label="Close">
+                ×
+              </button>
+            </div>
+            <div className="lr-modal-body">
+              <div className="lr-modal-section">
+                <div className="lr-modal-label">Employee</div>
+                <div className="lr-modal-value">{selectedRequest.employee}</div>
+                {selectedRequest.department && (
+                  <div className="lr-modal-subvalue">{selectedRequest.department}</div>
+                )}
+              </div>
+              <div className="lr-modal-grid">
+                <div>
+                  <div className="lr-modal-label">Type</div>
+                  <div className="lr-modal-value">{selectedRequest.type}</div>
+                </div>
+                <div>
+                  <div className="lr-modal-label">Status</div>
+                  <div className={`lr-modal-status ${selectedRequest.status.toLowerCase()}`}>
+                    {selectedRequest.status}
+                  </div>
+                </div>
+                <div>
+                  <div className="lr-modal-label">Start Date</div>
+                  <div className="lr-modal-value">{formatDate(selectedRequest.startDate)}</div>
+                </div>
+                <div>
+                  <div className="lr-modal-label">End Date</div>
+                  <div className="lr-modal-value">{formatDate(selectedRequest.endDate)}</div>
+                </div>
+                <div>
+                  <div className="lr-modal-label">Duration</div>
+                  <div className="lr-modal-value">
+                    {getDurationInDays(selectedRequest.startDate, selectedRequest.endDate)} day(s)
+                  </div>
+                </div>
+                <div>
+                  <div className="lr-modal-label">Submitted</div>
+                  <div className="lr-modal-value">{formatDate(selectedRequest.submittedAt, true)}</div>
+                </div>
+              </div>
+              <div className="lr-modal-section">
+                <div className="lr-modal-label">Reason</div>
+                <div className="lr-modal-text">
+                  {selectedRequest.reason ? selectedRequest.reason : <span className="lr-muted">No reason provided.</span>}
+                </div>
+              </div>
+              {selectedRequest.adminNote && (
+                <div className="lr-modal-section">
+                  <div className="lr-modal-label">Admin Note</div>
+                  <div className="lr-modal-text">{selectedRequest.adminNote}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

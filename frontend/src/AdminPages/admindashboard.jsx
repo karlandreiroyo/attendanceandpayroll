@@ -7,6 +7,7 @@ import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/curre
 
 export default function AdminDashboard() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [profileData, setProfileData] = useState(() => getSessionUserProfile());
   const [employeeCount, setEmployeeCount] = useState(0);
   const navigate = useNavigate();
@@ -17,6 +18,10 @@ export default function AdminDashboard() {
     const unsubscribe = subscribeToProfileUpdates(setProfileData);
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    setIsSidebarOpen(false);
+  }, [location.pathname]);
 
   useEffect(() => {
     let isMounted = true;
@@ -45,16 +50,12 @@ export default function AdminDashboard() {
     };
   }, []);
 
-  // Session destroyer function
   const handleLogout = () => {
-    // Close profile popover
     setIsProfileOpen(false);
-    // Call logout utility
     logout();
   };
 
   const attendanceData = useMemo(() => [], []);
-
   const overtimeRequests = useMemo(() => [], []);
 
   const dashboardStats = useMemo(() => {
@@ -77,7 +78,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="admin-layout">
-      <aside className="admin-sidebar">
+      <aside className={`admin-sidebar${isSidebarOpen ? " open" : ""}`}>
         <div className="brand">
           <div className="brand-avatar">TI</div>
           <div className="brand-name">Tatay Ilio</div>
@@ -93,10 +94,21 @@ export default function AdminDashboard() {
           <Link className={`nav-item${isActive('/admin/reports') ? ' active' : ''}`} to="/admin/reports">Reports</Link>
         </nav>
       </aside>
+      {isSidebarOpen && <div className="sidebar-backdrop" onClick={() => setIsSidebarOpen(false)} />}
 
       <main className="admin-content">
         <header className="admin-topbar">
-          <h1>Dashboard</h1>
+          <div className="topbar-left">
+            <button
+              className="mobile-nav-toggle"
+              type="button"
+              aria-label="Toggle navigation"
+              onClick={() => setIsSidebarOpen((open) => !open)}
+            >
+              ☰
+            </button>
+            <h1>Dashboard</h1>
+          </div>
           <div className="top-actions">
             <button className="profile-btn" onClick={() => setIsProfileOpen((v) => !v)}>
               <span className="profile-avatar">

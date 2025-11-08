@@ -6,6 +6,9 @@
   border: 1px solid #e5e7eb;
   border-radius: 12px;
   padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 /* ----- Header ----- */
@@ -15,6 +18,7 @@
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 /* ----- Search Bar ----- */
@@ -23,12 +27,14 @@
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   padding: 10px 12px;
+  min-width: 220px;
 }
 
 /* ----- Header Actions ----- */
 .header-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* ----- Buttons ----- */
@@ -86,6 +92,7 @@
   display: flex;
   gap: 8px;
   margin-bottom: 10px;
+  flex-wrap: wrap;
 }
 
 .filters select {
@@ -209,6 +216,15 @@
     text-align: center;
     display: flex;
     justify-content: center;
+  }
+
+  .action-cell {
+    justify-content: flex-end;
+  }
+
+  .table-responsive {
+    width: 100%;
+    overflow-x: auto;
   }
 
 /* ----- Employee Info ----- */
@@ -935,7 +951,7 @@
 /* ================================
    RESPONSIVE DESIGN
 ================================ */
-@media (max-width: 1200px) {
+@media (max-width: 1100px) {
   .thead,
   .tr {
     grid-template-columns: 2.5fr 0.8fr 0.6fr 0.6fr 0.8fr 160px;
@@ -943,92 +959,112 @@
   }
 }
 
-@media (max-width: 1000px) {
-  .thead,
-  .tr {
-    grid-template-columns: 2fr 0.7fr 0.5fr 0.5fr 0.7fr 150px;
+@media (max-width: 900px) {
+  .employee-card__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .employee-search {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .header-actions .btn {
+    flex: 1;
+  }
+
+  .filters {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 780px) {
+  .table {
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  .thead {
+    display: none;
+  }
+
+  .tbody .tr {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    border: 1px solid #e5e7eb;
+    margin: 0 12px 12px;
+    border-radius: 12px;
+    padding: 1rem;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  }
+
+  .tbody .tr > div {
+    width: 100%;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .tbody .tr > div::before {
+    content: attr(data-title);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #6b7280;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .emp-cell {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 0.6rem;
+  }
+
+  .emp {
     gap: 10px;
   }
-  
-  .thead {
-    padding: 12px 16px;
-    font-size: 11px;
-  }
-  
-  .tbody .tr {
-    padding: 12px 16px;
-  }
-}
 
-@media (max-width: 800px) {
-  .thead,
-  .tr {
-    grid-template-columns: 1.8fr 0.6fr 0.4fr 0.4fr 0.6fr 140px;
-    gap: 8px;
+  .emp-meta {
+    width: 100%;
   }
-  
-  .emp {
-    gap: 8px;
-  }
-  
-  .emp-avatar {
-    width: 32px;
-    height: 32px;
-    font-size: 12px;
-  }
-  
-  .emp-name {
-    font-size: 13px;
-  }
-  
+
   .emp-email {
-    font-size: 11px;
+    white-space: normal;
   }
-  
-  .actions-btn {
-    padding: 6px 10px;
-    font-size: 13px;
+
+  .action-cell {
+    justify-content: stretch;
+  }
+
+  .action-cell .actions-btn {
+    width: 100%;
+    justify-content: center;
   }
 }
 
-@media (max-width: 600px) {
-  .thead,
-  .tr {
-    grid-template-columns: 1.5fr 0.5fr 0.3fr 0.3fr 0.5fr 130px;
+@media (max-width: 520px) {
+  .employee-card {
+    padding: 14px;
+  }
+
+  .tbody .tr {
+    margin: 0 8px 12px;
+    padding: 0.85rem;
+  }
+
+  .header-actions {
     gap: 6px;
   }
-  
-  .thead {
-    padding: 10px 12px;
-    font-size: 10px;
-  }
-  
-  .tbody .tr {
-    padding: 10px 12px;
-  }
-  
-  .emp-avatar {
-    width: 28px;
-    height: 28px;
-    font-size: 11px;
-  }
-  
-  .emp-name {
-    font-size: 12px;
-  }
-  
-  .emp-email {
-    font-size: 10px;
-  }
-  
-  .actions-btn {
-    padding: 5px 8px;
-    font-size: 12px;
-  }
-  
-  .status,
-  .role-badge {
-    font-size: 10px;
-    padding: 4px 8px;
+
+  .filters select,
+  .employee-search {
+    padding: 8px 10px;
   }
 }

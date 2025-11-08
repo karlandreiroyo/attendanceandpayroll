@@ -11,6 +11,7 @@ export default function AdminEmployee() {
   const location = useLocation();
   const isActive = (path) => location.pathname.startsWith(path);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -200,6 +201,15 @@ export default function AdminEmployee() {
     const unsubscribe = subscribeToProfileUpdates(setProfileSession);
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    setIsSidebarOpen(false);
+  }, [location.pathname]);
+
+  const handleLogout = () => {
+    setIsProfileOpen(false);
+    logout();
+  };
 
   async function loadCurrentUser() {
     try {
@@ -785,7 +795,7 @@ export default function AdminEmployee() {
 
   return (
     <div className="admin-layout">
-      <aside className="admin-sidebar">
+      <aside className={`admin-sidebar${isSidebarOpen ? " open" : ""}`}>
         <div className="brand">
           <div className="brand-avatar">TI</div>
           <div className="brand-name">Tatay Ilio</div>
@@ -801,10 +811,21 @@ export default function AdminEmployee() {
           <Link className={`nav-item${isActive('/admin/reports') ? ' active' : ''}`} to="/admin/reports">Reports</Link>
         </nav>
       </aside>
+      {isSidebarOpen && <div className="sidebar-backdrop" onClick={() => setIsSidebarOpen(false)} />}
 
       <main className="admin-content">
         <header className="admin-topbar">
-          <h1>Employees</h1>
+          <div className="topbar-left">
+            <button
+              className="mobile-nav-toggle"
+              type="button"
+              aria-label="Toggle navigation"
+              onClick={() => setIsSidebarOpen((open) => !open)}
+            >
+              ☰
+            </button>
+            <h1>Employees</h1>
+          </div>
           <div className="top-actions">
             <button className="profile-btn" onClick={() => setIsProfileOpen(v => !v)}>
               <span className="profile-avatar">
@@ -822,7 +843,7 @@ export default function AdminEmployee() {
             </button>
             <div className={`profile-popover${isProfileOpen ? " open" : ""}`}>
               <div className="profile-row" onClick={() => { setIsProfileOpen(false); navigate('/admin/profile'); }}>Profile</div>
-              <div className="profile-row" onClick={() => { setIsProfileOpen(false); logout(); }}>Log out</div>
+              <div className="profile-row" onClick={handleLogout}>Log out</div>
             </div>
           </div>
         </header>
@@ -872,7 +893,7 @@ export default function AdminEmployee() {
               ) : (
                 filteredRows.map(r => (
                   <div key={r.id} className="tr">
-                    <div>
+                    <div className="emp-cell" data-title="Full Name">
                       <div className="emp">
                         <div className="emp-avatar">{r.name?.[0]}</div>
                         <div className="emp-meta">
@@ -881,17 +902,17 @@ export default function AdminEmployee() {
                         </div>
                       </div>
                     </div>
-                    <div className="username-cell">{r.username}</div>
-                    <div className="center">
+                    <div className="username-cell" data-title="Username">{r.username}</div>
+                    <div className="center" data-title="Role">
                       <span className={`role-badge ${r.role === 'admin' ? 'admin' : 'employee'}`}>
                         {r.role === 'admin' ? 'Admin' : 'Employee'}
                       </span>
                     </div>
-                    <div className="center">
+                    <div className="center" data-title="Status">
                       <span className={`status ${r.status === 'Inactive' ? 'danger' : 'success'}`}>{r.status}</span>
                     </div>
-                    <div className="right">{r.joinDate}</div>
-                    <div className="right">
+                    <div className="right" data-title="Join Date">{r.joinDate}</div>
+                    <div className="right action-cell" data-title="Actions">
                       <div className="actions-dropdown">
                         <button 
                           className="actions-btn" 
