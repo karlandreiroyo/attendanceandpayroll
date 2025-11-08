@@ -6,6 +6,7 @@ import AdminDashboard from "./AdminPages/adminDashboard";
 import AdminEmployee from "./AdminPages/adminEmployee";
 import AdminSchedules from "./AdminPages/adminSchedules";
 import AdminAttendance from "./AdminPages/adminAttendance";
+import AdminLeaveRequests from "./AdminPages/adminLeaveRequests";
 import AdminOvertime from "./AdminPages/adminOvertime";
 import AdminPayroll from "./AdminPages/adminPayroll";
 import AdminReports from "./AdminPages/adminReports";
@@ -59,6 +60,14 @@ function App() {
           element={
             <ProtectedRoute requiredRole="admin">
               <AdminAttendance />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/admin/leave-requests" 
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminLeaveRequests />
             </ProtectedRoute>
           } 
         />

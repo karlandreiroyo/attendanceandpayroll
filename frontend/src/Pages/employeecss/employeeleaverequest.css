@@ -207,6 +207,20 @@
   color: #1f2937;
 }
 
+.lr-balance-remaining {
+  font-size: 1.8rem;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 12px;
+}
+
+.lr-balance-legend {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
 /* ===== Progress Section ===== */
 .lr-progress {
   height: 8px;
@@ -285,6 +299,33 @@
   margin-top: 6px;
 }
 
+.lr-error {
+  color: #b91c1c;
+  font-size: 0.8rem;
+  margin-top: 4px;
+}
+
+.lr-alert {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+
+.lr-alert.success {
+  background: #dcfce7;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.lr-alert.error {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
 .lr-submit {
   background: #14a039;
   color: #ffffff;
@@ -303,6 +344,13 @@
   box-shadow: 0 2px 4px rgba(20, 160, 57, 0.3);
 }
 
+.lr-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 /* ===== Leave History Table ===== */
 .lr-history {
   margin-top: 22px;
@@ -315,7 +363,7 @@
 .thead,
 .trow {
   display: grid;
-  grid-template-columns: 1.2fr 1.6fr 1fr 1.2fr 0.8fr;
+  grid-template-columns: 1.2fr 1.6fr 1fr 1.2fr 0.8fr 0.9fr;
   gap: 8px;
   padding: 12px 10px;
   align-items: center;
@@ -341,29 +389,84 @@
 }
 
 /* ===== Status Badge ===== */
-.badge.success {
-  background: #e7f7ec;
-  color: #065f46;
+.badge {
   padding: 6px 10px;
   border-radius: 999px;
   font-size: 0.8rem;
-  border: 1px solid #bfe8cd;
-  text-align: center;
   font-weight: 500;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent;
+}
+
+.badge.pending {
+  background: #fef3c7;
+  color: #b45309;
+  border-color: #fcd34d;
+}
+
+.badge.success {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+
+.badge.danger {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fecaca;
 }
 
 .badge.neutral {
   background: #f3f4f6;
   color: #4b5563;
+  border-color: #e5e7eb;
+}
+
+.lr-history-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.lr-cancel {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #dc2626;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.lr-cancel:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.lr-cancel:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* ===== Responsive ===== */
 @media (max-width: 640px) {
   .thead,
   .trow {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, 1fr);
     text-align: left;
     font-size: 0.85rem;
+    row-gap: 10px;
+  }
+
+  .thead > div:nth-child(n + 5),
+  .trow > div:nth-child(n + 5) {
+    grid-column: span 2;
   }
 
   .lr-row.two {
