@@ -1,39 +1,148 @@
-#include <WiFi.h> 
+#include <Adafruit_Fingerprint.h>
+#include <SoftwareSerial.h>
 
-// Replace with your Wi-Fi network credentials
-const char* ssid = "dignonononono";
-const char* password = "one-9-intervention";
+// Pin definitions for UNO R3
+#define RX_PIN 2  // Connect to TX of DY50
+#define TX_PIN 3  // Connect to RX of DY50
+
+SoftwareSerial fingerSerial(RX_PIN, TX_PIN);
+Adafruit_Fingerprint finger = Adafruit_Fingerprint(&fingerSerial);
 
 void setup() {
-  // Start the Serial Monitor
-  Serial.begin(115200);
-  delay(1000);
-  
-  Serial.println();
-  Serial.println("Connecting to WiFi...");
-  
-  // Connect to Wi-Fi
-  WiFi.begin(ssid, password);
+  Serial.begin(9600);
+  while (!Serial);  // For Leonardo/Micro/Zero
+  Serial.println("\nDY50 Fingerprint Sensor Test");
 
-  // Wait until connected
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+  finger.begin(57600);
+  if (finger.verifyPassword()) {
+    Serial.println("Found fingerprint sensor!");
+  } else {
+    Serial.println("Did not find fingerprint sensor :(");
+    while (1) { delay(1); }
   }
-
-  // Print IP address
-  Serial.println();
-  Serial.println("WiFi connected!");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
+  Serial.println("Type 'enroll' to register a new fingerprint.");
+  Serial.println("Device is always in detection mode by default.");
 }
 
 void loop() {
-  // Keep checking connection
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi disconnected!");
-  } else {
-    Serial.println("WiFi connected and stable!");
+  static bool enrolling = false;
+  if (Serial.available()) {
+    String cmd = Serial.readStringUntil('\n');
+    cmd.trim();
+    if (cmd == "enroll") {
+      enrolling = true;
+      Serial.println("Enter ID # (1-127):");
+      while (!Serial.available());
+      int enrollID = Serial.parseInt();
+      if (enrollID < 1 || enrollID > 127) {
+        Serial.println("Invalid ID. Must be 1-127.");
+      } else {
+        enrollFingerprint(enrollID);
+      }
+      enrolling = false;
+    } else {
+      Serial.println("Unknown command. Type 'enroll'.");
+    }
   }
-  delay(5000); // Wait 5 seconds
+  if (!enrolling) {
+    int id = getFingerprintID();
+    if (id >= 0) {
+      Serial.print("Detected Fingerprint ID: ");
+      Serial.println(id);
+      delay(2000); // Wait before next scan to avoid multiple triggers
+    } else {
+      // Check if a finger was placed but not recognized
+      uint8_t p = finger.getImage();
+      if (p == FINGERPRINT_OK) {
+        // Finger placed but not matched
+        Serial.println("Unregistered fingerprint detected.");
+        delay(2000); // Wait before next scan
+        // Clear the finger from the sensor
+        while (finger.getImage() != FINGERPRINT_NOFINGER) { delay(50); }
+      } else {
+        delay(200);
+      }
+    }
+  }
+}
+// Enroll a fingerprint with the given ID
+void enrollFingerprint(int id) {
+  int p = -1;
+  Serial.print("Enrolling ID #"); Serial.println(id);
+  Serial.println("Place finger on sensor...");
+  while (p != FINGERPRINT_OK) {
+    p = finger.getImage();
+    if (p == FINGERPRINT_OK) {
+      Serial.println("Image taken");
+    } else if (p == FINGERPRINT_NOFINGER) {
+      // waiting
+    } else if (p == FINGERPRINT_PACKETRECIEVEERR) {
+      Serial.println("Communication error");
+    } else if (p == FINGERPRINT_IMAGEFAIL) {
+      Serial.println("Imaging error");
+    } else {
+      Serial.println("Unknown error");
+    }
+    delay(100);
+  }
+  // Convert image to template
+  p = finger.image2Tz(1);
+  if (p != FINGERPRINT_OK) {
+    Serial.println("Image conversion failed");
+    return;
+  }
+  Serial.println("Remove finger");
+  delay(2000);
+  while (finger.getImage() != FINGERPRINT_NOFINGER) { delay(100); }
+  Serial.println("Place same finger again...");
+  p = -1;
+  while (p != FINGERPRINT_OK) {
+    p = finger.getImage();
+    if (p == FINGERPRINT_OK) {
+      Serial.println("Image taken");
+    } else if (p == FINGERPRINT_NOFINGER) {
+      // waiting
+    } else if (p == FINGERPRINT_PACKETRECIEVEERR) {
+      Serial.println("Communication error");
+    } else if (p == FINGERPRINT_IMAGEFAIL) {
+      Serial.println("Imaging error");
+    } else {
+      Serial.println("Unknown error");
+    }
+    delay(100);
+  }
+  // Convert image to template
+  p = finger.image2Tz(2);
+  if (p != FINGERPRINT_OK) {
+    Serial.println("Image conversion failed");
+    return;
+  }
+  // Create model
+  p = finger.createModel();
+  if (p != FINGERPRINT_OK) {
+    Serial.println("Model creation failed");
+    return;
+  }
+  // Store model
+  p = finger.storeModel(id);
+  if (p == FINGERPRINT_OK) {
+    Serial.println("Fingerprint enrolled successfully!");
+  } else {
+    Serial.println("Enrollment failed");
+  }
+}
+
+int getFingerprintID() {
+  uint8_t p = finger.getImage();
+  if (p != FINGERPRINT_OK) return -1;
+
+  p = finger.image2Tz();
+  if (p != FINGERPRINT_OK) return -1;
+
+  p = finger.fingerSearch();
+  if (p == FINGERPRINT_OK) {
+    return finger.fingerID;
+  } else {
+    return -1;
+  }
 }
