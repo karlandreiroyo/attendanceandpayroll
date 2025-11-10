@@ -1,3 +1,10 @@
+.table .tr.clickable-row {
+  cursor: pointer;
+}
+
+.table .tr.clickable-row:hover {
+  background-color: #f8fafc;
+}
 /* ================================
    EMPLOYEES CARD SECTION
 ================================ */
@@ -116,7 +123,7 @@
   .thead,
   .tr {
     display: grid;
-    grid-template-columns: 3fr 1fr 0.8fr 0.8fr 1fr 180px; /* widen Actions to prevent wrap */
+   grid-template-columns: 3fr 1.5fr 1fr 1fr 1.2fr; /* widen Actions to prevent wrap */
     align-items: center;
     gap: 16px;
   }

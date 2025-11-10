@@ -19,7 +19,6 @@ export default function AdminEmployee() {
   const [selected, setSelected] = useState(null);
   const [deptFilter, setDeptFilter] = useState("All Departments");
   const [statusFilter, setStatusFilter] = useState("All Status");
-  const [openActionsId, setOpenActionsId] = useState(null);
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [viewEmployee, setViewEmployee] = useState(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
@@ -53,8 +52,7 @@ export default function AdminEmployee() {
     role: 'employee',
     username: '',
     password: '',
-    confirm_password: '',
-    finger_template_id: ''
+    confirm_password: ''
   });
 
   const [rows, setRows] = useState([]);
@@ -260,10 +258,9 @@ export default function AdminEmployee() {
           position: u.position,
           status: u.status || "Active",
           joinDate: formatDate(u.join_date),
-          finger_template_id: u.finger_template_id || '',
+          
         }));
         setRows(mapped);
-        setOpenActionsId(null); // Reset dropdown state when data loads
       } catch (err) {
         console.error(err);
         setNotification({ type: "error", message: "Failed to load employees" });
@@ -358,7 +355,11 @@ export default function AdminEmployee() {
     };
 
     const trimmedFingerprint = editFingerprint.trim();
-    body.finger_template_id = trimmedFingerprint ? trimmedFingerprint : null;
+    if (trimmedFingerprint) {
+      body.finger_template_id = trimmedFingerprint;
+    } else {
+      body.finger_template_id = null;
+    }
 
     const userId = selected?.user_id || selected?.id;
     if (!userId) {
@@ -403,7 +404,7 @@ export default function AdminEmployee() {
       finger_template_id: updatedFromServer.finger_template_id || '',
       };
       
-      setRows(prev => prev.map(r => (r.user_id === updatedRow.user_id || r.id === updatedRow.id ? updatedRow : r)));
+        setRows(prev => prev.map(r => (r.user_id === updatedRow.user_id || r.id === updatedRow.id ? updatedRow : r)));
       notifyEmployeesUpdated();
       setIsEditOpen(false);
       setSelected(null);
@@ -417,7 +418,6 @@ export default function AdminEmployee() {
       setEditStatus('Active');
       setEditFingerprint('');
       setEditFormErrors({});
-      setOpenActionsId(null);
       setNotification({ type: 'success', message: 'Employee updated successfully' });
       setTimeout(() => setNotification(null), 3000);
     } catch (err) {
@@ -673,7 +673,6 @@ export default function AdminEmployee() {
       phone: formData.phone || undefined,
       address: formData.address || undefined,
       role: formData.role === 'user/employee' ? 'employee' : formData.role,
-      finger_template_id: formData.finger_template_id?.trim() || undefined,
     };
 
     try {
@@ -704,7 +703,7 @@ export default function AdminEmployee() {
         position: created.position,
         status: created.status || "Active",
         joinDate: formatDate(created.join_date),
-      finger_template_id: created.finger_template_id || '',
+        finger_template_id: created.finger_template_id || '',
       };
       setRows(prev => [...prev, newRow]);
       notifyEmployeesUpdated();
@@ -721,13 +720,11 @@ export default function AdminEmployee() {
         role: 'employee',
         username: '',
         password: '',
-        confirm_password: '',
-        finger_template_id: ''
+        confirm_password: ''
       });
       setFormErrors({});
       setShowPassword(false);
       setShowConfirmPassword(false);
-      setOpenActionsId(null); // Reset dropdown state after adding
       setNotification({ type: 'success', message: `Employee "${newRow.name}" has been added successfully!` });
       setTimeout(() => setNotification(null), 3000);
     } catch (err) {
@@ -796,16 +793,6 @@ export default function AdminEmployee() {
       setDeleteLoading(false);
     }
   }
-
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (openActionsId && !event.target.closest('.actions-dropdown')) {
-        setOpenActionsId(null);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [openActionsId]);
 
   return (
     <div className="admin-layout">
@@ -898,14 +885,25 @@ export default function AdminEmployee() {
               <div className="center">Role</div>
               <div className="center">Status</div>
               <div className="right">Join Date</div>
-              <div className="actions-header right"></div>
             </div>
             <div className="tbody">
               {loading ? (
                 <div className="tr"><div>Loading...</div></div>
               ) : (
                 filteredRows.map(r => (
-                  <div key={r.id} className="tr">
+                  <div
+                    key={r.id}
+                    className="tr clickable-row"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openView(r)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openView(r);
+                      }
+                    }}
+                  >
                     <div className="emp-cell" data-title="Full Name">
                       <div className="emp">
                         <div className="emp-avatar">{r.name?.[0]}</div>
@@ -925,16 +923,6 @@ export default function AdminEmployee() {
                       <span className={`status ${r.status === 'Inactive' ? 'danger' : 'success'}`}>{r.status}</span>
                     </div>
                     <div className="right" data-title="Join Date">{r.joinDate}</div>
-                    <div className="right action-cell" data-title="Actions">
-                      <div className="actions-dropdown">
-                        <button 
-                          className="actions-btn" 
-                          onClick={() => openView(r)}
-                        >
-                          Details
-                        </button>
-                      </div>
-                    </div>
                   </div>
                 ))
               )}
@@ -1330,23 +1318,6 @@ export default function AdminEmployee() {
                       )}
                     </div>
                   </div>
-
-                <div className="detail-section">
-                  <h3>Biometrics</h3>
-                  <div className="detail-item">
-                    <span className="detail-label">Fingerprint Template ID</span>
-                    <input
-                      name="finger_template_id"
-                      placeholder="Enter template ID from the fingerprint scanner (optional)"
-                      className="detail-input"
-                      value={formData.finger_template_id}
-                      onChange={(e) => handleInputChange('finger_template_id', e.target.value)}
-                    />
-                    <div className="field-info" style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
-                      Use this to link the employee to their biometric enrollment. You can leave it blank for now.
-                    </div>
-                  </div>
-                </div>
 
                   <div className="detail-section">
                     <h3>Account</h3>
