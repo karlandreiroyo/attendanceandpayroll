@@ -36,6 +36,11 @@ export class ReportsController {
   async getEmployeeReport(@Query('department') department?: string) {
     return this.reportsService.getEmployeeList({ department });
   }
+
+  @Get('admins')
+  async getAdminReport(@Query('department') department?: string) {
+    return this.reportsService.getAdminList({ department });
+  }
 }
 
 

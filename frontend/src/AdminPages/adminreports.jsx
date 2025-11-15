@@ -5,12 +5,14 @@ import "../AdminPages/admincss/adminReports.css";
 import { handleLogout as logout } from "../utils/logout";
 import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
 import { API_BASE_URL } from "../config/api";
+import { useSidebarState } from "../hooks/useSidebarState";
 
 const REPORT_TYPES = [
   { label: "Attendance Summary", value: "attendance" },
   { label: "Leave Summary", value: "leave" },
   { label: "Payroll Summary", value: "payroll" },
   { label: "Employee List", value: "employees" },
+  { label: "Admin List", value: "admins" },
   { label: "Custom Report", value: "custom" },
 ];
 
@@ -22,6 +24,7 @@ export default function AdminReports() {
     const unsubscribe = subscribeToProfileUpdates(setProfileData);
     return unsubscribe;
   }, []);
+  const { isSidebarOpen, toggleSidebar, closeSidebar, isMobileView } = useSidebarState();
   const [dept, setDept] = useState("All Departments");
   const [selectedReport, setSelectedReport] = useState("Attendance Summary");
   const [dateRange, setDateRange] = useState({
@@ -40,6 +43,12 @@ export default function AdminReports() {
     () => REPORT_TYPES.find((type) => type.label === selectedReport),
     [selectedReport]
   );
+
+  useEffect(() => {
+    if (isMobileView) {
+      closeSidebar();
+    }
+  }, [location.pathname, isMobileView, closeSidebar]);
 
   useEffect(() => {
     async function loadDepartments() {
@@ -170,6 +179,15 @@ export default function AdminReports() {
         const departmentsSet = Array.from(new Set(employees.map((emp) => emp.department ?? 'Unassigned')));
         return `${header}\nTotal Employees: ${employees.length}\nActive Employees: ${activeCount}\nDepartments: ${departmentsSet.join(", ")}`;
       }
+      case "admins": {
+        const admins = reportData.admins ?? [];
+        if (!admins.length) {
+          return `${header}\nNo admins found for the selected filters.`;
+        }
+        const activeCount = admins.filter((admin) => (admin.status ?? '').toLowerCase() === "active").length;
+        const departmentsSet = Array.from(new Set(admins.map((admin) => admin.department ?? 'Unassigned')));
+        return `${header}\nTotal Admins: ${admins.length}\nActive Admins: ${activeCount}\nDepartments: ${departmentsSet.join(", ")}`;
+      }
       default:
         return `${header}\nNo data available.`;
     }
@@ -287,13 +305,28 @@ export default function AdminReports() {
           ];
           break;
         }
+        case "admins": {
+          const admins = reportData.admins ?? [];
+          dataRows = [
+            ["Admin", "Department", "Position", "Status", "Join Date", "Email"],
+            ...admins.map((admin) => [
+              admin.name,
+              admin.department,
+              admin.position,
+              admin.status,
+              admin.joinDate ?? "",
+              admin.email,
+            ]),
+          ];
+          break;
+        }
         default:
           break;
       }
     }
 
     const csvContent = [...headerRows, ...dataRows].map((row) => row.join(",")).join("\n");
-    
+
     const blob = new Blob([csvContent], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -308,8 +341,8 @@ export default function AdminReports() {
   }
 
   return (
-    <div className="admin-layout">
-      <aside className="admin-sidebar">
+    <div className={`admin-layout${isSidebarOpen ? "" : " sidebar-collapsed"}`}>
+      <aside className={`admin-sidebar ${isSidebarOpen ? "open" : "collapsed"}`}>
         <div className="brand">
           <div className="brand-avatar">TI</div>
           <div className="brand-name">Tatay Ilio</div>
@@ -324,10 +357,23 @@ export default function AdminReports() {
           <Link className={`nav-item${isActive('/admin/reports') ? ' active' : ''}`} to="/admin/reports">Reports</Link>
         </nav>
       </aside>
+      {isSidebarOpen && isMobileView && (
+        <div className="sidebar-backdrop open" onClick={closeSidebar} />
+      )}
 
       <main className="admin-content">
         <header className="admin-topbar">
-          <h1>Reports</h1>
+          <div className="topbar-left">
+            <button
+              className="sidebar-toggle"
+              type="button"
+              aria-label={isSidebarOpen ? "Collapse navigation" : "Expand navigation"}
+              onClick={toggleSidebar}
+            >
+              <span aria-hidden="true">{isSidebarOpen ? "✕" : "☰"}</span>
+            </button>
+            <h1>Reports</h1>
+          </div>
           <div className="top-actions">
             <button className="profile-btn" onClick={() => setIsProfileOpen(v => !v)}>
               <span className="profile-avatar">
@@ -369,15 +415,15 @@ export default function AdminReports() {
               <div className="param">
                 <div className="param-title">Date Range</div>
                 <div className="param-inputs">
-                  <input 
-                    type="date" 
-                    value={dateRange.start} 
+                  <input
+                    type="date"
+                    value={dateRange.start}
                     onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))}
                   />
                   <span>to</span>
-                  <input 
-                    type="date" 
-                    value={dateRange.end} 
+                  <input
+                    type="date"
+                    value={dateRange.end}
                     onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))}
                   />
                 </div>
@@ -454,10 +500,10 @@ export default function AdminReports() {
                           <div>
                             {reportData.totals.totalEmployees > 0
                               ? Math.round(
-                                  (reportData.totals.present /
-                                    Math.max(reportData.totals.totalEmployees, 1)) *
-                                    100
-                                )
+                                (reportData.totals.present /
+                                  Math.max(reportData.totals.totalEmployees, 1)) *
+                                100
+                              )
                               : 0}
                             %
                           </div>
@@ -496,6 +542,41 @@ export default function AdminReports() {
                           </div>
                           <div>{emp.joinDate ? new Date(emp.joinDate).toLocaleDateString() : "-"}</div>
                           <div>{emp.email}</div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {selectedReport === "Admin List" && (
+                <div className="summary-table">
+                  {!loading && !error && (!reportData || !reportData.admins || reportData.admins.length === 0) ? (
+                    <div className="table-empty">
+                      Admin records will appear here once available.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="t-head columns-6">
+                        <div>Admin</div>
+                        <div>Department</div>
+                        <div>Position</div>
+                        <div>Status</div>
+                        <div>Join Date</div>
+                        <div>Email</div>
+                      </div>
+                      {(reportData?.admins ?? []).map((admin) => (
+                        <div key={admin.id} className="t-row columns-6">
+                          <div>{admin.name}</div>
+                          <div>{admin.department}</div>
+                          <div>{admin.position}</div>
+                          <div>
+                            <span className={`status-badge ${admin.status === "Active" ? "active" : ""}`}>
+                              {admin.status}
+                            </span>
+                          </div>
+                          <div>{admin.joinDate ? new Date(admin.joinDate).toLocaleDateString() : "-"}</div>
+                          <div>{admin.email}</div>
                         </div>
                       ))}
                     </>

@@ -5,6 +5,7 @@ import "../Pages/employeecss/employeeLeaveRequest.css"; // Keep employee-specifi
 import { handleLogout as logout } from "../utils/logout";
 import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
 import { API_BASE_URL } from "../config/api";
+import { useSidebarState } from "../hooks/useSidebarState";
 
 const LEAVE_TYPES = ["Sick Leave", "Vacation", "Personal Leave", "Emergency Leave", "Other"];
 const STATUS_CLASS_MAP = {
@@ -60,6 +61,7 @@ export default function EmployeeLeaveRequest() {
   const [balances, setBalances] = useState([]);
   const [loadingBalances, setLoadingBalances] = useState(false);
   const [errors, setErrors] = useState({});
+  const { isSidebarOpen, toggleSidebar, closeSidebar, isMobileView } = useSidebarState();
 
   const employeeId = useMemo(() => sessionStorage.getItem("userId"), []);
   const department = useMemo(() => sessionStorage.getItem("department") || "", []);
@@ -308,9 +310,8 @@ export default function EmployeeLeaveRequest() {
   };
 
   return (
-    <div className="admin-layout">
-      {/* Sidebar - matches admin layout */}
-      <aside className="admin-sidebar">
+    <div className={`admin-layout${isSidebarOpen ? "" : " sidebar-collapsed"}`}>
+      <aside className={`admin-sidebar ${isSidebarOpen ? "open" : "collapsed"}`}>
         <div className="brand">
           <div className="brand-avatar">TI</div>
           <div className="brand-name">Tatay Ilio</div>
@@ -330,10 +331,23 @@ export default function EmployeeLeaveRequest() {
           </Link>
         </nav>
       </aside>
+      {isSidebarOpen && isMobileView && (
+        <div className="sidebar-backdrop open" onClick={closeSidebar} />
+      )}
 
       <main className="admin-content">
         <header className="admin-topbar">
-          <h1>Leave Requests</h1>
+          <div className="topbar-left">
+            <button
+              className="sidebar-toggle"
+              type="button"
+              aria-label={isSidebarOpen ? "Collapse navigation" : "Expand navigation"}
+              onClick={toggleSidebar}
+            >
+              <span aria-hidden="true">{isSidebarOpen ? "✕" : "☰"}</span>
+            </button>
+            <h1>Leave Requests</h1>
+          </div>
           <div className="top-actions">
             <button className="profile-btn" onClick={() => setIsTopUserOpen((open) => !open)}>
               <span className="profile-avatar">{profileInfo.initials}</span>

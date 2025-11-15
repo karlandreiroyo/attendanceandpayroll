@@ -5,6 +5,7 @@ import "./admincss/adminSchedules.css";
 import { handleLogout as logout } from "../utils/logout";
 import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
 import { API_BASE_URL } from "../config/api";
+import { useSidebarState } from "../hooks/useSidebarState";
 
 const SHIFT_DEFINITIONS = {
   M: { label: "Morning", hours: "8:00 AM - 4:00 PM" },
@@ -12,6 +13,22 @@ const SHIFT_DEFINITIONS = {
   N: { label: "Night", hours: "10:00 PM - 6:00 AM" },
   O: { label: "Day Off", hours: "" },
 };
+
+const SHIFT_STYLES = {
+  M: { backgroundColor: "#eafff0", color: "#166534" },
+  A: { backgroundColor: "#fff7cc", color: "#92400e" },
+  N: { backgroundColor: "#e0efff", color: "#1d4ed8" },
+  O: { backgroundColor: "#f3f4f6", color: "#4b5563" },
+};
+
+const SHIFT_OPTIONS = [
+  { value: "", label: "No shift assigned", style: { backgroundColor: "#ffffff", color: "#6b7280" } },
+  ...Object.entries(SHIFT_DEFINITIONS).map(([code, def]) => ({
+    value: code,
+    label: `${def.label}${def.hours ? ` (${def.hours})` : ""}`,
+    style: SHIFT_STYLES[code] ?? {},
+  })),
+];
 
 const DEPARTMENT_COLOR_PALETTE = [
   "#93c5fd",
@@ -40,7 +57,6 @@ export default function AdminSchedules() {
   const location = useLocation();
   const isActive = (path) => location.pathname.startsWith(path);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [profileData, setProfileData] = useState(() => getSessionUserProfile());
   const [current, setCurrent] = useState(() => {
     const now = new Date();
@@ -50,6 +66,7 @@ export default function AdminSchedules() {
   const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [scheduleNotice, setScheduleNotice] = useState(null);
   const [saving, setSaving] = useState(false);
+  const { isSidebarOpen, toggleSidebar, closeSidebar, isMobileView } = useSidebarState();
 
   const days = useMemo(() => getMonthMatrix(current.year, current.month), [current]);
 
@@ -90,8 +107,10 @@ export default function AdminSchedules() {
   }, []);
 
   useEffect(() => {
-    setIsSidebarOpen(false);
-  }, [location.pathname]);
+    if (isMobileView) {
+      closeSidebar();
+    }
+  }, [location.pathname, isMobileView, closeSidebar]);
 
   useEffect(() => {
     async function loadEmployees() {
@@ -142,11 +161,19 @@ export default function AdminSchedules() {
 
   const departmentColorsMemo = departmentColors;
 
-  function toggleShift(empId, day) {
+  function handleShiftChange(empId, day, nextShift) {
     const key = `${empId}-${day}`;
-    const order = ["", "M", "A", "N", "O"];
-    const next = order[(order.indexOf(shifts[key] || "") + 1) % order.length];
-    setShifts(prev => ({ ...prev, [key]: next }));
+    setShifts((prev) => {
+      if (!nextShift) {
+        if (!prev[key]) {
+          return prev;
+        }
+        const updated = { ...prev };
+        delete updated[key];
+        return updated;
+      }
+      return { ...prev, [key]: nextShift };
+    });
   }
 
   async function saveSchedule() {
@@ -205,8 +232,8 @@ export default function AdminSchedules() {
   const monthNumberLabel = `${current.year}-${String(current.month + 1).padStart(2, "0")}`;
 
   return (
-    <div className="admin-layout">
-      <aside className={`admin-sidebar${isSidebarOpen ? " open" : ""}`}>
+    <div className={`admin-layout${isSidebarOpen ? "" : " sidebar-collapsed"}`}>
+      <aside className={`admin-sidebar ${isSidebarOpen ? "open" : "collapsed"}`}>
         <div className="brand">
           <div className="brand-avatar">TI</div>
           <div className="brand-name">Tatay Ilio</div>
@@ -221,18 +248,20 @@ export default function AdminSchedules() {
           <Link className={`nav-item${isActive('/admin/reports') ? ' active' : ''}`} to="/admin/reports">Reports</Link>
         </nav>
       </aside>
-      {isSidebarOpen && <div className="sidebar-backdrop open" onClick={() => setIsSidebarOpen(false)} />}
+      {isSidebarOpen && isMobileView && (
+        <div className="sidebar-backdrop open" onClick={closeSidebar} />
+      )}
 
       <main className="admin-content">
         <header className="admin-topbar">
           <div className="topbar-left">
             <button
-              className="mobile-nav-toggle"
+              className="sidebar-toggle"
               type="button"
-              aria-label="Toggle navigation"
-              onClick={() => setIsSidebarOpen((open) => !open)}
+              aria-label={isSidebarOpen ? "Collapse navigation" : "Expand navigation"}
+              onClick={toggleSidebar}
             >
-              ☰
+              <span aria-hidden="true">{isSidebarOpen ? "✕" : "☰"}</span>
             </button>
             <h1>Schedules</h1>
           </div>
@@ -348,13 +377,39 @@ export default function AdminSchedules() {
                     const key = `${emp.id}-${d.day}`;
                     const val = shifts[key] || "";
                     const shiftInfo = SHIFT_DEFINITIONS[val];
+                    const selectTitle = shiftInfo
+                      ? `${shiftInfo.label}${shiftInfo.hours ? ` (${shiftInfo.hours})` : ""}`
+                      : "No shift assigned";
+                    const selectStyle = val ? SHIFT_STYLES[val] : {};
+                    const cellClasses = [
+                      "cell",
+                      val ? `cell-${val}` : "cell-empty",
+                      val ? "cell-has-value" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ");
                     return (
-                      <button
-                        key={key}
-                        className={`cell ${val ? 'cell-' + val : ''}`}
-                        onClick={() => toggleShift(emp.id, d.day)}
-                        title={shiftInfo ? `${shiftInfo.label}${shiftInfo.hours ? ` (${shiftInfo.hours})` : ""}` : ""}
-                      />
+                      <div key={key} className={cellClasses}>
+                        <select
+                          className={`shift-select ${val ? `shift-select-${val} has-value` : ""}`}
+                          value={val}
+                          title={selectTitle}
+                          aria-label={`Shift for ${emp.name} on ${monthLabel} ${d.day}`}
+                          style={selectStyle}
+                          onChange={(event) => handleShiftChange(emp.id, d.day, event.target.value)}
+                        >
+                          {SHIFT_OPTIONS.map((option) => (
+                            <option
+                              key={option.value || "empty"}
+                              value={option.value}
+                              style={option.style}
+                              className={option.value ? `shift-option shift-option-${option.value}` : "shift-option"}
+                            >
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     );
                   })}
                 </div>

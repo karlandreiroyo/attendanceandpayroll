@@ -4,6 +4,7 @@ import "../AdminPages/admincss/adminDashboard.css";
 import "../AdminPages/admincss/adminAttendance.css";
 import { handleLogout as logout } from "../utils/logout";
 import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
+import { useSidebarState } from "../hooks/useSidebarState";
 
 export default function AdminAttendance() {
   const navigate = useNavigate();
@@ -11,6 +12,7 @@ export default function AdminAttendance() {
   const isActive = (path) => location.pathname.startsWith(path);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [profileData, setProfileData] = useState(() => getSessionUserProfile());
+  const { isSidebarOpen, toggleSidebar, closeSidebar, isMobileView } = useSidebarState();
   useEffect(() => {
     const unsubscribe = subscribeToProfileUpdates(setProfileData);
     return unsubscribe;
@@ -50,6 +52,12 @@ export default function AdminAttendance() {
     absent: rows.filter(r => r.status === "Absent").length,
     total: rows.length,
   }), [rows]);
+
+  useEffect(() => {
+    if (isMobileView) {
+      closeSidebar();
+    }
+  }, [location.pathname, isMobileView, closeSidebar]);
 
   function exportAttendance() {
     const csvContent = [
@@ -101,8 +109,8 @@ export default function AdminAttendance() {
   }
 
   return (
-    <div className="admin-layout">
-      <aside className="admin-sidebar">
+    <div className={`admin-layout${isSidebarOpen ? "" : " sidebar-collapsed"}`}>
+      <aside className={`admin-sidebar ${isSidebarOpen ? "open" : "collapsed"}`}>
         <div className="brand">
           <div className="brand-avatar">TI</div>
           <div className="brand-name">Tatay Ilio</div>
@@ -117,10 +125,23 @@ export default function AdminAttendance() {
           <Link className={`nav-item${isActive('/admin/reports') ? ' active' : ''}`} to="/admin/reports">Reports</Link>
         </nav>
       </aside>
+      {isSidebarOpen && isMobileView && (
+        <div className="sidebar-backdrop open" onClick={closeSidebar} />
+      )}
 
       <main className="admin-content">
         <header className="admin-topbar">
-          <h1>Attendance</h1>
+          <div className="topbar-left">
+            <button
+              className="sidebar-toggle"
+              type="button"
+              aria-label={isSidebarOpen ? "Collapse navigation" : "Expand navigation"}
+              onClick={toggleSidebar}
+            >
+              <span aria-hidden="true">{isSidebarOpen ? "✕" : "☰"}</span>
+            </button>
+            <h1>Attendance</h1>
+          </div>
           <div className="top-actions">
             <button className="profile-btn" onClick={() => setIsProfileOpen(v => !v)}>
               <span className="profile-avatar">

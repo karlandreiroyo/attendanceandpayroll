@@ -5,6 +5,7 @@ import "../Pages/employeecss/employeePayslips.css";
 import { handleLogout as logout } from "../utils/logout";
 import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
 import { API_BASE_URL } from "../config/api";
+import { useSidebarState } from "../hooks/useSidebarState";
 
 function formatPeso(value) {
   return `₱${Number(value || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -18,6 +19,7 @@ export default function EmployeePayslips() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState(null);
+  const { isSidebarOpen, toggleSidebar, closeSidebar, isMobileView } = useSidebarState();
 
   const userId = useMemo(() => sessionStorage.getItem("userId"), []);
 
@@ -84,8 +86,8 @@ export default function EmployeePayslips() {
   };
 
   return (
-    <div className="admin-layout">
-      <aside className="admin-sidebar">
+    <div className={`admin-layout${isSidebarOpen ? "" : " sidebar-collapsed"}`}>
+      <aside className={`admin-sidebar ${isSidebarOpen ? "open" : "collapsed"}`}>
         <div className="brand">
           <div className="brand-avatar">TI</div>
           <div className="brand-name">Tatay Ilio</div>
@@ -98,9 +100,23 @@ export default function EmployeePayslips() {
         </nav>
       </aside>
 
+      {isSidebarOpen && isMobileView && (
+        <div className="sidebar-backdrop open" onClick={closeSidebar} />
+      )}
+
       <main className="admin-content">
         <header className="admin-topbar">
-          <h1>Payslips</h1>
+          <div className="topbar-left">
+            <button
+              className="sidebar-toggle"
+              type="button"
+              aria-label={isSidebarOpen ? "Collapse navigation" : "Expand navigation"}
+              onClick={toggleSidebar}
+            >
+              <span aria-hidden="true">{isSidebarOpen ? "✕" : "☰"}</span>
+            </button>
+            <h1>Payslips</h1>
+          </div>
           <div className="top-actions">
             <button
               className="profile-btn"

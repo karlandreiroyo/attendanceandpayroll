@@ -1,66 +1,49 @@
-import React, { useEffect, useState } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import React, { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function ProtectedRoute({ children, requiredRole }) {
-  const location = useLocation();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [shouldRedirect, setShouldRedirect] = useState(false);
+  const navigate = useNavigate();
 
-  // Check authentication on mount and whenever location changes (including forward/back navigation)
   useEffect(() => {
-    // Check if user was logged out (prevents back/forward button from restoring session)
     const isLoggedOut = sessionStorage.getItem("isLoggedOut");
-    
-    // Check if user is logged in
     const userRole = sessionStorage.getItem("userRole");
     const username = sessionStorage.getItem("username");
 
-    // If logged out flag exists or not logged in, deny access
+    // Check if user is logged out or missing credentials
     if (isLoggedOut || !userRole || !username) {
-      // Clear any residual session data if logout flag exists
-      if (isLoggedOut) {
-        sessionStorage.clear();
-      }
-      setShouldRedirect(true);
-      setIsAuthenticated(false);
+      // Clear any residual data and redirect to login
+      sessionStorage.clear();
+      navigate("/", { replace: true });
       return;
     }
 
-    // Check role requirement
-    if (requiredRole && userRole !== requiredRole) {
-      setShouldRedirect(true);
-      setIsAuthenticated(false);
-      return;
-    }
-
-    // User is authenticated
-    setIsAuthenticated(true);
-    setShouldRedirect(false);
-  }, [location, requiredRole]);
-
-  // If logged out flag exists or not logged in, redirect to login
-  if (shouldRedirect) {
-    const isLoggedOut = sessionStorage.getItem("isLoggedOut");
-    const userRole = sessionStorage.getItem("userRole");
-    
-    // If there's a role mismatch, redirect to appropriate dashboard
-    if (!isLoggedOut && userRole) {
+    // Check if user has the required role
+    if (userRole !== requiredRole) {
+      // Redirect to appropriate dashboard based on actual role
       if (userRole === "admin") {
-        return <Navigate to="/admin/dashboard" replace />;
+        navigate("/admin/dashboard", { replace: true });
+      } else if (userRole === "employee") {
+        navigate("/employee/dashboard", { replace: true });
       } else {
-        return <Navigate to="/employee/dashboard" replace />;
+        // Unknown role, redirect to login
+        sessionStorage.clear();
+        navigate("/", { replace: true });
       }
+      return;
     }
-    
-    return <Navigate to="/" replace />;
+  }, [navigate, requiredRole]);
+
+  // Check authentication status
+  const isLoggedOut = sessionStorage.getItem("isLoggedOut");
+  const userRole = sessionStorage.getItem("userRole");
+  const username = sessionStorage.getItem("username");
+
+  // Don't render children if not authenticated or wrong role
+  if (isLoggedOut || !userRole || !username || userRole !== requiredRole) {
+    return null; // Will redirect in useEffect
   }
 
-  // User is authenticated, render the protected component
-  if (isAuthenticated) {
-    return children;
-  }
-
-  // Loading state while checking
-  return null;
+  // User is authenticated and has correct role
+  return <>{children}</>;
 }
 

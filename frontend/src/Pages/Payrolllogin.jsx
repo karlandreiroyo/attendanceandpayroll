@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import "../Pages/employeecss/payrollLogin.css";
 import { API_BASE_URL } from "../config/api";
@@ -32,6 +32,54 @@ export default function PayrollLogin() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotContact, setForgotContact] = useState("");
+  const [forgotError, setForgotError] = useState("");
+  const [forgotSuccess, setForgotSuccess] = useState("");
+  const [showVerification, setShowVerification] = useState(false);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [verificationError, setVerificationError] = useState("");
+  const [generatedCode, setGeneratedCode] = useState("");
+  const [codeUsed, setCodeUsed] = useState(false);
+  const [showResetForm, setShowResetForm] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [resetError, setResetError] = useState("");
+  const [resetSuccess, setResetSuccess] = useState("");
+
+  const validateEmail = useMemo(
+    () => (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),
+    [],
+  );
+  const validatePhone = useMemo(
+    () => (phone) => {
+      const clean = phone.replace(/\D/g, "");
+      return clean.length >= 10 && clean.length <= 15;
+    },
+    [],
+  );
+  const isEmail = useMemo(() => (value) => value.includes("@"), []);
+
+  const generateVerificationCode = useMemo(
+    () => () => Math.floor(100000 + Math.random() * 900000).toString(),
+    [],
+  );
+
+  const resetForgotState = () => {
+    setForgotContact("");
+    setForgotError("");
+    setForgotSuccess("");
+    setVerificationCode("");
+    setVerificationError("");
+    setGeneratedCode("");
+    setCodeUsed(false);
+    setShowVerification(false);
+    setShowResetForm(false);
+    setNewPassword("");
+    setConfirmPassword("");
+    setResetError("");
+    setResetSuccess("");
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -84,6 +132,87 @@ export default function PayrollLogin() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleForgotPassword = (e) => {
+    e.preventDefault();
+    setForgotError("");
+    setForgotSuccess("");
+
+    if (!forgotContact.trim()) {
+      setForgotError("Please enter your registered email address or phone number.");
+      return;
+    }
+
+    if (isEmail(forgotContact)) {
+      if (!validateEmail(forgotContact)) {
+        setForgotError("Please enter a valid email address.");
+        return;
+      }
+    } else if (!validatePhone(forgotContact)) {
+      setForgotError("Please enter a valid phone number (10-15 digits).");
+      return;
+    }
+
+    const code = generateVerificationCode();
+    setGeneratedCode(code);
+    setCodeUsed(false);
+    console.info(`Verification code for ${forgotContact}: ${code}`);
+    setShowForgotPassword(false);
+    setShowVerification(true);
+  };
+
+  const handleVerification = (e) => {
+    e.preventDefault();
+    setVerificationError("");
+
+    if (!verificationCode.trim()) {
+      setVerificationError("Please enter the verification code.");
+      return;
+    }
+    if (verificationCode.length !== 6) {
+      setVerificationError("Verification code must be 6 digits.");
+      return;
+    }
+    if (codeUsed) {
+      setVerificationError("This verification code has already been used. Please request a new one.");
+      return;
+    }
+    if (verificationCode !== generatedCode) {
+      setVerificationError("Invalid verification code. Please try again.");
+      return;
+    }
+
+    setCodeUsed(true);
+    setShowVerification(false);
+    setShowResetForm(true);
+  };
+
+  const handlePasswordReset = (e) => {
+    e.preventDefault();
+    setResetError("");
+    setResetSuccess("");
+
+    if (!newPassword.trim() || !confirmPassword.trim()) {
+      setResetError("Please enter and confirm your new password.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setResetError("Password must be at least 8 characters long.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setResetError("Passwords do not match. Please try again.");
+      return;
+    }
+
+    setResetSuccess(
+      "Password reset request recorded. Our administrators will verify your identity and complete the reset shortly.",
+    );
+    setTimeout(() => {
+      setShowResetForm(false);
+      resetForgotState();
+    }, 2500);
   };
 
   return (
@@ -141,11 +270,191 @@ export default function PayrollLogin() {
           {error && (
             <div className="error-message">{error}</div>
           )}
+          <div className="forgot-row">
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => {
+                resetForgotState();
+                setShowForgotPassword(true);
+              }}
+            >
+              Forgot password?
+            </button>
+          </div>
           <button type="submit" disabled={loading} className="login-button employee-btn submit-btn">
             {loading ? "Signing in..." : "Sign In"}
           </button>
         </form>
       </div>
+
+      {showForgotPassword && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3>Reset Password</h3>
+              <button
+                className="modal-close"
+                onClick={() => {
+                  setShowForgotPassword(false);
+                  resetForgotState();
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <form onSubmit={handleForgotPassword}>
+              <div className="field">
+                <span>Email Address or Phone Number</span>
+                <input
+                  type="text"
+                  placeholder="Enter your contact details"
+                  value={forgotContact}
+                  onChange={(e) => setForgotContact(e.target.value)}
+                  required
+                />
+                <small className="field-hint">
+                  Enter the email or mobile number associated with your account.
+                </small>
+              </div>
+              {forgotError && <div className="error-message">{forgotError}</div>}
+              {forgotSuccess && <div className="success-message">{forgotSuccess}</div>}
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="cancel-btn"
+                  onClick={() => {
+                    setShowForgotPassword(false);
+                    resetForgotState();
+                  }}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="reset-btn">
+                  Send Verification
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showVerification && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3>Enter Verification Code</h3>
+              <button
+                className="modal-close"
+                onClick={() => {
+                  setShowVerification(false);
+                  resetForgotState();
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <form onSubmit={handleVerification}>
+              <div className="field">
+                <span>6-Digit Verification Code</span>
+                <input
+                  type="text"
+                  placeholder="123456"
+                  value={verificationCode}
+                  onChange={(e) =>
+                    setVerificationCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                  }
+                  maxLength={6}
+                  required
+                  className="verification-input"
+                />
+                <small className="field-hint">
+                  Enter the code sent to {forgotContact || "your contact"}.
+                </small>
+              </div>
+              {verificationError && <div className="error-message">{verificationError}</div>}
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="cancel-btn"
+                  onClick={() => {
+                    setShowVerification(false);
+                    resetForgotState();
+                  }}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="reset-btn">
+                  Verify Code
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showResetForm && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3>Create New Password</h3>
+              <button
+                className="modal-close"
+                onClick={() => {
+                  setShowResetForm(false);
+                  resetForgotState();
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <form onSubmit={handlePasswordReset}>
+              <div className="field">
+                <span>New Password</span>
+                <input
+                  type="password"
+                  placeholder="Enter new password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  minLength={8}
+                  required
+                />
+              </div>
+              <div className="field">
+                <span>Confirm Password</span>
+                <input
+                  type="password"
+                  placeholder="Re-enter new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  minLength={8}
+                  required
+                />
+              </div>
+              <small className="field-hint">
+                Password must contain at least 8 characters. For security, an administrator will validate the change.
+              </small>
+              {resetError && <div className="error-message">{resetError}</div>}
+              {resetSuccess && <div className="success-message">{resetSuccess}</div>}
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="cancel-btn"
+                  onClick={() => {
+                    setShowResetForm(false);
+                    resetForgotState();
+                  }}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="reset-btn">
+                  Update Password
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

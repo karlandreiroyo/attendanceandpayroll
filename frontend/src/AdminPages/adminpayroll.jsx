@@ -5,6 +5,7 @@ import "../AdminPages/admincss/adminPayroll.css";
 import { handleLogout as logout } from "../utils/logout";
 import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
 import { API_BASE_URL } from "../config/api";
+import { useSidebarState } from "../hooks/useSidebarState";
 
 function peso(value) {
   return `₱${Number(value || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -25,7 +26,7 @@ export default function AdminPayroll() {
   const isActive = (path) => location.pathname.startsWith(path);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [profileData, setProfileData] = useState(() => getSessionUserProfile());
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const { isSidebarOpen, toggleSidebar, closeSidebar, isMobileView } = useSidebarState();
 
   useEffect(() => {
     const unsubscribe = subscribeToProfileUpdates(setProfileData);
@@ -224,8 +225,8 @@ export default function AdminPayroll() {
   }, [period]);
 
   return (
-    <div className="admin-layout">
-      <aside className={`admin-sidebar${isSidebarOpen ? " open" : ""}`}>
+    <div className={`admin-layout${isSidebarOpen ? "" : " sidebar-collapsed"}`}>
+      <aside className={`admin-sidebar ${isSidebarOpen ? "open" : "collapsed"}`}>
         <div className="brand">
           <div className="brand-avatar">TI</div>
           <div className="brand-name">Tatay Ilio</div>
@@ -240,18 +241,20 @@ export default function AdminPayroll() {
           <Link className={`nav-item${isActive('/admin/reports') ? ' active' : ''}`} to="/admin/reports">Reports</Link>
         </nav>
       </aside>
-      {isSidebarOpen && <div className="sidebar-backdrop open" onClick={() => setIsSidebarOpen(false)} />}
+      {isSidebarOpen && isMobileView && (
+        <div className="sidebar-backdrop open" onClick={closeSidebar} />
+      )}
 
       <main className="admin-content">
         <header className="admin-topbar">
           <div className="topbar-left">
             <button
-              className="mobile-nav-toggle"
+              className="sidebar-toggle"
               type="button"
-              aria-label="Toggle navigation"
-              onClick={() => setIsSidebarOpen((open) => !open)}
+              aria-label={isSidebarOpen ? "Collapse navigation" : "Expand navigation"}
+              onClick={toggleSidebar}
             >
-              ☰
+              <span aria-hidden="true">{isSidebarOpen ? "✕" : "☰"}</span>
             </button>
             <h1>Payroll</h1>
           </div>
@@ -343,17 +346,17 @@ export default function AdminPayroll() {
           </div>
 
           <div className="payroll-table">
-            <div className="p-head">
-              <div>Employee</div>
-              <div>Position</div>
-              <div>Daily Rate</div>
-              <div>Days Worked</div>
-              <div>Gross Pay</div>
-              <div>Deductions</div>
-              <div>Net Pay</div>
-              <div>Status</div>
-              <div>Actions</div>
-            </div>
+          <div className="p-head">
+            <div className="cell heading">Employee</div>
+            <div className="cell heading">Position</div>
+            <div className="cell heading numeric">Daily Rate</div>
+            <div className="cell heading numeric">Days Worked</div>
+            <div className="cell heading numeric">Gross Pay</div>
+            <div className="cell heading numeric">Deductions</div>
+            <div className="cell heading numeric">Net Pay</div>
+            <div className="cell heading status">Status</div>
+            <div className="cell heading actions">Actions</div>
+          </div>
             <div className="p-body">
               {loading ? (
                 <div className="p-row">
@@ -366,7 +369,7 @@ export default function AdminPayroll() {
               ) : (
                 filteredEntries.map((entry) => (
                   <div key={entry.userId} className="p-row">
-                    <div>
+                    <div className="cell">
                       <div className="emp">
                         <div className="emp-avatar">{entry.name[0] || '?'}</div>
                         <div className="emp-meta">
@@ -375,35 +378,57 @@ export default function AdminPayroll() {
                         </div>
                       </div>
                     </div>
-                    <div>
+                    <div className="cell">
                       <div>{entry.position || '—'}</div>
-                      <div className="sub">{entry.department}</div>
                     </div>
-                    <div>{peso(entry.dailyRate)}</div>
-                    <div>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        value={entry.daysWorked}
-                        disabled={processed}
-                        onChange={(e) => handleEntryChange(entry.userId, 'daysWorked', e.target.value)}
-                      />
+                    <div className="cell numeric">{peso(entry.dailyRate)}</div>
+                    <div className="cell numeric">
+                      <div className="numeric-input-wrapper">
+                        <input
+                          className="numeric-input"
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          value={entry.daysWorked}
+                          disabled={processed}
+                          onChange={(e) => handleEntryChange(entry.userId, 'daysWorked', e.target.value)}
+                        />
+                        {!processed && (
+                          <span className="numeric-preview" title={entry.daysWorked || 0}>
+                            {String(entry.daysWorked || 0)}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div>{peso(entry.grossPay)}</div>
-                    <div>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={entry.deductions}
-                        disabled={processed}
-                        onChange={(e) => handleEntryChange(entry.userId, 'deductions', e.target.value)}
-                      />
+                    <div className="cell numeric">{peso(entry.grossPay)}</div>
+                    <div className="cell numeric">
+                      <div className="numeric-input-wrapper">
+                        <input
+                          className="numeric-input"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={entry.deductions}
+                          disabled={processed}
+                          onChange={(e) => handleEntryChange(entry.userId, 'deductions', e.target.value)}
+                        />
+                        {!processed && (
+                          <span
+                            className="numeric-preview"
+                            title={Number(entry.deductions || 0).toFixed(2)}
+                          >
+                            {Number(entry.deductions || 0).toFixed(2)}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div>{peso(entry.netPay)}</div>
-                    <div><span className={`pill ${processed ? 'pill-success' : 'pill-warn'}`}>{entry.status}</span></div>
-                    <div className="actions"><button className="link" onClick={() => openPayrollDetails(entry)}>Details</button></div>
+                    <div className="cell numeric">{peso(entry.netPay)}</div>
+                    <div className="cell status">
+                      <span className={`pill ${processed ? 'pill-success' : 'pill-warn'}`}>{entry.status}</span>
+                    </div>
+                    <div className="cell actions">
+                      <button className="link" onClick={() => openPayrollDetails(entry)}>Details</button>
+                    </div>
                   </div>
                 ))
               )}

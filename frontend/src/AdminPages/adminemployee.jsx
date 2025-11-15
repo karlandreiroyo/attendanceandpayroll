@@ -5,13 +5,13 @@ import "../AdminPages/admincss/adminEmployee.css";
 import { API_BASE_URL } from "../config/api";
 import { handleLogout as logout } from "../utils/logout";
 import { notifyProfileUpdated, getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
+import { useSidebarState } from "../hooks/useSidebarState";
 
 export default function AdminEmployee() {
   const navigate = useNavigate();
   const location = useLocation();
   const isActive = (path) => location.pathname.startsWith(path);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -56,8 +56,10 @@ export default function AdminEmployee() {
   });
 
   const [rows, setRows] = useState([]);
+  const isAdminRole = (role) => (role || 'employee').toLowerCase() === 'admin';
   const [currentUser, setCurrentUser] = useState(null);
   const [profileSession, setProfileSession] = useState(() => getSessionUserProfile());
+  const { isSidebarOpen, toggleSidebar, closeSidebar, isMobileView } = useSidebarState();
 
   // Departments that allow admin role
   const adminAllowedDepartments = useMemo(() => ['HR', 'Management', 'Accounting', 'Branch'], []);
@@ -204,8 +206,10 @@ export default function AdminEmployee() {
   }, []);
 
   useEffect(() => {
-    setIsSidebarOpen(false);
-  }, [location.pathname]);
+    if (isMobileView) {
+      closeSidebar();
+    }
+  }, [location.pathname, isMobileView, closeSidebar]);
 
   const handleLogout = () => {
     setIsProfileOpen(false);
@@ -258,9 +262,10 @@ export default function AdminEmployee() {
           position: u.position,
           status: u.status || "Active",
           joinDate: formatDate(u.join_date),
-          
+
         }));
-        setRows(mapped);
+        const employeesOnly = mapped.filter((user) => !isAdminRole(user.role));
+        setRows(employeesOnly);
       } catch (err) {
         console.error(err);
         setNotification({ type: "error", message: "Failed to load employees" });
@@ -314,22 +319,22 @@ export default function AdminEmployee() {
 
   function validateEditForm() {
     const errors = {};
-    
+
     const firstNameError = validateFirstName(editFirstName);
     if (firstNameError) errors.first_name = firstNameError;
-    
+
     const lastNameError = validateLastName(editLastName);
     if (lastNameError) errors.last_name = lastNameError;
-    
+
     const emailError = validateEmail(editEmail);
     if (emailError) errors.email = emailError;
-    
+
     const phoneError = validatePhone(editPhone);
     if (phoneError) errors.phone = phoneError;
-    
+
     if (!editDept) errors.dept = "Department is required";
     if (!editPosition) errors.position = "Position is required";
-    
+
     return errors;
   }
 
@@ -376,16 +381,16 @@ export default function AdminEmployee() {
         credentials: 'include',
         body: JSON.stringify(body),
       });
-      
+
       if (!res.ok) {
         const errText = await res.text();
         console.error('Update failed:', res.status, errText);
         throw new Error(errText || `Failed to update employee (${res.status})`);
       }
-      
+
       const updatedFromServer = await res.json();
       console.log('Update successful:', updatedFromServer);
-      
+
       const updatedRow = {
         id: updatedFromServer.id || updatedFromServer.user_id,
         user_id: updatedFromServer.user_id || updatedFromServer.id,
@@ -401,10 +406,26 @@ export default function AdminEmployee() {
         position: updatedFromServer.position,
         status: updatedFromServer.status || 'Active',
         joinDate: formatDate(updatedFromServer.join_date),
-      finger_template_id: updatedFromServer.finger_template_id || '',
+        finger_template_id: updatedFromServer.finger_template_id || '',
       };
-      
-        setRows(prev => prev.map(r => (r.user_id === updatedRow.user_id || r.id === updatedRow.id ? updatedRow : r)));
+      const updatedIsAdmin = isAdminRole(updatedRow.role);
+      const identifier = updatedRow.user_id || updatedRow.id;
+
+      setRows((prev) => {
+        if (updatedIsAdmin) {
+          return prev.filter((r) => (r.user_id || r.id) !== identifier);
+        }
+        let replaced = false;
+        const next = prev.map((r) => {
+          if ((r.user_id || r.id) === identifier) {
+            replaced = true;
+            return updatedRow;
+          }
+          return r;
+        });
+        return replaced ? next : [...next, updatedRow];
+      });
+
       notifyEmployeesUpdated();
       setIsEditOpen(false);
       setSelected(null);
@@ -418,7 +439,12 @@ export default function AdminEmployee() {
       setEditStatus('Active');
       setEditFingerprint('');
       setEditFormErrors({});
-      setNotification({ type: 'success', message: 'Employee updated successfully' });
+      setNotification({
+        type: 'success',
+        message: updatedIsAdmin
+          ? 'Account updated to admin role. You can view it in Reports → Admin List.'
+          : 'Employee updated successfully',
+      });
       setTimeout(() => setNotification(null), 3000);
     } catch (err) {
       console.error('Update error:', err);
@@ -485,7 +511,7 @@ export default function AdminEmployee() {
 
   const handleInputChange = (field, value) => {
     let processedValue = value;
-    
+
     // Auto-capitalize first letter for names and remove numbers/special characters
     if (field === 'first_name' || field === 'last_name') {
       // Remove all non-letter characters (keep only letters and spaces)
@@ -495,18 +521,18 @@ export default function AdminEmployee() {
         processedValue = processedValue.charAt(0).toUpperCase() + processedValue.slice(1);
       }
     }
-    
+
     // Auto-add +63 prefix for phone and only allow numbers
     if (field === 'phone') {
       processedValue = formatPhoneDisplay(value);
     }
-    
+
     setFormData(prev => ({ ...prev, [field]: processedValue }));
-    
+
     // Live validation
     const errors = { ...formErrors };
     let error = null;
-    
+
     switch (field) {
       case 'first_name':
         error = validateFirstName(processedValue);
@@ -534,19 +560,19 @@ export default function AdminEmployee() {
         error = validateConfirmPassword(processedValue);
         break;
     }
-    
+
     if (error) {
       errors[field] = error;
     } else {
       delete errors[field];
     }
-    
+
     setFormErrors(errors);
   };
 
   const handleEditInputChange = (field, value) => {
     let processedValue = value;
-    
+
     // Auto-capitalize first letter for names and remove numbers/special characters
     if (field === 'first_name' || field === 'last_name') {
       // Remove all non-letter characters (keep only letters and spaces)
@@ -556,12 +582,12 @@ export default function AdminEmployee() {
         processedValue = processedValue.charAt(0).toUpperCase() + processedValue.slice(1);
       }
     }
-    
+
     // Auto-add +63 prefix for phone and only allow numbers
     if (field === 'phone') {
       processedValue = formatPhoneDisplay(value);
     }
-    
+
     // Update the appropriate state
     switch (field) {
       case 'first_name':
@@ -611,23 +637,23 @@ export default function AdminEmployee() {
   function validateAddForm() {
     const errors = {};
     const normalize = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
-    
+
     const firstNameError = validateFirstName(formData.first_name);
     if (firstNameError) errors.first_name = firstNameError;
-    
+
     const lastNameError = validateLastName(formData.last_name);
     if (lastNameError) errors.last_name = lastNameError;
-    
+
     const emailError = validateEmail(formData.email);
     if (emailError) errors.email = emailError;
-    
+
     const phoneError = validatePhone(formData.phone);
     if (phoneError) errors.phone = phoneError;
-    
+
     if (!formData.dept) errors.dept = "Department is required";
     if (!formData.position) errors.position = "Position is required";
     if (!formData.status) errors.status = "Status is required";
-    
+
     const usernameError = validateUsername(formData.username);
     if (usernameError) errors.username = usernameError;
     // Duplicate username check (case-insensitive)
@@ -636,13 +662,13 @@ export default function AdminEmployee() {
     if (!errors.username && desiredUsername && usernameExists) {
       errors.username = 'Username already exists';
     }
-    
+
     const passwordError = validatePassword(formData.password);
     if (passwordError) errors.password = passwordError;
-    
+
     const confirmPasswordError = validateConfirmPassword(formData.confirm_password);
     if (confirmPasswordError) errors.confirm_password = confirmPasswordError;
-    
+
     // Duplicate name check (first_name + last_name, case-insensitive)
     const desiredFullName = normalize(`${formData.first_name} ${formData.last_name}`);
     const nameExists = rows.some(r => normalize(r.name) === desiredFullName);
@@ -650,7 +676,7 @@ export default function AdminEmployee() {
       errors.first_name = errors.first_name || 'An account with this name already exists';
       errors.last_name = errors.last_name || 'An account with this name already exists';
     }
-    
+
     return errors;
   }
 
@@ -705,7 +731,10 @@ export default function AdminEmployee() {
         joinDate: formatDate(created.join_date),
         finger_template_id: created.finger_template_id || '',
       };
-      setRows(prev => [...prev, newRow]);
+      const createdIsAdmin = isAdminRole(newRow.role);
+      if (!createdIsAdmin) {
+        setRows(prev => [...prev, newRow]);
+      }
       notifyEmployeesUpdated();
       setIsAddOpen(false);
       setFormData({
@@ -725,7 +754,12 @@ export default function AdminEmployee() {
       setFormErrors({});
       setShowPassword(false);
       setShowConfirmPassword(false);
-      setNotification({ type: 'success', message: `Employee "${newRow.name}" has been added successfully!` });
+      setNotification({
+        type: 'success',
+        message: createdIsAdmin
+          ? `Admin "${newRow.name}" created successfully. You can view it in Reports → Admin List.`
+          : `Employee "${newRow.name}" has been added successfully!`,
+      });
       setTimeout(() => setNotification(null), 3000);
     } catch (err) {
       console.error(err);
@@ -737,7 +771,7 @@ export default function AdminEmployee() {
   }
 
   function toggleEmployeeStatus(id) {
-    setRows(prev => prev.map(r => 
+    setRows(prev => prev.map(r =>
       r.id === id ? { ...r, status: r.status === "Active" ? "Inactive" : "Active" } : r
     ));
   }
@@ -764,21 +798,21 @@ export default function AdminEmployee() {
 
   async function confirmDelete() {
     if (!employeeToDelete) return;
-    
+
     const id = employeeToDelete.user_id || employeeToDelete.id;
-    
+
     try {
       setDeleteLoading(true);
       const res = await fetch(`${API_BASE_URL}/users/${id}`, {
         method: 'DELETE',
         credentials: 'include',
       });
-      
+
       if (!res.ok) {
         const errText = await res.text();
         throw new Error(errText || `Failed to delete employee (${res.status})`);
       }
-      
+
       setRows(prev => prev.filter(x => (x.user_id || x.id) !== id));
       notifyEmployeesUpdated();
       setIsDeleteOpen(false);
@@ -795,8 +829,8 @@ export default function AdminEmployee() {
   }
 
   return (
-    <div className="admin-layout">
-      <aside className={`admin-sidebar${isSidebarOpen ? " open" : ""}`}>
+    <div className={`admin-layout${isSidebarOpen ? "" : " sidebar-collapsed"}`}>
+      <aside className={`admin-sidebar ${isSidebarOpen ? "open" : "collapsed"}`}>
         <div className="brand">
           <div className="brand-avatar">TI</div>
           <div className="brand-name">Tatay Ilio</div>
@@ -811,18 +845,20 @@ export default function AdminEmployee() {
           <Link className={`nav-item${isActive('/admin/reports') ? ' active' : ''}`} to="/admin/reports">Reports</Link>
         </nav>
       </aside>
-      {isSidebarOpen && <div className="sidebar-backdrop" onClick={() => setIsSidebarOpen(false)} />}
+      {isSidebarOpen && isMobileView && (
+        <div className="sidebar-backdrop open" onClick={closeSidebar} />
+      )}
 
       <main className="admin-content">
         <header className="admin-topbar">
           <div className="topbar-left">
             <button
-              className="mobile-nav-toggle"
+              className="sidebar-toggle"
               type="button"
-              aria-label="Toggle navigation"
-              onClick={() => setIsSidebarOpen((open) => !open)}
+              aria-label={isSidebarOpen ? "Collapse navigation" : "Expand navigation"}
+              onClick={toggleSidebar}
             >
-              ☰
+              <span aria-hidden="true">{isSidebarOpen ? "✕" : "☰"}</span>
             </button>
             <h1>Employees</h1>
           </div>
@@ -830,10 +866,10 @@ export default function AdminEmployee() {
             <button className="profile-btn" onClick={() => setIsProfileOpen(v => !v)}>
               <span className="profile-avatar">
                 {(profileSession.profilePicture) ? (
-                  <img 
-                    src={profileSession.profilePicture} 
-                    alt="Profile" 
-                    style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
+                  <img
+                    src={profileSession.profilePicture}
+                    alt="Profile"
+                    style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
                   />
                 ) : (
                   getInitials()
@@ -937,7 +973,7 @@ export default function AdminEmployee() {
                 <div className="modal-title">Edit Employee</div>
                 <button className="icon-btn" onClick={() => setIsEditOpen(false)}>✖</button>
               </div>
-              
+
               <div className="employee-details">
                 <div className="employee-header">
                   <div className="employee-avatar-large">
@@ -960,23 +996,23 @@ export default function AdminEmployee() {
                     <div className="detail-row two">
                       <div className="detail-item">
                         <span className="detail-label">First Name</span>
-                        <input 
-                          name="first_name" 
+                        <input
+                          name="first_name"
                           value={editFirstName}
                           onChange={(e) => handleEditInputChange('first_name', e.target.value)}
                           className={`detail-input ${editFormErrors.first_name ? 'error' : ''}`}
-                          required 
+                          required
                         />
                         {editFormErrors.first_name && <div className="field-error">{editFormErrors.first_name}</div>}
                       </div>
                       <div className="detail-item">
                         <span className="detail-label">Last Name</span>
-                        <input 
-                          name="last_name" 
+                        <input
+                          name="last_name"
                           value={editLastName}
                           onChange={(e) => handleEditInputChange('last_name', e.target.value)}
                           className={`detail-input ${editFormErrors.last_name ? 'error' : ''}`}
-                          required 
+                          required
                         />
                         {editFormErrors.last_name && <div className="field-error">{editFormErrors.last_name}</div>}
                       </div>
@@ -984,22 +1020,22 @@ export default function AdminEmployee() {
 
                     <div className="detail-item">
                       <span className="detail-label">Email Address</span>
-                      <input 
-                        type="email" 
-                        name="email" 
+                      <input
+                        type="email"
+                        name="email"
                         value={editEmail}
                         onChange={(e) => handleEditInputChange('email', e.target.value)}
                         className={`detail-input ${editFormErrors.email ? 'error' : ''}`}
-                        required 
+                        required
                       />
                       {editFormErrors.email && <div className="field-error">{editFormErrors.email}</div>}
                     </div>
 
                     <div className="detail-item">
                       <span className="detail-label">Phone</span>
-                      <input 
+                      <input
                         type="text"
-                        name="phone" 
+                        name="phone"
                         value={editPhone}
                         onChange={(e) => handleEditInputChange('phone', e.target.value)}
                         placeholder="+63XXXXXXXXXX"
@@ -1090,11 +1126,11 @@ export default function AdminEmployee() {
 
                     <div className="detail-item">
                       <span className="detail-label">Status</span>
-                      <select 
-                        name="status" 
+                      <select
+                        name="status"
                         value={editStatus}
                         onChange={(e) => setEditStatus(e.target.value)}
-                        className="detail-select" 
+                        className="detail-select"
                         required
                       >
                         <option value="Active">Active</option>
@@ -1108,28 +1144,28 @@ export default function AdminEmployee() {
                     </div>
                   </div>
 
-                <div className="detail-section">
-                  <h3>Biometrics</h3>
-                  <div className="detail-item">
-                    <span className="detail-label">Fingerprint Template ID</span>
-                    <input
-                      name="finger_template_id"
-                      value={editFingerprint}
-                      onChange={(e) => setEditFingerprint(e.target.value)}
-                      placeholder="Enter template ID from the fingerprint scanner (optional)"
-                      className="detail-input"
-                    />
-                    <div className="field-info" style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
-                      Update this if the employee re-enrolls on a fingerprint device.
+                  <div className="detail-section">
+                    <h3>Biometrics</h3>
+                    <div className="detail-item">
+                      <span className="detail-label">Fingerprint Template ID</span>
+                      <input
+                        name="finger_template_id"
+                        value={editFingerprint}
+                        onChange={(e) => setEditFingerprint(e.target.value)}
+                        placeholder="Enter template ID from the fingerprint scanner (optional)"
+                        className="detail-input"
+                      />
+                      <div className="field-info" style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                        Update this if the employee re-enrolls on a fingerprint device.
+                      </div>
                     </div>
                   </div>
-                </div>
 
                   {/* === ACTIONS === */}
                   <div className="modal-actions">
                     <button type="button" className="btn" onClick={() => setIsEditOpen(false)}>Cancel</button>
                     <button className="btn primary" type="submit">Update Employee</button>
-                  </div>  
+                  </div>
                 </form>
               </div>
             </div>
@@ -1144,7 +1180,7 @@ export default function AdminEmployee() {
                 <div className="modal-title">Add Employee</div>
                 <button className="icon-btn" onClick={() => setIsAddOpen(false)}>✖</button>
               </div>
-              
+
               <div className="employee-details">
 
                 <form onSubmit={handleAdd} className="details-grid" autoComplete="off">
@@ -1153,48 +1189,48 @@ export default function AdminEmployee() {
                     <div className="detail-row two">
                       <div className="detail-item">
                         <span className="detail-label">First Name</span>
-                        <input 
-                          name="first_name" 
-                          placeholder="Enter first name" 
+                        <input
+                          name="first_name"
+                          placeholder="Enter first name"
                           className={`detail-input ${formErrors.first_name ? 'error' : ''}`}
                           value={formData.first_name}
                           onChange={(e) => handleInputChange('first_name', e.target.value)}
-                          required 
+                          required
                         />
                         {formErrors.first_name && <div className="field-error">{formErrors.first_name}</div>}
                       </div>
                       <div className="detail-item">
                         <span className="detail-label">Last Name</span>
-                        <input 
-                          name="last_name" 
-                          placeholder="Enter last name" 
+                        <input
+                          name="last_name"
+                          placeholder="Enter last name"
                           className={`detail-input ${formErrors.last_name ? 'error' : ''}`}
                           value={formData.last_name}
                           onChange={(e) => handleInputChange('last_name', e.target.value)}
-                          required 
+                          required
                         />
                         {formErrors.last_name && <div className="field-error">{formErrors.last_name}</div>}
                       </div>
                     </div>
                     <div className="detail-item">
                       <span className="detail-label">Email Address</span>
-                      <input 
-                        type="email" 
-                        name="email" 
-                        placeholder="Enter email address" 
+                      <input
+                        type="email"
+                        name="email"
+                        placeholder="Enter email address"
                         className={`detail-input ${formErrors.email ? 'error' : ''}`}
                         value={formData.email}
                         onChange={(e) => handleInputChange('email', e.target.value)}
-                        required 
+                        required
                       />
                       {formErrors.email && <div className="field-error">{formErrors.email}</div>}
                     </div>
                     <div className="detail-row two">
                       <div className="detail-item">
                         <span className="detail-label">Phone </span>
-                        <input 
-                          name="phone" 
-                          placeholder="+63XXXXXXXXXX" 
+                        <input
+                          name="phone"
+                          placeholder="+63XXXXXXXXXX"
                           className={`detail-input ${formErrors.phone ? 'error' : ''}`}
                           value={formData.phone}
                           onChange={(e) => handleInputChange('phone', e.target.value)}
@@ -1203,9 +1239,9 @@ export default function AdminEmployee() {
                       </div>
                       <div className="detail-item">
                         <span className="detail-label">Address </span>
-                        <input 
-                          name="address" 
-                          placeholder="Enter address" 
+                        <input
+                          name="address"
+                          placeholder="Enter address"
                           className="detail-input"
                           value={formData.address}
                           onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
@@ -1218,8 +1254,8 @@ export default function AdminEmployee() {
                     <h3>Work Information</h3>
                     <div className="detail-item">
                       <span className="detail-label">Department</span>
-                      <select 
-                        name="dept" 
+                      <select
+                        name="dept"
                         className={`detail-select ${formErrors.dept ? 'error' : ''}`}
                         value={formData.dept}
                         onChange={(e) => {
@@ -1249,8 +1285,8 @@ export default function AdminEmployee() {
                     </div>
                     <div className="detail-item">
                       <span className="detail-label">Position</span>
-                      <select 
-                        name="position" 
+                      <select
+                        name="position"
                         className={`detail-select ${formErrors.position ? 'error' : ''}`}
                         value={formData.position}
                         onChange={(e) => {
@@ -1298,8 +1334,8 @@ export default function AdminEmployee() {
                     </div>
                     <div className="detail-item">
                       <span className="detail-label">Role</span>
-                      <select 
-                        name="role" 
+                      <select
+                        name="role"
                         className="detail-select"
                         value={formData.role}
                         onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value }))}
@@ -1323,34 +1359,34 @@ export default function AdminEmployee() {
                     <h3>Account</h3>
                     <div className="detail-item">
                       <span className="detail-label">Username</span>
-                      <input 
-                        name="username" 
-                        placeholder="Choose a username" 
+                      <input
+                        name="username"
+                        placeholder="Choose a username"
                         className={`detail-input ${formErrors.username ? 'error' : ''}`}
                         value={formData.username}
                         onChange={(e) => handleInputChange('username', e.target.value)}
                         autoComplete="off"
                         pattern="\S+"
                         title="Spaces are not allowed"
-                        required 
+                        required
                       />
                       {formErrors.username && <div className="field-error">{formErrors.username}</div>}
                     </div>
                     <div className="detail-item">
                       <span className="detail-label">Password</span>
                       <div className="password-input-container">
-                        <input 
-                          type={showPassword ? "text" : "password"} 
-                          name="password" 
-                          placeholder="Create a password" 
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          name="password"
+                          placeholder="Create a password"
                           className={`detail-input ${formErrors.password ? 'error' : ''}`}
                           value={formData.password}
                           onChange={(e) => handleInputChange('password', e.target.value)}
                           autoComplete="new-password"
-                          required 
+                          required
                         />
-                        <button 
-                          type="button" 
+                        <button
+                          type="button"
                           className="password-toggle"
                           onClick={() => setShowPassword(!showPassword)}
                         >
@@ -1362,18 +1398,18 @@ export default function AdminEmployee() {
                     <div className="detail-item">
                       <span className="detail-label">Confirm Password</span>
                       <div className="password-input-container">
-                        <input 
-                          type={showConfirmPassword ? "text" : "password"} 
-                          name="confirm_password" 
-                          placeholder="Re-enter password" 
+                        <input
+                          type={showConfirmPassword ? "text" : "password"}
+                          name="confirm_password"
+                          placeholder="Re-enter password"
                           className={`detail-input ${formErrors.confirm_password ? 'error' : ''}`}
                           value={formData.confirm_password}
                           onChange={(e) => handleInputChange('confirm_password', e.target.value)}
                           autoComplete="new-password"
-                          required 
+                          required
                         />
-                        <button 
-                          type="button" 
+                        <button
+                          type="button"
                           className="password-toggle"
                           onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                         >
@@ -1401,7 +1437,7 @@ export default function AdminEmployee() {
                 <div className="modal-title">Employee Details</div>
                 <button className="icon-btn" onClick={() => setIsViewOpen(false)}>✖</button>
               </div>
-              
+
               <div className="employee-details">
                 <div className="employee-header">
                   <div className="employee-avatar-large">
@@ -1431,7 +1467,7 @@ export default function AdminEmployee() {
                       <span className="detail-label">Username</span>
                       <span className="detail-value">{viewEmployee.username}</span>
                     </div>
-                    
+
                     <div className="detail-item">
                       <span className="detail-label">Employee ID</span>
                       <span className="detail-value">EMP{String(viewEmployee.user_id || viewEmployee.id).padStart(3, '0')}</span>
@@ -1462,15 +1498,15 @@ export default function AdminEmployee() {
                     </div>
                   </div>
 
-                <div className="detail-section">
-                  <h3>Biometrics</h3>
-                  <div className="detail-item">
-                    <span className="detail-label">Fingerprint Template</span>
-                    <span className="detail-value">
-                      {viewEmployee.finger_template_id ? viewEmployee.finger_template_id : 'Not yet enrolled'}
-                    </span>
+                  <div className="detail-section">
+                    <h3>Biometrics</h3>
+                    <div className="detail-item">
+                      <span className="detail-label">Fingerprint Template</span>
+                      <span className="detail-value">
+                        {viewEmployee.finger_template_id ? viewEmployee.finger_template_id : 'Not yet enrolled'}
+                      </span>
+                    </div>
                   </div>
-                </div>
 
                   <div className="detail-section">
                     <h3>Contact Information</h3>
@@ -1495,8 +1531,8 @@ export default function AdminEmployee() {
 
                 <div className="modal-actions">
                   <button className="btn" onClick={() => setIsViewOpen(false)}>Cancel</button>
+                  <button className="btn btn-danger" onClick={() => { setIsViewOpen(false); openEdit(viewEmployee); }}>Edit</button>
                   <button className="btn btn-danger" onClick={() => { setIsViewOpen(false); openDeleteConfirmation(viewEmployee); }}>Delete</button>
-                  <button className="btn primary" onClick={() => { setIsViewOpen(false); openEdit(viewEmployee); }}>Edit</button>
                 </div>
               </div>
             </div>
@@ -1514,15 +1550,15 @@ export default function AdminEmployee() {
                 </p>
               </div>
               <div className="delete-modal-actions">
-                <button 
-                  className="btn" 
+                <button
+                  className="btn"
                   onClick={closeDeleteConfirmation}
                   disabled={deleteLoading}
                 >
                   Cancel
                 </button>
-                <button 
-                  className="btn btn-danger" 
+                <button
+                  className="btn btn-danger"
                   onClick={confirmDelete}
                   disabled={deleteLoading}
                 >
