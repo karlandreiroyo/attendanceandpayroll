@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import type { File as MulterFile } from 'multer';
 import { SupabaseService } from '../supabase/supabase.service';
 
 export interface User { // ✅ Export it so controller can import
