@@ -86,11 +86,15 @@ export class ReportsService {
     return date.toISOString();
   }
 
-  private async loadUsers(params?: { department?: string; roles?: string[] }) {
-    const { department, roles } = params ?? {};
+  private async loadUsers(params?: { department?: string; roles?: string[]; includeInactive?: boolean }) {
+    const { department, roles, includeInactive } = params ?? {};
     const query = this.supabaseService.client
       .from('users')
       .select('user_id, first_name, last_name, department, position, status, join_date, email, role');
+
+    if (!includeInactive) {
+      query.eq('status', 'Active');
+    }
 
     if (department) {
       query.eq('department', department);

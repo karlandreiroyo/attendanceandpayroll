@@ -322,7 +322,8 @@ export class PayrollService {
   private async fetchEmployees(): Promise<Array<{ userId: string; name: string; department: string; position: string; dailyRate: number }>> {
     const { data, error } = await this.supabaseService.client
       .from('users')
-      .select('user_id, first_name, last_name, department, position, daily_rate, role')
+      .select('user_id, first_name, last_name, department, position, daily_rate, role, status')
+      .eq('status', 'Active')
       .neq('role', 'admin');
 
     if (error) {

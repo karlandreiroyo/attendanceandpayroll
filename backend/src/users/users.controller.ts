@@ -20,7 +20,10 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) { }
 
   @Get()
-  async findAll(@Query('username') username?: string): Promise<User | User[]> {
+  async findAll(
+    @Query('username') username?: string,
+    @Query('includeInactive') includeInactive?: string,
+  ): Promise<User | User[]> {
     try {
       if (username) {
         const user = await this.usersService.findByUsername(username);
@@ -29,7 +32,8 @@ export class UsersController {
         }
         return user;
       }
-      return await this.usersService.findAll();
+      const includeInactiveFlag = includeInactive === 'true';
+      return await this.usersService.findAll(includeInactiveFlag);
     } catch (error) {
       throw new BadRequestException(error.message);
     }

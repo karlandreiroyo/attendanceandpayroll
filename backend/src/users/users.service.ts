@@ -35,10 +35,16 @@ export class UsersService {
         return (data as User) ?? null;
     }
 
-    async findAll(): Promise<User[]> {
-        const { data, error } = await this.supabaseService.client
-            .from('users') // ✅ remove <User>
+    async findAll(includeInactive = false): Promise<User[]> {
+        const query = this.supabaseService.client
+            .from('users')
             .select('*');
+
+        if (!includeInactive) {
+            query.eq('status', 'Active');
+        }
+
+        const { data, error } = await query;
 
         if (error) throw new Error(error.message);
         return (data as User[]) ?? [];
@@ -90,14 +96,30 @@ export class UsersService {
         return (data as User[])[0];
     }
 
-    async delete(id: number | string): Promise<{ deleted: boolean }> {
-        // Use user_id as the primary key column name
-        const { error } = await this.supabaseService.client
-            .from('users')
-            .delete()
-            .eq('user_id', id);
+    async delete(id: number | string): Promise<{ deleted: boolean; softDeleted: boolean }> {
+        const updatePayload = {
+            status: 'Inactive' as const,
+        };
 
-        if (error) throw new Error(error.message);
-        return { deleted: true };
+        let { data, error } = await this.supabaseService.client
+            .from('users')
+            .update(updatePayload)
+            .eq('user_id', id)
+            .select('user_id');
+
+        if (!error && (!data || data.length === 0)) {
+            const responseById = await this.supabaseService.client
+                .from('users')
+                .update(updatePayload)
+                .eq('id', id)
+                .select('user_id');
+            data = responseById.data;
+            error = responseById.error;
+        }
+
+        if (error) throw new Error(error.message || 'Failed to deactivate user');
+        if (!data || data.length === 0) throw new Error('User not found');
+
+        return { deleted: true, softDeleted: true };
     }
 }

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import "../AdminPages/admincss/adminDashboard.css";
 import "../AdminPages/admincss/adminEmployee.css";
@@ -52,287 +52,17 @@ export default function AdminEmployee() {
     role: 'employee',
     username: '',
     password: '',
-    confirm_password: '',
-    finger_template_id: ''
+    confirm_password: ''
   });
-  const [fingerprintUI, setFingerprintUI] = useState({
-    supported: typeof navigator !== 'undefined' && 'serial' in navigator,
-    connecting: false,
-    connected: false,
-    capturing: false,
-    statusText: 'No device detected',
-    lastDetectedId: null,
-    logs: [],
-    error: null,
-  });
-  const [fingerprintEnrollId, setFingerprintEnrollId] = useState('');
-  const fingerprintPortRef = useRef(null);
-  const fingerprintReaderRef = useRef(null);
-  const fingerprintBufferRef = useRef('');
-  const fingerprintCaptureIdRef = useRef('');
+
   const [rows, setRows] = useState([]);
   const isAdminRole = (role) => (role || 'employee').toLowerCase() === 'admin';
   const [currentUser, setCurrentUser] = useState(null);
   const [profileSession, setProfileSession] = useState(() => getSessionUserProfile());
   const { isSidebarOpen, toggleSidebar, closeSidebar, isMobileView } = useSidebarState();
-  const textEncoderRef = useRef(null);
 
   // Departments that allow admin role
   const adminAllowedDepartments = useMemo(() => ['HR', 'Management', 'Accounting', 'Branch'], []);
-
-  const updateFingerprintUI = (updater) => {
-    setFingerprintUI(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater };
-      return next;
-    });
-  };
-
-  const appendFingerprintLog = (line) => {
-    if (!line) return;
-    updateFingerprintUI(prev => {
-      const logEntry = { id: Date.now() + Math.random(), text: line };
-      const logs = [...prev.logs, logEntry].slice(-8);
-      return { ...prev, logs };
-    });
-  };
-
-  const processFingerprintLine = (rawLine) => {
-    const line = rawLine.trim();
-    if (!line) return;
-    appendFingerprintLog(line);
-
-    if (/sensor.*not found/i.test(line)) {
-      updateFingerprintUI(prev => ({
-        ...prev,
-        error: 'Sensor not found',
-        statusText: 'Sensor not found',
-        connected: false,
-      }));
-      return;
-    }
-
-    if (/✅\s*Enroll success|enroll success/i.test(line)) {
-      const enrolledId = fingerprintCaptureIdRef.current;
-      if (enrolledId) {
-        setFormData(prev => ({ ...prev, finger_template_id: String(enrolledId) }));
-        setFingerprintEnrollId(String(enrolledId));
-      }
-      fingerprintCaptureIdRef.current = '';
-      updateFingerprintUI(prev => ({
-        ...prev,
-        capturing: false,
-        statusText: enrolledId ? `Enrolled ID #${enrolledId}` : 'Enrollment complete',
-        error: null,
-      }));
-      return;
-    }
-
-    const detectedMatch = line.match(/(?:Detected ID|Found ID)\D*(\d+)/i);
-    if (detectedMatch) {
-      const detectedId = detectedMatch[1];
-      updateFingerprintUI(prev => ({
-        ...prev,
-        lastDetectedId: detectedId,
-        statusText: `Detected ID #${detectedId}`,
-        error: null,
-      }));
-      setFormData(prev => {
-        if (prev.finger_template_id) return prev;
-        return { ...prev, finger_template_id: detectedId };
-      });
-      setFingerprintEnrollId(prev => prev || detectedId);
-      return;
-    }
-
-    if (/unregistered fingerprint/i.test(line)) {
-      updateFingerprintUI(prev => ({
-        ...prev,
-        statusText: 'Fingerprint not enrolled',
-      }));
-    }
-
-    if (/Place finger/i.test(line)) {
-      updateFingerprintUI(prev => ({
-        ...prev,
-        statusText: 'Place finger on sensor',
-      }));
-    }
-  };
-
-  const closeFingerprintConnection = async () => {
-    fingerprintCaptureIdRef.current = '';
-    fingerprintBufferRef.current = '';
-    try {
-      if (fingerprintReaderRef.current) {
-        await fingerprintReaderRef.current.cancel();
-        fingerprintReaderRef.current.releaseLock();
-      }
-    } catch (err) {
-      console.warn('Fingerprint reader close error', err);
-    } finally {
-      fingerprintReaderRef.current = null;
-    }
-
-    if (fingerprintPortRef.current) {
-      try {
-        await fingerprintPortRef.current.close();
-      } catch (err) {
-        console.warn('Fingerprint port close error', err);
-      }
-    }
-    fingerprintPortRef.current = null;
-  };
-
-  const extractNumericTemplateId = (value) => (value || '').replace(/\D/g, '').slice(0, 3);
-
-  const startFingerprintReadLoop = async (port) => {
-    if (!port?.readable) return;
-    const reader = port.readable.getReader();
-    fingerprintReaderRef.current = reader;
-    const decoder = new TextDecoder();
-
-    try {
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        if (value) {
-          const chunk = decoder.decode(value);
-          fingerprintBufferRef.current += chunk;
-          const lines = fingerprintBufferRef.current.split(/\r?\n/);
-          fingerprintBufferRef.current = lines.pop() || '';
-          lines.forEach(processFingerprintLine);
-        }
-      }
-    } catch (err) {
-      console.error('Fingerprint read error', err);
-      appendFingerprintLog(`⚠️ ${err.message || 'Reader stopped'}`);
-    }
-  };
-
-  const sendFingerprintCommand = async (command) => {
-    if (!fingerprintPortRef.current?.writable) {
-      throw new Error('Device not connected');
-    }
-    if (!textEncoderRef.current) {
-      textEncoderRef.current = new TextEncoder();
-    }
-    const writer = fingerprintPortRef.current.writable.getWriter();
-    try {
-      await writer.write(textEncoderRef.current.encode(`${command}\n`));
-    } finally {
-      writer.releaseLock();
-    }
-  };
-
-  const handleConnectFingerprint = async () => {
-    if (!fingerprintUI.supported || fingerprintUI.connecting) return;
-    updateFingerprintUI(prev => ({ ...prev, connecting: true, error: null }));
-    try {
-      const port = await navigator.serial.requestPort();
-      await port.open({ baudRate: 9600 });
-      fingerprintPortRef.current = port;
-      fingerprintBufferRef.current = '';
-      appendFingerprintLog('🔌 Device connected');
-      updateFingerprintUI(prev => ({
-        ...prev,
-        connecting: false,
-        connected: true,
-        statusText: 'Device connected',
-        logs: [],
-      }));
-      startFingerprintReadLoop(port);
-    } catch (err) {
-      console.error('Fingerprint connect error', err);
-      updateFingerprintUI(prev => ({
-        ...prev,
-        connecting: false,
-        connected: false,
-        error: err.message || 'Failed to connect',
-        statusText: 'No device detected',
-      }));
-    }
-  };
-
-  const handleDisconnectFingerprint = async () => {
-    await closeFingerprintConnection();
-    appendFingerprintLog('🔌 Device disconnected');
-    updateFingerprintUI(prev => ({
-      ...prev,
-      connected: false,
-      capturing: false,
-      statusText: 'Device disconnected',
-    }));
-  };
-
-  const handleStartFingerprintEnrollment = async () => {
-    if (!fingerprintPortRef.current) {
-      updateFingerprintUI(prev => ({ ...prev, error: 'Connect a fingerprint device first' }));
-      return;
-    }
-    const numericId = Number(fingerprintEnrollId);
-    if (!Number.isInteger(numericId) || numericId < 1 || numericId > 127) {
-      updateFingerprintUI(prev => ({ ...prev, error: 'Template ID must be between 1 and 127' }));
-      return;
-    }
-    fingerprintCaptureIdRef.current = String(numericId);
-    updateFingerprintUI(prev => ({
-      ...prev,
-      capturing: true,
-      error: null,
-      statusText: `Enrolling ID #${numericId}`,
-    }));
-    appendFingerprintLog(`📝 Requesting enroll for ID ${numericId}`);
-    try {
-      await sendFingerprintCommand('enroll');
-      await new Promise(resolve => setTimeout(resolve, 150));
-      await sendFingerprintCommand(String(numericId));
-    } catch (err) {
-      console.error('Fingerprint enroll command failed', err);
-      appendFingerprintLog(`❌ ${err.message || 'Failed to start enrollment'}`);
-      updateFingerprintUI(prev => ({
-        ...prev,
-        capturing: false,
-        error: err.message || 'Failed to start enrollment',
-      }));
-    }
-  };
-
-  const handleFingerprintSlotInput = (value) => {
-    const sanitized = extractNumericTemplateId(value);
-    setFingerprintEnrollId(sanitized);
-    setFormData(prev => ({ ...prev, finger_template_id: sanitized }));
-  };
-
-  const syncFingerprintEnrollState = (value) => {
-    const sanitized = extractNumericTemplateId(value);
-    setFingerprintEnrollId(sanitized);
-  };
-
-  useEffect(() => {
-    return () => {
-      closeFingerprintConnection();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isAddOpen) {
-      setFingerprintEnrollId('');
-      updateFingerprintUI(prev => ({
-        ...prev,
-        capturing: false,
-        error: null,
-        statusText: prev.connected ? prev.statusText : 'No device detected',
-      }));
-      if (fingerprintPortRef.current) {
-        handleDisconnectFingerprint();
-      }
-    }
-  }, [isAddOpen]);
-
-  useEffect(() => {
-    if (!isAddOpen) return;
-    syncFingerprintEnrollState(formData.finger_template_id || '');
-  }, [formData.finger_template_id, isAddOpen]);
 
   const formatPhoneDisplay = (value) => {
     if (!value && value !== 0) return '';
@@ -513,7 +243,7 @@ export default function AdminEmployee() {
     async function loadEmployees() {
       try {
         setLoading(true);
-        const res = await fetch(`${API_BASE_URL}/users`, { credentials: "include" });
+        const res = await fetch(`${API_BASE_URL}/users?includeInactive=true`, { credentials: "include" });
         if (!res.ok) throw new Error(`Failed to fetch users: ${res.status}`);
         const users = await res.json();
         if (aborted) return;
@@ -632,8 +362,6 @@ export default function AdminEmployee() {
     const trimmedFingerprint = editFingerprint.trim();
     if (trimmedFingerprint) {
       body.finger_template_id = trimmedFingerprint;
-    } else {
-      body.finger_template_id = null;
     }
 
     const userId = selected?.user_id || selected?.id;
@@ -969,12 +697,11 @@ export default function AdminEmployee() {
       phone: formData.phone || undefined,
       address: formData.address || undefined,
       role: formData.role === 'user/employee' ? 'employee' : formData.role,
-      finger_template_id: formData.finger_template_id?.trim() || undefined,
     };
 
     try {
       setSubmitLoading(true);
-      const res = await fetch(`${API_BASE_URL}/users`, {
+      const res = await fetch(`${API_BASE_URL}/users?includeInactive=true`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -1020,16 +747,8 @@ export default function AdminEmployee() {
         role: 'employee',
         username: '',
         password: '',
-        confirm_password: '',
-        finger_template_id: ''
+        confirm_password: ''
       });
-      setFingerprintEnrollId('');
-      updateFingerprintUI(prev => ({
-        ...prev,
-        capturing: false,
-        error: null,
-        statusText: prev.connected ? prev.statusText : 'No device detected',
-      }));
       setFormErrors({});
       setShowPassword(false);
       setShowConfirmPassword(false);
@@ -1062,7 +781,7 @@ export default function AdminEmployee() {
       (currentId && (employee.user_id === currentId || employee.id === currentId)) ||
       (currentUsername && employee.username === currentUsername)
     ) {
-      setNotification({ type: 'error', message: "You cannot delete your own account while you're logged in." });
+      setNotification({ type: 'error', message: "You cannot deactivate your own account while you're logged in." });
       setTimeout(() => setNotification(null), 4000);
       return;
     }
@@ -1092,15 +811,19 @@ export default function AdminEmployee() {
         throw new Error(errText || `Failed to delete employee (${res.status})`);
       }
 
-      setRows(prev => prev.filter(x => (x.user_id || x.id) !== id));
+      const employeeName = employeeToDelete.name;
+      setRows(prev => prev.map((row) => {
+        if ((row.user_id || row.id) !== id) return row;
+        return { ...row, status: 'Inactive' };
+      }));
       notifyEmployeesUpdated();
       setIsDeleteOpen(false);
       setEmployeeToDelete(null);
-      setNotification({ type: 'success', message: `Employee "${employeeToDelete.name}" has been deleted successfully` });
+      setNotification({ type: 'success', message: `Employee "${employeeName}" has been deactivated successfully` });
       setTimeout(() => setNotification(null), 3000);
     } catch (err) {
       console.error(err);
-      setNotification({ type: 'error', message: err.message || 'Failed to delete employee' });
+      setNotification({ type: 'error', message: err.message || 'Failed to deactivate employee' });
       setTimeout(() => setNotification(null), 4000);
     } finally {
       setDeleteLoading(false);
@@ -1324,7 +1047,7 @@ export default function AdminEmployee() {
                     </div>
 
                     <div className="detail-item">
-                      <span className="detail-label">mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm</span>
+                      <span className="detail-label">Address</span>
                       <input
                         type="text"
                         name="address"
@@ -1699,154 +1422,6 @@ export default function AdminEmployee() {
                     </div>
                   </div>
 
-                  <div className="detail-section biometrics-section">
-                    <div className="section-header-row">
-                      <h3>Fingerprint Enrollment</h3>
-                      <span className="chip optional">Optional</span>
-                    </div>
-                    <p className="section-subtitle">
-                      Plug in a compatible fingerprint scanner to capture templates during onboarding, or you can complete this step later from the employee profile.
-                    </p>
-
-                    <div className="detail-item fingerprint-manual-entry">
-                      <div>
-                        <span className="detail-label">Fingerprint Template ID</span>
-                        <span className="detail-subtext">Enter template ID from the fingerprint scanner (optional)</span>
-                      </div>
-                      <input
-                        name="finger_template_id"
-                        placeholder="e.g. 0021-ABCD-FF12"
-                        className="detail-input"
-                        value={formData.finger_template_id || ''}
-                        onChange={(e) => {
-                          const nextValue = e.target.value;
-                          setFormData(prev => ({ ...prev, finger_template_id: nextValue }));
-                          syncFingerprintEnrollState(nextValue);
-                        }}
-                      />
-                      <div className="field-info">
-                        Update this if the employee re-enrolls on a fingerprint device.
-                      </div>
-                    </div>
-
-                    <div className="fingerprint-enroll-card">
-                      <div className="fingerprint-visual" aria-hidden="true">
-                        <span className="fingerprint-icon">🖐️</span>
-                      </div>
-                      <div className="fingerprint-content">
-                        <h4>Connect scanner to start enrollment</h4>
-                        <p>
-                          Once the device is ready, click <strong>Start Capture</strong> and ask the employee to scan the same finger three times for the best match quality.
-                        </p>
-
-                        {!fingerprintUI.supported && (
-                          <div className="fingerprint-warning">
-                            Web Serial API is not available in this browser. Please use Google Chrome or Microsoft Edge on desktop.
-                          </div>
-                        )}
-
-                        <div className="fingerprint-status">
-                          <span
-                            className={`status-dot ${
-                              fingerprintUI.capturing
-                                ? 'capturing'
-                                : fingerprintUI.connected
-                                ? 'ok'
-                                : fingerprintUI.error
-                                ? 'error'
-                                : 'idle'
-                            }`}
-                          />
-                          <div>
-                            <span className="status-label">Scanner status</span>
-                            <span className="status-value">
-                              {fingerprintUI.statusText || (fingerprintUI.supported ? 'No device detected' : 'Not supported')}
-                            </span>
-                          </div>
-                        </div>
-
-                        {fingerprintUI.error && (
-                          <div className="fingerprint-error">{fingerprintUI.error}</div>
-                        )}
-
-                        <div className="fingerprint-id-input">
-                          <label htmlFor="fingerprintSlot">Template Slot ID (1-127)</label>
-                          <input
-                            id="fingerprintSlot"
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            min="1"
-                            max="127"
-                            placeholder="e.g. 21"
-                            value={fingerprintEnrollId}
-                            onChange={(e) => handleFingerprintSlotInput(e.target.value)}
-                            disabled={!fingerprintUI.connected || fingerprintUI.capturing}
-                          />
-                          <span className="field-info">
-                            This is the ID the DY50 sketch requests right after it receives the <code>enroll</code> command.
-                          </span>
-                        </div>
-
-                        <div className="fingerprint-actions">
-                          <button
-                            type="button"
-                            className="btn outline"
-                            onClick={fingerprintUI.connected ? handleDisconnectFingerprint : handleConnectFingerprint}
-                            disabled={
-                              !fingerprintUI.supported ||
-                              (fingerprintUI.connecting && !fingerprintUI.connected)
-                            }
-                          >
-                            {fingerprintUI.connected
-                              ? 'Disconnect Device'
-                              : fingerprintUI.connecting
-                              ? 'Connecting...'
-                              : 'Connect Device'}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn primary"
-                            onClick={handleStartFingerprintEnrollment}
-                            disabled={
-                              !fingerprintUI.connected ||
-                              !fingerprintEnrollId ||
-                              fingerprintUI.capturing
-                            }
-                          >
-                            {fingerprintUI.capturing ? 'Capturing...' : 'Start Capture'}
-                          </button>
-                        </div>
-
-                        <div className="fingerprint-log">
-                          <div className="fingerprint-log-header">
-                            <span>Live Device Feed</span>
-                            {fingerprintUI.lastDetectedId && (
-                              <span className="chip neutral">Last match #{fingerprintUI.lastDetectedId}</span>
-                            )}
-                          </div>
-                          <div className="fingerprint-log-list">
-                            {fingerprintUI.logs.length ? (
-                              fingerprintUI.logs.map((log) => (
-                                <div key={log.id} className="fingerprint-log-line">
-                                  {log.text}
-                                </div>
-                              ))
-                            ) : (
-                              <div className="fingerprint-log-placeholder">
-                                Device output will appear here once the scanner is connected.
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <small className="fingerprint-tip">
-                          Commands mirror the Arduino sketch in <code>hardware/hardware.ino</code> (<code>enroll</code>, slot number, and live status messages).
-                        </small>
-                      </div>
-                    </div>
-                  </div>
-
                   <div className="modal-actions">
                     <button type="button" className="btn" onClick={() => setIsAddOpen(false)} disabled={submitLoading}>Cancel</button>
                     <button className="btn primary" type="submit" disabled={submitLoading}>{submitLoading ? 'Adding...' : 'Add Employee'}</button>
@@ -1959,7 +1534,7 @@ export default function AdminEmployee() {
                 <div className="modal-actions">
                   <button className="btn" onClick={() => setIsViewOpen(false)}>Cancel</button>
                   <button className="btn btn-danger" onClick={() => { setIsViewOpen(false); openEdit(viewEmployee); }}>Edit</button>
-                  <button className="btn btn-danger" onClick={() => { setIsViewOpen(false); openDeleteConfirmation(viewEmployee); }}>Delete</button>
+                  <button className="btn btn-danger" onClick={() => { setIsViewOpen(false); openDeleteConfirmation(viewEmployee); }}>Deactivate</button>
                 </div>
               </div>
             </div>
@@ -1971,9 +1546,9 @@ export default function AdminEmployee() {
             <div className="modal-body delete-confirmation-modal">
               <div className="delete-modal-header">
                 <div className="delete-icon">⚠️</div>
-                <h2 className="delete-modal-title">Delete Employee</h2>
+                <h2 className="delete-modal-title">Deactivate Employee</h2>
                 <p className="delete-modal-message">
-                  Are you sure you want to delete <strong>{employeeToDelete.name}</strong>? This action cannot be undone.
+                  Are you sure you want to deactivate <strong>{employeeToDelete.name}</strong>? This keeps their history but removes access.
                 </p>
               </div>
               <div className="delete-modal-actions">
@@ -1989,7 +1564,7 @@ export default function AdminEmployee() {
                   onClick={confirmDelete}
                   disabled={deleteLoading}
                 >
-                  {deleteLoading ? 'Deleting...' : 'Delete Employee'}
+                  {deleteLoading ? 'Updating...' : 'Deactivate Employee'}
                 </button>
               </div>
             </div>
