@@ -14,7 +14,15 @@ function formatPeso(value) {
 export default function EmployeePayslips() {
   const navigate = useNavigate();
   const [isTopUserOpen, setIsTopUserOpen] = useState(false);
-  const [profileInfo, setProfileInfo] = useState(() => getSessionUserProfile());
+  const [profileInfo, setProfileInfo] = useState(() => {
+    const baseProfile = getSessionUserProfile();
+    return {
+      ...baseProfile,
+      userId: sessionStorage.getItem("userId") || null,
+      position: sessionStorage.getItem("position") || null,
+      department: sessionStorage.getItem("department") || null,
+    };
+  });
   const [payslips, setPayslips] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -25,8 +33,59 @@ export default function EmployeePayslips() {
   const userId = useMemo(() => sessionStorage.getItem("userId"), []);
 
   useEffect(() => {
-    const unsubscribe = subscribeToProfileUpdates(setProfileInfo);
+    const unsubscribe = subscribeToProfileUpdates((updatedProfile) => {
+      setProfileInfo({
+        ...updatedProfile,
+        userId: sessionStorage.getItem("userId") || null,
+        position: sessionStorage.getItem("position") || null,
+        department: sessionStorage.getItem("department") || null,
+      });
+    });
     return () => unsubscribe();
+  }, []);
+
+  // Load employee data to get position and department if not in sessionStorage
+  useEffect(() => {
+    async function loadEmployeeData() {
+      const username = sessionStorage.getItem("username");
+      if (!username) return;
+      
+      // Only fetch if position or department is missing
+      const currentPosition = sessionStorage.getItem("position");
+      const currentDepartment = sessionStorage.getItem("department");
+      if (currentPosition && currentDepartment) return; // Already have the data
+      
+      try {
+        const res = await fetch(`${API_BASE_URL}/users?username=${username}`, {
+          credentials: "include",
+        });
+        if (!res.ok) return;
+        
+        const userData = await res.json();
+        const user = Array.isArray(userData) 
+          ? userData.find((u) => u.username === username)
+          : userData;
+        
+        if (user) {
+          if (user.position) {
+            sessionStorage.setItem("position", user.position);
+            setProfileInfo(prev => ({ ...prev, position: user.position }));
+          }
+          if (user.department) {
+            sessionStorage.setItem("department", user.department);
+            setProfileInfo(prev => ({ ...prev, department: user.department }));
+          }
+          if (user.user_id || user.id) {
+            const userId = String(user.user_id ?? user.id);
+            sessionStorage.setItem("userId", userId);
+            setProfileInfo(prev => ({ ...prev, userId }));
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load employee data:", err);
+      }
+    }
+    loadEmployeeData();
   }, []);
 
   useEffect(() => {
