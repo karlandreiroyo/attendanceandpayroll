@@ -121,11 +121,39 @@ export default function AdminPayroll() {
     }, { gross: 0, deduct: 0, net: 0 });
   }, [entries]);
 
+  const sanitizeNumericInput = (value) => {
+    if (!value || value === '') return '';
+    // Remove all non-numeric and non-decimal characters
+    let cleaned = value.replace(/[^0-9.]/g, '');
+    
+    // Ensure only one decimal point
+    const parts = cleaned.split('.');
+    if (parts.length > 2) {
+      cleaned = parts[0] + '.' + parts.slice(1).join('');
+    }
+    
+    // Remove leading zeros (except for "0." or standalone "0")
+    // If input is "024", it becomes "24"
+    // If input is "0", it stays "0"
+    // If input is "0.5", it stays "0.5"
+    if (cleaned.length > 1 && cleaned[0] === '0' && cleaned[1] !== '.') {
+      // Remove leading zeros but keep at least one digit
+      cleaned = cleaned.replace(/^0+/, '');
+      // If we removed everything (edge case), return empty string
+      if (cleaned === '') {
+        return '';
+      }
+    }
+    
+    return cleaned;
+  };
+
   const handleEntryChange = (userId, field, value) => {
     if (processed) return;
+    const sanitized = sanitizeNumericInput(value);
     setEntries((prev) => prev.map((entry) => {
       if (entry.userId !== userId) return entry;
-      const updated = recalcEntry({ ...entry, [field]: value });
+      const updated = recalcEntry({ ...entry, [field]: sanitized });
       return updated;
     }));
   };
@@ -346,17 +374,17 @@ export default function AdminPayroll() {
           </div>
 
           <div className="payroll-table">
-          <div className="p-head">
-            <div className="cell heading">Employee</div>
-            <div className="cell heading">Position</div>
-            <div className="cell heading numeric">Daily Rate</div>
-            <div className="cell heading numeric">Days Worked</div>
-            <div className="cell heading numeric">Gross Pay</div>
-            <div className="cell heading numeric">Deductions</div>
-            <div className="cell heading numeric">Net Pay</div>
-            <div className="cell heading status">Status</div>
-            <div className="cell heading actions">Actions</div>
-          </div>
+            <div className="p-head">
+              <div className="cell heading">Employee</div>
+              <div className="cell heading">Position</div>
+              <div className="cell heading numeric">Daily Rate</div>
+              <div className="cell heading numeric">Days Worked</div>
+              <div className="cell heading numeric">Gross Pay</div>
+              <div className="cell heading numeric">Deductions</div>
+              <div className="cell heading numeric">Net Pay</div>
+              <div className="cell heading">Status</div>
+              <div className="cell heading">Actions</div>
+            </div>
             <div className="p-body">
               {loading ? (
                 <div className="p-row">
@@ -386,18 +414,14 @@ export default function AdminPayroll() {
                       <div className="numeric-input-wrapper">
                         <input
                           className="numeric-input"
-                          type="number"
-                          min="0"
-                          step="0.5"
-                          value={entry.daysWorked}
+                          type="text"
+                          inputMode="decimal"
+                          value={entry.daysWorked || ''}
                           disabled={processed}
-                          onChange={(e) => handleEntryChange(entry.userId, 'daysWorked', e.target.value)}
+                          onChange={(e) => {
+                            handleEntryChange(entry.userId, 'daysWorked', e.target.value);
+                          }}
                         />
-                        {!processed && (
-                          <span className="numeric-preview" title={entry.daysWorked || 0}>
-                            {String(entry.daysWorked || 0)}
-                          </span>
-                        )}
                       </div>
                     </div>
                     <div className="cell numeric">{peso(entry.grossPay)}</div>
@@ -405,21 +429,14 @@ export default function AdminPayroll() {
                       <div className="numeric-input-wrapper">
                         <input
                           className="numeric-input"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={entry.deductions}
+                          type="text"
+                          inputMode="decimal"
+                          value={entry.deductions || ''}
                           disabled={processed}
-                          onChange={(e) => handleEntryChange(entry.userId, 'deductions', e.target.value)}
+                          onChange={(e) => {
+                            handleEntryChange(entry.userId, 'deductions', e.target.value);
+                          }}
                         />
-                        {!processed && (
-                          <span
-                            className="numeric-preview"
-                            title={Number(entry.deductions || 0).toFixed(2)}
-                          >
-                            {Number(entry.deductions || 0).toFixed(2)}
-                          </span>
-                        )}
                       </div>
                     </div>
                     <div className="cell numeric">{peso(entry.netPay)}</div>
