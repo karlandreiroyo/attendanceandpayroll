@@ -1,20 +1,106 @@
+/* ===== CRITICAL: Force sidebar to stay fixed - MUST BE FIRST ===== */
+html,
+body {
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: hidden !important;
+  position: relative !important;
+  transform: none !important;
+  perspective: none !important;
+  filter: none !important;
+  will-change: auto !important;
+  display: block !important;
+}
+
+#root {
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: hidden !important;
+  position: relative !important;
+  transform: none !important;
+  perspective: none !important;
+  filter: none !important;
+  will-change: auto !important;
+  max-width: none !important;
+  text-align: left !important;
+}
+
+/* Force sidebar to be fixed - highest specificity possible */
+aside.admin-sidebar,
+.admin-layout aside.admin-sidebar,
+.admin-layout .admin-sidebar,
+aside.admin-sidebar.open,
+aside.admin-sidebar.collapsed,
+div.admin-layout aside.admin-sidebar,
+body aside.admin-sidebar,
+html body aside.admin-sidebar {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  bottom: 0 !important;
+  right: auto !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  min-height: 100vh !important;
+  z-index: 1000 !important;
+  margin: 0 !important;
+  border-bottom: none !important;
+  border-top: none !important;
+  overflow-y: hidden !important;
+  overflow-x: hidden !important;
+  will-change: auto !important;
+  contain: none !important;
+  isolation: isolate !important;
+  box-sizing: border-box !important;
+  transform: none !important;
+}
+
 /* Override admin layout for employee-specific styling */
 .admin-layout {
   display: flex;
   height: 100vh;
+  max-height: 100vh;
   width: 100vw;
   background: #f6f7fb;
+  overflow-x: hidden !important;
+  overflow-y: hidden !important;
+  position: relative;
+  margin: 0;
+  padding: 0;
+  transform: none !important;
+  perspective: none !important;
+  filter: none !important;
+  will-change: auto !important;
+  isolation: auto !important;
 }
 
 .admin-sidebar {
   width: 240px;
-  background: #0e7d2a;
+  background: #0e7d2a !important;
   color: #fff;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 16px;
+  padding: 16px !important;
   flex-shrink: 0;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  bottom: 0 !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  min-height: 100vh !important;
+  overflow-y: hidden !important;
+  overflow-x: hidden !important;
+  z-index: 1000 !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  border-bottom: none !important;
+  border-top: none !important;
 }
 
 .brand {
@@ -41,12 +127,17 @@
 
 .nav {
   display: grid;
-  gap: 6px;
+  gap: 2px;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  padding-bottom: 0;
 }
 
 .nav-item {
   text-decoration: none;
-  padding: 10px 12px;
+  padding: 8px 12px;
   color: #fff;
   border-radius: 6px;
   transition: background-color 0.2s;
@@ -65,9 +156,26 @@
   display: flex;
   flex-direction: column;
   background: #f6f7fb;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
   min-width: 0;
+  margin-left: 240px;
+  width: calc(100% - 240px);
+  height: 100vh;
+  max-height: 100vh;
+  box-sizing: border-box;
+  position: relative;
+  overscroll-behavior: contain;
+}
+
+/* Remove scrollable areas from forms - make whole forms visible */
+.admin-content form,
+.admin-content .form,
+.admin-content section,
+.admin-content > section {
+  overflow: visible !important;
+  max-height: none !important;
+  height: auto !important;
 }
 
 .admin-topbar {
@@ -154,6 +262,7 @@
 /* Content area - matches admin measurements */
 .admin-content > section {
   padding: 24px;
+  overflow: visible !important;
 }
 
 /* Ensure proper scrolling for employee content */
@@ -169,10 +278,11 @@
 .ps-empty {
   padding: 24px;
   text-align: center;
-  color: #6b7280;
+  color: #4b5563;
   background: #f9fafb;
   border: 1px dashed #d1d5db;
   border-radius: 12px;
+  font-weight: 500;
 }
 
 .ps-empty-inline {
@@ -180,9 +290,10 @@
   margin-top: 8px;
   border-radius: 10px;
   background: #f9fafb;
-  color: #6b7280;
+  color: #4b5563;
   border: 1px dashed #d1d5db;
   text-align: center;
+  font-weight: 500;
 }
 
 /* Table Head & Row */
@@ -196,8 +307,9 @@
 }
 
 .ps-head {
-  color: #6b7280;
+  color: #374151;
   font-size: 0.85rem;
+  font-weight: 600;
 }
 
 .ps-row {
@@ -243,6 +355,24 @@
   grid-template-columns: 1fr 1fr;
   gap: 16px;
   margin-bottom: 14px;
+}
+
+.card-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 16px;
+}
+
+.ps-period-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
 }
 
 .ps-block {
@@ -327,6 +457,31 @@
 }
 
 /* ===== Responsive Design ===== */
+@media (max-width: 992px) {
+  .admin-sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    min-height: 100vh !important;
+    transform: translateX(-100%) !important;
+    z-index: 1300 !important;
+    overflow-y: hidden !important;
+    overflow-x: hidden !important;
+  }
+
+  .admin-sidebar.open {
+    transform: translateX(0) !important;
+  }
+
+  .admin-content {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
 @media (max-width: 800px) {
   .ps-head,
   .ps-row {

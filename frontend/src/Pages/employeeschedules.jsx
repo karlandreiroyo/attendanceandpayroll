@@ -253,10 +253,32 @@ export default function EmployeeSchedules() {
         <section className="card">
           <div className="calendar-head">
             <div className="title">Work Schedule</div>
-            <div className="nav">
-              <button onClick={handlePrev} aria-label="Previous month">‹</button>
-              <div id="monthLabel">{`${monthName} ${year}`}</div>
-              <button onClick={handleNext} aria-label="Next month">›</button>
+            <div className="month-nav">
+              <button
+                className="icon-btn"
+                onClick={handlePrev}
+                aria-label="Previous month"
+              >
+                ◀
+              </button>
+              <input
+                className="month-picker"
+                type="month"
+                value={`${year}-${String(month + 1).padStart(2, "0")}`}
+                onChange={(e) => {
+                  const [yearVal, monthVal] = e.target.value.split("-").map(Number);
+                  if (!Number.isNaN(yearVal) && !Number.isNaN(monthVal)) {
+                    setCurrentDate(new Date(yearVal, monthVal - 1));
+                  }
+                }}
+              />
+              <button
+                className="icon-btn"
+                onClick={handleNext}
+                aria-label="Next month"
+              >
+                ▶
+              </button>
             </div>
           </div>
 

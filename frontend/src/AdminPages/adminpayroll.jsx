@@ -5,7 +5,6 @@ import "../AdminPages/admincss/adminPayroll.css";
 import { handleLogout as logout } from "../utils/logout";
 import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
 import { API_BASE_URL } from "../config/api";
-import { useSidebarState } from "../hooks/useSidebarState";
 
 function peso(value) {
   return `₱${Number(value || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -26,7 +25,7 @@ export default function AdminPayroll() {
   const isActive = (path) => location.pathname.startsWith(path);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [profileData, setProfileData] = useState(() => getSessionUserProfile());
-  const { isSidebarOpen, toggleSidebar, closeSidebar, isMobileView } = useSidebarState();
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
     const unsubscribe = subscribeToProfileUpdates(setProfileData);
@@ -123,9 +122,36 @@ export default function AdminPayroll() {
 
   const handleEntryChange = (userId, field, value) => {
     if (processed) return;
+    
+    // Parse the value properly - remove leading zeros and handle empty strings
+    let parsedValue = value;
+    if (field === 'daysWorked' || field === 'deductions') {
+      // Remove any non-numeric characters except decimal point
+      parsedValue = value.toString().replace(/[^\d.]/g, '');
+      
+      // Handle multiple decimal points - keep only the first one
+      const parts = parsedValue.split('.');
+      if (parts.length > 2) {
+        parsedValue = parts[0] + '.' + parts.slice(1).join('');
+      }
+      
+      // Remove leading zeros (but keep single zero or zero before decimal)
+      // Example: "024" -> "24", "0.5" -> "0.5", "0" -> "0"
+      if (parsedValue.length > 1) {
+        if (parsedValue[0] === '0' && parsedValue[1] !== '.') {
+          parsedValue = parsedValue.replace(/^0+/, '') || '0';
+        }
+      }
+      
+      // If empty, set to 0
+      if (parsedValue === '' || parsedValue === '.') {
+        parsedValue = '0';
+      }
+    }
+    
     setEntries((prev) => prev.map((entry) => {
       if (entry.userId !== userId) return entry;
-      const updated = recalcEntry({ ...entry, [field]: value });
+      const updated = recalcEntry({ ...entry, [field]: parsedValue });
       return updated;
     }));
   };
@@ -225,8 +251,8 @@ export default function AdminPayroll() {
   }, [period]);
 
   return (
-    <div className={`admin-layout${isSidebarOpen ? "" : " sidebar-collapsed"}`}>
-      <aside className={`admin-sidebar ${isSidebarOpen ? "open" : "collapsed"}`}>
+    <div className="admin-layout">
+      <aside className={`admin-sidebar${isSidebarOpen ? " open" : ""}`}>
         <div className="brand">
           <div className="brand-avatar">TI</div>
           <div className="brand-name">Tatay Ilio</div>
@@ -241,20 +267,18 @@ export default function AdminPayroll() {
           <Link className={`nav-item${isActive('/admin/reports') ? ' active' : ''}`} to="/admin/reports">Reports</Link>
         </nav>
       </aside>
-      {isSidebarOpen && isMobileView && (
-        <div className="sidebar-backdrop open" onClick={closeSidebar} />
-      )}
+      {isSidebarOpen && <div className="sidebar-backdrop open" onClick={() => setIsSidebarOpen(false)} />}
 
       <main className="admin-content">
         <header className="admin-topbar">
           <div className="topbar-left">
             <button
-              className="sidebar-toggle"
+              className="mobile-nav-toggle"
               type="button"
-              aria-label={isSidebarOpen ? "Collapse navigation" : "Expand navigation"}
-              onClick={toggleSidebar}
+              aria-label="Toggle navigation"
+              onClick={() => setIsSidebarOpen((open) => !open)}
             >
-              <span aria-hidden="true">{isSidebarOpen ? "✕" : "☰"}</span>
+              ☰
             </button>
             <h1>Payroll</h1>
           </div>
@@ -346,17 +370,17 @@ export default function AdminPayroll() {
           </div>
 
           <div className="payroll-table">
-          <div className="p-head">
-            <div className="cell heading">Employee</div>
-            <div className="cell heading">Position</div>
-            <div className="cell heading numeric">Daily Rate</div>
-            <div className="cell heading numeric">Days Worked</div>
-            <div className="cell heading numeric">Gross Pay</div>
-            <div className="cell heading numeric">Deductions</div>
-            <div className="cell heading numeric">Net Pay</div>
-            <div className="cell heading status">Status</div>
-            <div className="cell heading actions">Actions</div>
-          </div>
+            <div className="p-head">
+              <div>Employee</div>
+              <div>Position</div>
+              <div>Daily Rate</div>
+              <div>Days Worked</div>
+              <div>Gross Pay</div>
+              <div>Deductions</div>
+              <div>Net Pay</div>
+              <div>Status</div>
+              <div>Actions</div>
+            </div>
             <div className="p-body">
               {loading ? (
                 <div className="p-row">
@@ -369,7 +393,7 @@ export default function AdminPayroll() {
               ) : (
                 filteredEntries.map((entry) => (
                   <div key={entry.userId} className="p-row">
-                    <div className="cell">
+                    <div>
                       <div className="emp">
                         <div className="emp-avatar">{entry.name[0] || '?'}</div>
                         <div className="emp-meta">
@@ -378,57 +402,69 @@ export default function AdminPayroll() {
                         </div>
                       </div>
                     </div>
-                    <div className="cell">
+                    <div>
                       <div>{entry.position || '—'}</div>
+                      <div className="sub">{entry.department}</div>
                     </div>
-                    <div className="cell numeric">{peso(entry.dailyRate)}</div>
+                    <div>{peso(entry.dailyRate)}</div>
                     <div className="cell numeric">
                       <div className="numeric-input-wrapper">
                         <input
                           className="numeric-input"
-                          type="number"
+                          type="text"
+                          inputMode="decimal"
                           min="0"
-                          step="0.5"
-                          value={entry.daysWorked}
+                          value={entry.daysWorked || ''}
                           disabled={processed}
-                          onChange={(e) => handleEntryChange(entry.userId, 'daysWorked', e.target.value)}
+                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            // Allow empty string while typing, but handle it properly
+                            if (value === '') {
+                              handleEntryChange(entry.userId, 'daysWorked', '0');
+                            } else {
+                              handleEntryChange(entry.userId, 'daysWorked', value);
+                            }
+                          }}
+                          onBlur={(e) => {
+                            // Ensure we have a valid number on blur
+                            const numValue = Number(e.target.value) || 0;
+                            handleEntryChange(entry.userId, 'daysWorked', numValue.toString());
+                          }}
                         />
-                        {!processed && (
-                          <span className="numeric-preview" title={entry.daysWorked || 0}>
-                            {String(entry.daysWorked || 0)}
-                          </span>
-                        )}
                       </div>
                     </div>
-                    <div className="cell numeric">{peso(entry.grossPay)}</div>
+                    <div>{peso(entry.grossPay)}</div>
                     <div className="cell numeric">
                       <div className="numeric-input-wrapper">
                         <input
                           className="numeric-input"
-                          type="number"
+                          type="text"
+                          inputMode="decimal"
                           min="0"
-                          step="0.01"
-                          value={entry.deductions}
+                          value={entry.deductions || ''}
                           disabled={processed}
-                          onChange={(e) => handleEntryChange(entry.userId, 'deductions', e.target.value)}
+                          style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            // Allow empty string while typing, but handle it properly
+                            if (value === '') {
+                              handleEntryChange(entry.userId, 'deductions', '0');
+                            } else {
+                              handleEntryChange(entry.userId, 'deductions', value);
+                            }
+                          }}
+                          onBlur={(e) => {
+                            // Ensure we have a valid number on blur
+                            const numValue = Number(e.target.value) || 0;
+                            handleEntryChange(entry.userId, 'deductions', numValue.toString());
+                          }}
                         />
-                        {!processed && (
-                          <span
-                            className="numeric-preview"
-                            title={Number(entry.deductions || 0).toFixed(2)}
-                          >
-                            {Number(entry.deductions || 0).toFixed(2)}
-                          </span>
-                        )}
                       </div>
                     </div>
-                    <div className="cell numeric">{peso(entry.netPay)}</div>
-                    <div className="cell status">
-                      <span className={`pill ${processed ? 'pill-success' : 'pill-warn'}`}>{entry.status}</span>
-                    </div>
-                    <div className="cell actions">
-                      <button className="link" onClick={() => openPayrollDetails(entry)}>Details</button>
-                    </div>
+                    <div>{peso(entry.netPay)}</div>
+                    <div><span className={`pill ${processed ? 'pill-success' : 'pill-warn'}`}>{entry.status}</span></div>
+                    <div className="actions"><button className="link" onClick={() => openPayrollDetails(entry)}>Details</button></div>
                   </div>
                 ))
               )}

@@ -1,32 +1,109 @@
-/* Global Layout - Updated to match admin measurements */
-html, body {
-  margin: 0;
-  padding: 0;
-  height: 100%;
-  width: 100%;
-  font-family: "Segoe UI", Arial, sans-serif;
-  background-color: #f6f7fb;
-  color: #333;
-  overflow: hidden;
+/* ===== CRITICAL: Force sidebar to stay fixed - MUST BE FIRST ===== */
+/* Prevent body/html from scrolling - only admin-content scrolls */
+html,
+body {
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: hidden !important;
+  position: relative !important;
+  transform: none !important;
+  perspective: none !important;
+  filter: none !important;
+  will-change: auto !important;
+  display: block !important;
+}
+
+#root {
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: hidden !important;
+  position: relative !important;
+  transform: none !important;
+  perspective: none !important;
+  filter: none !important;
+  will-change: auto !important;
+  max-width: none !important;
+  text-align: left !important;
+}
+
+/* Force sidebar to be fixed - highest specificity possible */
+aside.admin-sidebar,
+.admin-layout aside.admin-sidebar,
+.admin-layout .admin-sidebar,
+aside.admin-sidebar.open,
+aside.admin-sidebar.collapsed,
+.admin-layout aside.admin-sidebar.open,
+.admin-layout aside.admin-sidebar.collapsed,
+div.admin-layout aside.admin-sidebar,
+body aside.admin-sidebar,
+html body aside.admin-sidebar {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  bottom: 0 !important;
+  right: auto !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  min-height: 100vh !important;
+  z-index: 1000 !important;
+  margin: 0 !important;
+  border-bottom: none !important;
+  border-top: none !important;
+  overflow-y: hidden !important;
+  overflow-x: hidden !important;
+  will-change: auto !important;
+  contain: none !important;
+  isolation: isolate !important;
+  box-sizing: border-box !important;
+  transform: none !important;
 }
 
 /* Override admin layout for employee-specific styling */
 .admin-layout {
   display: flex;
   height: 100vh;
+  max-height: 100vh;
   width: 100vw;
   background: #f6f7fb;
+  overflow-x: hidden !important;
+  overflow-y: hidden !important;
+  position: relative;
+  margin: 0;
+  padding: 0;
+  transform: none !important;
+  perspective: none !important;
+  filter: none !important;
+  will-change: auto !important;
+  isolation: auto !important;
 }
 
 .admin-sidebar {
   width: 240px;
-  background: #0e7d2a;
+  background: #0e7d2a !important;
   color: #fff;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 16px;
+  padding: 16px !important;
   flex-shrink: 0;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  bottom: 0 !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
+  min-height: 100vh !important;
+  overflow-y: hidden !important;
+  overflow-x: hidden !important;
+  z-index: 1000 !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  border-bottom: none !important;
+  border-top: none !important;
 }
 
 .brand {
@@ -34,6 +111,7 @@ html, body {
   align-items: center;
   gap: 10px;
   font-weight: 700;
+  flex-shrink: 0;
 }
 
 .brand-avatar {
@@ -53,12 +131,17 @@ html, body {
 
 .nav {
   display: grid;
-  gap: 6px;
+  gap: 2px;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  padding-bottom: 0;
 }
 
 .nav-item {
   text-decoration: none;
-  padding: 10px 12px;
+  padding: 8px 12px;
   color: #fff;
   border-radius: 6px;
   transition: background-color 0.2s;
@@ -77,10 +160,28 @@ html, body {
   display: flex;
   flex-direction: column;
   background: #f6f7fb;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
   min-width: 0;
   padding: 24px;
+  margin-left: 240px;
+  width: calc(100% - 240px);
+  height: 100vh;
+  max-height: 100vh;
+  box-sizing: border-box;
+  position: relative;
+  overscroll-behavior: contain;
+}
+
+/* Remove scrollable areas from forms - make whole forms visible */
+.admin-content form,
+.admin-content .lr-form,
+.admin-content .form,
+.admin-content section,
+.admin-content > section {
+  overflow: visible !important;
+  max-height: none !important;
+  height: auto !important;
 }
 
 .admin-topbar {
@@ -168,10 +269,6 @@ html, body {
   background: #f9fafb;
 }
 
-.brand-name {
-  color: #fff;
-}
-
 /* Menu */
 .menu {
   display: flex;
@@ -256,8 +353,8 @@ html, body {
 /* Content area - matches admin measurements */
 .admin-content > section {
   padding: 24px;
+  overflow: visible !important;
 }
-
 
 /* Topbar */
 .topbar {
@@ -294,7 +391,7 @@ html, body {
 }
 
 .welcome-sub {
-  color: #6b7280;
+  color: #4b5563;
   font-size: 16px;
   font-weight: 500;
 }
@@ -303,12 +400,16 @@ html, body {
 @media (max-width: 1400px) {
   .admin-content {
     padding: 20px;
+    margin-left: 240px;
+    width: calc(100% - 240px);
   }
 }
 
 @media (max-width: 1100px) {
   .admin-content {
     padding: 16px;
+    margin-left: 240px;
+    width: calc(100% - 240px);
   }
   
   .quick-grid {
@@ -317,9 +418,29 @@ html, body {
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 992px) {
+  .admin-sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    min-height: 100vh !important;
+    transform: translateX(-100%) !important;
+    z-index: 1300 !important;
+    overflow-y: hidden !important;
+    overflow-x: hidden !important;
+  }
+
+  .admin-sidebar.open {
+    transform: translateX(0) !important;
+  }
+
   .admin-content {
-    padding: 12px;
+    padding: 16px;
+    margin-left: 0;
+    width: 100%;
   }
   
   .admin-topbar {
@@ -346,10 +467,6 @@ html, body {
 }
 
 @media (max-width: 700px) {
-  .admin-sidebar { 
-    display: none; 
-  }
-  
   .admin-content { 
     padding: 12px; 
   }
@@ -430,11 +547,12 @@ html, body {
 
 .qc-sub {
   font-size: 0.85rem;
-  color: #6b7280;
+  color: #4b5563;
   margin-top: 2px;
+  font-weight: 500;
 }
 
-.qc-chevron { color: #9ca3af; font-size: 20px; }
+.qc-chevron { color: #374151; font-size: 20px; }
 
 /* Grid Sections */
 .grid-2 {
@@ -544,9 +662,10 @@ html, body {
   border: 1px dashed #d1d5db;
   border-radius: 12px;
   background: #f9fafb;
-  color: #6b7280;
+  color: #4b5563;
   font-size: 0.95rem;
   text-align: center;
+  font-weight: 500;
 }
 
 /* Attendance Section */
@@ -556,9 +675,10 @@ html, body {
   border-radius: 8px;
   display: grid;
   place-items: center;
-  color: #6b7280;
+  color: #4b5563;
   border: 1px dashed #14a039;
   transition: background 0.3s, transform 0.2s;
+  font-weight: 500;
 }
 
 .calendar:hover {
@@ -572,9 +692,10 @@ html, body {
   border-radius: 8px;
   display: grid;
   place-items: center;
-  color: #6b7280;
+  color: #4b5563;
   border: 1px dashed #ff8c00;
   transition: background 0.3s, transform 0.2s;
+  font-weight: 500;
 }
 
 .summary:hover {
@@ -702,8 +823,9 @@ html, body {
 
 .subtle-title {
   font-size: 0.9rem;
-  color: #6b7280;
+  color: #4b5563;
   margin-bottom: 10px;
+  font-weight: 600;
 }
 
 .att-grid {

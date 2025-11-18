@@ -28,7 +28,7 @@
 
 .login-subtitle {
   font-size: 13px;
-  color: #6b7280;
+  color: #374151;
   margin-bottom: 24px;
 }
 
@@ -61,7 +61,7 @@
 .back-link {
   margin-top: 16px;
   display: inline-block;
-  color: #6b7280;
+  color: #374151;
   font-size: 13px;
   text-decoration: none;
 }
@@ -142,7 +142,7 @@
   border: none;
   font-size: 24px;
   cursor: pointer;
-  color: #6b7280;
+  color: #374151;
   padding: 0;
   width: 30px;
   height: 30px;
@@ -234,7 +234,7 @@
 }
 
 .field-hint {
-  color: #6b7280;
+  color: #374151;
   font-size: 11px;
   margin-top: 4px;
   font-style: italic;

@@ -49,10 +49,10 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.btn.primary { 
-  background: #14a039; 
-  color: #fff; 
-  border-color: #14a039; 
+.btn.primary {
+  background: #14a039;
+  color: #fff;
+  border-color: #14a039;
   transition: all 0.2s ease;
 }
 
@@ -102,9 +102,9 @@
 
 .thead {
   background: #f9fafb;
-  color: #6b7280;
+  color: #374151;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   padding: 12px 14px;
 }
 
@@ -142,8 +142,9 @@
 }
 
 .emp-email {
-  color: #6b7280;
+  color: #374151;
   font-size: 12px;
+  font-weight: 500;
 }
 
 /* ----- Action Buttons ----- */
@@ -252,30 +253,40 @@
    RESPONSIVE DESIGN
 ================================ */
 @media (max-width: 1200px) {
-  .grid-head, 
+
+  .grid-head,
   .grid-row {
-    grid-template-columns: 180px repeat(31, 50px);
-    min-width: 1730px;
+    grid-template-columns: 150px repeat(31, 72px);
+    min-width: 2382px;
   }
-  
+
+  .sticky-col,
+  .head-cell:first-child,
   .emp-col {
-    min-width: 180px;
-    padding: 6px 8px;
+    width: 150px;
+    min-width: 150px;
+    max-width: 150px;
   }
-  
+
+  .grid-head .sticky-col {
+    z-index: 30 !important;
+  }
+
+  .grid-row .sticky-col {
+    z-index: 0 !important;
+  }
+
+  .emp-name {
+    font-size: 13px;
+  }
+
+  .emp-dept {
+    font-size: 11px;
+  }
+
   .cell {
-    min-width: 50px;
-    height: 35px;
-  }
-  
-  .head-cell {
-    min-width: 50px;
-    padding: 6px 2px;
-    font-size: 10px;
-  }
-  
-  .head-cell:first-child {
-    min-width: 180px;
+    min-width: 72px;
+    height: 60px;
   }
 }
 
@@ -285,44 +296,45 @@
     gap: 12px;
     align-items: stretch;
   }
-  
+
   .toolbar-actions {
     flex-wrap: wrap;
     justify-content: center;
   }
-  
-  .grid-head, 
+
+  .grid-head,
   .grid-row {
-    grid-template-columns: 160px repeat(31, 45px);
-    min-width: 1555px;
+    grid-template-columns: 140px repeat(31, 65px);
+    min-width: 2155px;
   }
-  
+
+  .sticky-col,
+  .head-cell:first-child,
   .emp-col {
-    min-width: 160px;
-    padding: 4px 6px;
+    width: 140px;
+    min-width: 140px;
+    max-width: 140px;
   }
-  
-  .cell {
-    min-width: 45px;
-    height: 32px;
+
+  .grid-head .sticky-col {
+    z-index: 30 !important;
   }
-  
-  .head-cell {
-    min-width: 45px;
-    padding: 4px 1px;
-    font-size: 9px;
+
+  .grid-row .sticky-col {
+    z-index: 0 !important;
   }
-  
-  .head-cell:first-child {
-    min-width: 160px;
-  }
-  
+
   .emp-name {
     font-size: 12px;
   }
-  
+
   .emp-dept {
-    font-size: 10px;
+    font-size: 10.5px;
+  }
+
+  .cell {
+    min-width: 65px;
+    height: 55px;
   }
 }
 
@@ -336,7 +348,10 @@
   border-radius: 12px;
   padding: 16px;
   max-width: 100%;
-  overflow: hidden;
+  overflow: visible;
+  padding-bottom: 24px;
+  /* Ensure legend is always accessible */
+  min-height: fit-content;
 }
 
 .schedule-toolbar {
@@ -347,7 +362,12 @@
   padding-right: 40px;
 }
 
-.month-nav { display: flex; align-items: center; gap: 8px; }
+.month-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .month-picker {
   border: 1px solid #cbd5e1;
   border-radius: 12px;
@@ -359,24 +379,27 @@
   background: #ffffff;
   box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
 }
+
 .month-picker:focus {
   outline: 2px solid #60a5fa;
   outline-offset: 2px;
 }
+
 .month-picker::-webkit-calendar-picker-indicator {
   cursor: pointer;
   filter: invert(25%) sepia(58%) saturate(457%) hue-rotate(88deg) brightness(94%) contrast(90%);
   opacity: 1;
 }
+
 .month-picker::-webkit-clear-button,
 .month-picker::-webkit-inner-spin-button {
   display: none;
 }
 
-.btn.warn { 
-  background: #f97316; 
-  border-color: #f97316; 
-  color: #fff; 
+.btn.warn {
+  background: #f97316;
+  border-color: #f97316;
+  color: #fff;
   transition: all 0.2s ease;
 }
 
@@ -387,21 +410,33 @@
   box-shadow: 0 2px 4px rgba(234, 88, 12, 0.3);
 }
 
-.toolbar-actions { 
-  display: flex; 
-  gap: 8px; 
+.toolbar-actions {
+  display: flex;
+  gap: 8px;
 }
 
-.schedule-grid { 
-  overflow-x: auto; 
-  overflow-y: auto;
-  border: 1px solid #e5e7eb; 
-  border-radius: 12px; 
-  max-width: calc(100% - 40px);
-  max-height: 520px;
+.schedule-grid {
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  max-width: calc(100% - 24px);
+  /* Ensure at least 8 employees are visible: 8 rows * 66px (65px cell + 1px border) + ~55px header = ~583px */
+  height: 583px !important;
+  min-height: 583px !important;
+  max-height: calc(100vh - 420px) !important;
   position: relative;
-  margin-left: 20px;
+  margin-left: 12px;
+  margin-bottom: 20px;
   background: #fff;
+  /* Ensure proper scrolling context */
+  -webkit-overflow-scrolling: touch;
+  display: block;
+  /* Force scrollbar to always be visible for better UX */
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+  /* Ensure content can overflow and scroll */
+  overscroll-behavior: contain;
 }
 
 .schedule-grid::-webkit-scrollbar {
@@ -422,53 +457,132 @@
 .schedule-grid::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
-.grid-head { 
-  display: grid; 
-  grid-template-columns: 200px repeat(31, 60px); 
-  background: #f9fafb; 
-  min-width: 2060px;
-}
-.grid-row { 
-  display: grid; 
-  grid-template-columns: 200px repeat(31, 60px); 
-  border-top: 1px solid #f1f5f9; 
-  min-width: 2060px;
+
+.grid-head {
+  display: grid;
+  grid-template-columns: 160px repeat(31, 80px);
+  background: #f9fafb;
+  min-width: 2640px;
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  /* Create stacking context for sticky children */
+  isolation: isolate;
 }
 
-.sticky { position: sticky; top: 0; z-index: 1; }
-.sticky-col { position: sticky; left: 0; background: #fff; z-index: 2; box-shadow: 1px 0 0 #f1f5f9; }
+/* Ensure grid-head calendar cells stay below employee column */
+.grid-head .head-cell:not(.sticky-col) {
+  z-index: 1;
+  position: sticky;
+  top: 0;
+}
 
-.head-cell { 
-  padding: 8px 4px; 
-  border-left: 1px solid #f1f5f9; 
-  text-align: center; 
-  color: #6b7280; 
-  font-size: 11px; 
-  min-width: 60px;
+.grid-row {
+  display: grid;
+  grid-template-columns: 160px repeat(31, 80px);
+  border-top: 1px solid #f1f5f9;
+  min-width: 2640px;
+  position: relative;
 }
-.head-cell:first-child { 
-  border-left: 0; 
-  text-align: left; 
-  color: #111827; 
-  font-weight: 700; 
-  min-width: 200px;
+
+.sticky {
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
-.head-day { 
-  font-weight: 700; 
-  color: #111827; 
+
+.sticky-col {
+  position: sticky !important;
+  left: 0 !important;
+  background: #fff !important;
+  z-index: 0 !important;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.08) !important;
+  width: 160px !important;
+  min-width: 160px !important;
+  max-width: 160px !important;
+  box-sizing: border-box !important;
+}
+
+.grid-row .sticky-col {
+  border-right: 1px solid #e5e7eb !important;
+  background: #fff !important;
+  z-index: 0 !important;
+  position: sticky !important;
+  left: 0 !important;
+  /* Ensure employee names stay below the header */
+  top: auto !important;
+}
+
+.head-cell {
+  padding: 10px 6px;
+  border-left: 1px solid #f1f5f9;
+  text-align: center;
+  color: #374151;
   font-size: 12px;
-}
-.head-dow { 
-  font-size: 10px; 
-  color: #6b7280; 
+  min-width: 80px;
+  font-weight: 600;
+  position: relative;
+  z-index: 1;
+  background: #f9fafb;
 }
 
-.emp-col { 
-  padding: 8px 12px; 
-  display: grid; 
-  gap: 2px; 
-  min-width: 200px;
+/* Ensure calendar header cells don't overlay employee column */
+.grid-head .head-cell:not(.sticky-col) {
+  z-index: 1;
+  position: relative;
 }
+
+.head-cell:first-child {
+  border-left: 0;
+  text-align: left;
+  color: #111827;
+  font-weight: 700;
+  min-width: 160px;
+  max-width: 160px;
+  box-sizing: border-box;
+}
+
+/* Ensure the Employee header cell stays fixed and above everything */
+.grid-head .head-cell.sticky-col,
+.grid-head .sticky-col {
+  z-index: 30 !important;
+  position: sticky !important;
+  left: 0 !important;
+  top: 0 !important;
+  background: #f9fafb !important;
+  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.08) !important;
+  /* Create a stacking context to ensure it's always on top */
+  isolation: isolate;
+  /* Ensure it's always rendered on top */
+  transform: translateZ(0);
+}
+
+.head-day {
+  font-weight: 700;
+  color: #111827;
+  font-size: 14px;
+}
+
+.head-dow {
+  font-size: 11px;
+  color: #374151;
+  font-weight: 600;
+}
+
+.emp-col {
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+  min-width: 160px;
+  max-width: 160px;
+  overflow: hidden;
+  box-sizing: border-box;
+  /* Ensure text doesn't overflow */
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
 .emp-indicator {
   width: 18px;
   height: 4px;
@@ -476,39 +590,157 @@
   display: inline-block;
   margin-bottom: 6px;
 }
-.emp-name { 
-  font-weight: 600; 
-  color: #111827; 
-  font-size: 13px;
-}
-.emp-dept { 
-  color: #6b7280; 
-  font-size: 11px; 
+
+.emp-name {
+  font-weight: 600;
+  color: #111827;
+  font-size: 14px;
 }
 
-.cell { 
-  height: 40px; 
-  border-left: 1px solid #f1f5f9; 
-  background: #fff; 
-  cursor: pointer; 
-  min-width: 60px;
+.emp-dept {
+  color: #374151;
+  font-size: 12px;
+  font-weight: 500;
 }
-.grid-row .cell:first-of-type { border-left: 0; }
-.cell:hover { outline: 2px solid #dbeafe; outline-offset: -2px; }
+
+.cell {
+  height: 65px;
+  border-left: 1px solid #f1f5f9;
+  background: #fff;
+  min-width: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  transition: box-shadow 0.18s ease, border-color 0.18s ease;
+  position: relative;
+  z-index: 0 !important;
+  overflow: hidden;
+}
+
+.grid-row .cell:first-of-type {
+  border-left: 0;
+}
+
+.cell:hover,
+.cell:focus-within {
+  box-shadow: inset 0 0 0 2px #dbeafe;
+  border-color: #bfdbfe;
+}
+
+.cell-empty {
+  background: #fff;
+}
+
+.cell-has-value {
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.06);
+}
+
+/* Shift select styling to fit text inside boxes */
+.cell .shift-select {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  color: #111827;
+  padding: 0 4px;
+  cursor: pointer;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  outline: none;
+  line-height: 1.3;
+  box-sizing: border-box;
+}
+
+.cell .shift-select:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.cell .shift-select option {
+  padding: 6px 10px;
+  font-size: 13px;
+  background: #fff;
+  color: #111827;
+  white-space: normal;
+}
 
 /* Shift colors */
-.cell-M { background: #eafff0; }   /* Morning - green tint */
-.cell-A { background: #fff7cc; }   /* Afternoon - yellow tint */
-.cell-N { background: #e0efff; }   /* Night - blue tint */
-.cell-O { background: #f3f4f6; }   /* Day Off - gray */
+.cell-M {
+  background: #eafff0;
+}
 
-.legend { display: flex; gap: 18px; flex-wrap: wrap; color: #6b7280; font-size: 12px; padding: 10px 4px 0; }
-.legend-item { display: inline-flex; align-items: center; gap: 8px; }
-.dot { width: 14px; height: 10px; border-radius: 4px; display: inline-block; }
-.dot-M { background: #22c55e33; border: 1px solid #16a34a55; }
-.dot-A { background: #facc1533; border: 1px solid #eab30855; }
-.dot-N { background: #60a5fa33; border: 1px solid #3b82f655; }
-.dot-O { background: #e5e7eb; border: 1px solid #e5e7eb; }
+/* Morning - green tint */
+.cell-A {
+  background: #fff7cc;
+}
+
+/* Afternoon - yellow tint */
+.cell-N {
+  background: #e0efff;
+}
+
+/* Night - blue tint */
+.cell-O {
+  background: #f3f4f6;
+}
+
+/* Day Off - gray */
+
+.legend {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 16px 4px 8px;
+  margin-top: 16px;
+  margin-bottom: 8px;
+  border-top: 1px solid #e5e7eb;
+  position: relative;
+  z-index: 1;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dot {
+  width: 14px;
+  height: 10px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.dot-M {
+  background: #22c55e33;
+  border: 1px solid #16a34a55;
+}
+
+.dot-A {
+  background: #facc1533;
+  border: 1px solid #eab30855;
+}
+
+.dot-N {
+  background: #60a5fa33;
+  border: 1px solid #3b82f655;
+}
+
+.dot-O {
+  background: #e5e7eb;
+  border: 1px solid #e5e7eb;
+}
 
 .department-legend {
   display: flex;
@@ -539,8 +771,9 @@
 .grid-empty {
   padding: 48px 24px;
   text-align: center;
-  color: #6b7280;
+  color: #374151;
   font-size: 0.95rem;
+  font-weight: 500;
   min-height: 160px;
 }
 
@@ -553,4 +786,3 @@
   color: #047857;
   font-size: 0.95rem;
 }
-

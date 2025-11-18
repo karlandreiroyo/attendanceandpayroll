@@ -18,7 +18,7 @@
 .lr-card-label {
   font-size: 0.75rem;
   text-transform: uppercase;
-  color: #9ca3af;
+  color: #4b5563;
   letter-spacing: 0.05em;
   font-weight: 500;
   margin-bottom: 0.5rem;
@@ -99,7 +99,7 @@
 }
 
 .lr-filters-row input[type="search"]::placeholder {
-  color: #9ca3af;
+  color: #4b5563;
 }
 
 .lr-filters-row .btn.secondary {
@@ -117,7 +117,7 @@
 
 .lr-filters-row .btn.secondary:hover {
   background: #f9fafb;
-  border-color: #9ca3af;
+  border-color: #4b5563;
 }
 
 .lr-date-field {
@@ -131,7 +131,7 @@
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #6b7280;
+  color: #374151;
   font-weight: 500;
 }
 
@@ -155,7 +155,30 @@
   padding: 0;
   overflow: auto;
   border-radius: 12px;
-  max-height: 560px;
+  max-height: calc(100vh - 500px);
+  min-height: 400px;
+  /* Better scrollbar styling */
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+.lr-table::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.lr-table::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.lr-table::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.lr-table::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 .lr-table-head,
@@ -173,8 +196,12 @@
   text-transform: uppercase;
   font-size: 0.75rem;
   letter-spacing: 0.05em;
-  color: #6b7280;
+  color: #374151;
   border-bottom: 1px solid #e5e7eb;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .lr-table-row {
@@ -219,11 +246,11 @@
 
 .lr-emp-meta {
   font-size: 0.8125rem;
-  color: #6b7280;
+  color: #374151;
 }
 
 .lr-muted {
-  color: #6b7280;
+  color: #374151;
   font-size: 0.8125rem;
 }
 
@@ -275,7 +302,7 @@
 
 .btn.mini.ghost:hover:not(:disabled) {
   background: #f9fafb;
-  border-color: #9ca3af;
+  border-color: #4b5563;
 }
 
 .pill {
@@ -314,7 +341,7 @@
 .lr-empty {
   padding: 3rem 1.5rem;
   text-align: center;
-  color: #9ca3af;
+  color: #4b5563;
   font-size: 0.9375rem;
 }
 
@@ -369,7 +396,7 @@
   border: none;
   font-size: 1.4rem;
   cursor: pointer;
-  color: #6b7280;
+  color: #374151;
   line-height: 1;
   padding: 0.25rem;
 }
@@ -395,7 +422,7 @@
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #6b7280;
+  color: #374151;
   font-weight: 600;
 }
 
@@ -407,7 +434,7 @@
 
 .lr-modal-subvalue {
   font-size: 0.9rem;
-  color: #6b7280;
+  color: #374151;
 }
 
 .lr-modal-text {
@@ -483,6 +510,7 @@
 
   .lr-table {
     max-height: none;
+    min-height: auto;
   }
 
   .lr-table-head {

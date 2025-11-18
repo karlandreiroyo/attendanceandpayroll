@@ -179,14 +179,6 @@ export default function AdminLeaveRequests() {
     });
   }, [requests, searchTerm, statusFilter, typeFilter, deptFilter, dateRange]);
 
-  const summary = useMemo(() => {
-    const total = requests.length;
-    const pending = requests.filter((req) => req.status === "Pending").length;
-    const approved = requests.filter((req) => req.status === "Approved").length;
-    const rejected = requests.filter((req) => req.status === "Rejected").length;
-    return { total, pending, approved, rejected };
-  }, [requests]);
-
   async function updateRequestStatus(id, status) {
     setUpdating((prev) => [...prev, id]);
     try {
@@ -293,25 +285,6 @@ export default function AdminLeaveRequests() {
             </div>
           </div>
         </header>
-
-        <section className="lr-cards">
-          <div className="lr-card">
-            <div className="lr-card-label">Total Requests</div>
-            <div className="lr-card-value">{summary.total}</div>
-          </div>
-          <div className="lr-card">
-            <div className="lr-card-label">Pending</div>
-            <div className="lr-card-value pending">{summary.pending}</div>
-          </div>
-          <div className="lr-card">
-            <div className="lr-card-label">Approved</div>
-            <div className="lr-card-value approved">{summary.approved}</div>
-          </div>
-          <div className="lr-card">
-            <div className="lr-card-label">Rejected</div>
-            <div className="lr-card-value rejected">{summary.rejected}</div>
-          </div>
-        </section>
 
         <section className="lr-filters card">
           {notice && <div className={`lr-alert ${notice.type}`}>{notice.message}</div>}

@@ -98,7 +98,7 @@
 
 .profile-input:read-only {
   background: #f9fafb;
-  color: #6b7280;
+  color: #374151;
   cursor: not-allowed;
   border-color: #e5e7eb;
 }
@@ -111,7 +111,7 @@
 
 .profile-help {
   font-size: 13px;
-  color: #6b7280;
+  color: #374151;
   font-style: italic;
   margin-top: 4px;
 }
@@ -150,7 +150,7 @@
   padding: 8px;
   border-radius: 6px;
   font-size: 18px;
-  color: #6b7280;
+  color: #374151;
   transition: all 0.2s ease;
   display: flex;
   align-items: center;
@@ -300,14 +300,14 @@
 
 .notification-timestamp {
   font-size: 12px;
-  color: #6b7280;
+  color: #374151;
 }
 
 .notification-close {
   background: transparent;
   border: none;
   cursor: pointer;
-  color: #9ca3af;
+  color: #4b5563;
   font-size: 18px;
   padding: 6px;
   border-radius: 6px;
