@@ -331,18 +331,27 @@ export class PayrollService {
     }
 
     const employees = (data as RawEmployee[] | null) ?? [];
+    
+    // UUID validation regex
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-    return employees.map((emp) => {
-      const userId = emp.user_id ?? '';
-      const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || 'Unnamed';
-      return {
-        userId,
-        name,
-        department: emp.department || 'Unassigned',
-        position: emp.position || '',
-        dailyRate: Number(emp.daily_rate) || 0,
-      };
-    });
+    return employees
+      .filter((emp) => {
+        const userId = emp.user_id;
+        // Only include employees with valid UUID user_id
+        return userId && typeof userId === 'string' && uuidRegex.test(userId);
+      })
+      .map((emp) => {
+        const userId = emp.user_id ?? '';
+        const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || 'Unnamed';
+        return {
+          userId,
+          name,
+          department: emp.department || 'Unassigned',
+          position: emp.position || '',
+          dailyRate: Number(emp.daily_rate) || 0,
+        };
+      });
   }
 
   private async fetchScheduleEntries(year: number, month: number): Promise<RawScheduleEntry[]> {
@@ -356,7 +365,14 @@ export class PayrollService {
       throw new BadRequestException(error.message);
     }
 
-    return (data as RawScheduleEntry[] | null) ?? [];
+    const entries = (data as RawScheduleEntry[] | null) ?? [];
+    
+    // Filter out entries with invalid UUIDs
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return entries.filter((entry) => {
+      const userId = entry.user_id;
+      return userId && typeof userId === 'string' && uuidRegex.test(userId);
+    });
   }
 
   private computeSummary(entries: PayrollEntryResponse[]) {

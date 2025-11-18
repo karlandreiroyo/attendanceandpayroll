@@ -84,12 +84,18 @@ export class SchedulesService {
       throw new BadRequestException(deleteError.message);
     }
 
+    // UUID validation regex
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    
     const entries = Object.entries(dto.shifts || {})
       .map(([key, shift]) => {
         if (!shift) return null;
         const [userId, dayString] = key.split('-');
         const day = Number(dayString);
-        if (!userId || Number.isNaN(day)) return null;
+        // Validate UUID format before including
+        if (!userId || Number.isNaN(day) || !uuidRegex.test(userId)) {
+          return null;
+        }
         return {
           user_id: userId,
           year: dto.year,
