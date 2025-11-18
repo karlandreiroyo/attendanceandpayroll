@@ -3,6 +3,9 @@
   gap: 1rem;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   margin-bottom: 1.5rem;
+  width: 100%;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .lr-card {
@@ -13,6 +16,9 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  width: 100%;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .lr-card-label {

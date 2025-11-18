@@ -4,6 +4,9 @@
   display: grid;
   grid-template-columns: 280px 1fr;
   gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 /* === Report Sidebar === */
@@ -16,6 +19,9 @@
   gap: 12px;
   height: fit-content;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  width: 100%;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .rt-title {
@@ -197,6 +203,10 @@
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   overflow: hidden;
+  width: 100%;
+  overflow-x: auto;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .table-empty {
@@ -218,21 +228,38 @@
 .t-row {
   display: grid;
   align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.t-head div,
+.t-row div {
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  justify-content: flex-start;
 }
 
 .t-head.columns-5,
 .t-row.columns-5 {
-  grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr 1.4fr;
+  min-width: 960px;
 }
 
 .t-head.columns-6,
 .t-row.columns-6 {
-  grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr 1fr;
+  grid-template-columns: 1.6fr 1fr 1fr 0.9fr 1fr 1.7fr;
+  min-width: 1100px;
 }
 
 .t-head.columns-7,
 .t-row.columns-7 {
-  grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr 1fr 1fr;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr 1fr 1.7fr;
+  min-width: 1220px;
 }
 
 .t-head {
@@ -247,6 +274,26 @@
   padding: 10px 12px;
   border-top: 1px solid #f1f5f9;
   background: #fff;
+}
+
+.t-head div:first-child,
+.t-row div:first-child {
+  font-weight: 600;
+  color: #111827;
+}
+
+.t-head.columns-6 div:nth-child(4),
+.t-row.columns-6 div:nth-child(4) {
+  justify-content: center;
+}
+
+.t-head.columns-6 div:nth-child(6),
+.t-row.columns-6 div:nth-child(6),
+.t-head.columns-7 div:last-child,
+.t-row.columns-7 div:last-child {
+  justify-content: flex-start;
+  min-width: 200px;
+  white-space: nowrap;
 }
 
 /* === Trend Chart Placeholder === */

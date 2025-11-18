@@ -16,6 +16,9 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 /* ----- Header ----- */
@@ -121,7 +124,9 @@
   width: 100%;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
-  overflow: hidden;
+  overflow-x: auto;
+  box-sizing: border-box;
+  max-width: 100%;
   min-width: 0; /* Ensure table can shrink */
 }
 
