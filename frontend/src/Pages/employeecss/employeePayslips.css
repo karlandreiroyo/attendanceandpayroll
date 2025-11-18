@@ -238,6 +238,43 @@
 }
 
 /* Detail Section */
+.ps-detail {
+  max-width: 900px;
+  margin: 0 auto 32px;
+}
+
+.ps-print-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.ps-company-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0e7d2a;
+}
+
+.ps-company-tagline {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.ps-print-meta .ps-kv {
+  border: none;
+  padding: 4px 0;
+}
+
+.ps-print-meta {
+  min-width: 240px;
+}
+
 .ps-detail .ps-detail-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -269,6 +306,26 @@
   font-weight: 700;
 }
 
+.ps-time-highlight {
+  background: #e0f2fe;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.ps-deductions-highlight {
+  background: #fee2e2;
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: #b91c1c;
+}
+
+.ps-netpay-highlight {
+  background: #dcfce7;
+  border-radius: 8px;
+  padding: 10px 12px;
+  border: 1px solid #16a34a;
+}
+
 /* Earnings & Deductions */
 .ps-earnings,
 .ps-deductions {
@@ -298,6 +355,25 @@
 
 .ps-btn:hover {
   background: #0f7a2a;
+}
+
+.ps-period-label {
+  font-size: 18px;
+  font-weight: 600;
+  text-align: center;
+  color: #374151;
+  margin-bottom: 12px;
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.ps-issue-date {
+  text-align: center;
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 16px;
+  font-style: italic;
 }
 
 .ps-notice {
@@ -335,5 +411,299 @@
 
   .ps-detail .ps-detail-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ===== Print Styles ===== */
+@media print {
+  /* Hide navigation, sidebar, header, and other UI elements */
+  .admin-sidebar,
+  .admin-topbar,
+  .sidebar-toggle,
+  .profile-btn,
+  .profile-popover,
+  .ps-list,
+  .ps-notice,
+  .ps-actions,
+  .sidebar-backdrop,
+  .card.ps-list {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Show only the payslip detail section */
+  .card.ps-detail {
+    display: block !important;
+    visibility: visible !important;
+  }
+
+  /* Reset layout for print */
+  body,
+  html {
+    margin: 0;
+    padding: 0;
+    background: white;
+  }
+
+  .admin-layout {
+    display: block !important;
+    height: auto !important;
+    width: 100% !important;
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    position: static !important;
+  }
+
+  .admin-content {
+    display: block !important;
+    overflow: visible !important;
+    background: white !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Payslip container */
+  .card.ps-detail {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 40px !important;
+    background: white !important;
+    border: none !important;
+    box-shadow: none !important;
+    display: block !important;
+    visibility: visible !important;
+    page-break-inside: avoid;
+  }
+
+  .ps-detail > * {
+    display: block !important;
+    visibility: visible !important;
+  }
+
+  /* Print-friendly payslip header */
+  .ps-detail .card-title {
+    font-size: 28px;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 8px;
+    color: #111827;
+    border-bottom: 3px solid #0e7d2a;
+    padding-bottom: 12px;
+  }
+
+  .ps-print-header {
+    border: none;
+    border-bottom: 2px solid #e5e7eb;
+    border-radius: 0;
+    padding-bottom: 24px;
+    margin-bottom: 24px;
+  }
+
+  .ps-company-name {
+    font-size: 22px;
+  }
+
+  .ps-company-tagline {
+    font-size: 15px;
+  }
+
+  .ps-period-label {
+    font-size: 20px;
+    font-weight: 600;
+    text-align: center;
+    color: #374151;
+    margin-bottom: 12px;
+    padding: 12px;
+    background: #f9fafb;
+    border-radius: 8px;
+  }
+
+  .ps-issue-date {
+    text-align: center;
+    font-size: 14px;
+    color: #6b7280;
+    margin-bottom: 24px;
+    font-style: italic;
+  }
+
+  /* Highlight key financial details in print */
+  .ps-block .ps-kv.total {
+    background: #ecfdf5;
+    padding: 16px;
+    margin: 12px -20px -12px -20px;
+    border-radius: 0 0 8px 8px;
+    border-top: 3px solid #0e7d2a;
+    border-bottom: none;
+  }
+
+  /* Make deductions section prominent */
+  .ps-deductions {
+    border-left: 4px solid #ef4444;
+  }
+
+  .ps-deductions .ps-subtitle {
+    color: #dc2626;
+  }
+
+  /* Print layout adjustments */
+  .ps-detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+    page-break-inside: avoid;
+  }
+
+  .ps-block {
+    background: white;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 20px;
+    page-break-inside: avoid;
+  }
+
+  .ps-subtitle {
+    font-size: 16px;
+    font-weight: 700;
+    color: #0e7d2a;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e5e7eb;
+  }
+
+  .ps-kv {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    font-size: 14px;
+    border-bottom: 1px dotted #d1d5db;
+  }
+
+  .ps-kv:last-child {
+    border-bottom: none;
+  }
+
+  .ps-kv.total {
+    font-weight: 700;
+    font-size: 18px;
+    color: #0e7d2a;
+    margin-top: 8px;
+    padding-top: 16px;
+    padding-bottom: 16px;
+    border-top: 3px solid #0e7d2a;
+    border-bottom: none;
+    background: #ecfdf5;
+    border-radius: 6px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  /* Emphasize time/days worked in print */
+  .ps-time-highlight {
+    font-weight: 600;
+    font-size: 15px;
+    background: #f0f9ff;
+    padding: 10px 12px;
+    border-radius: 6px;
+    margin: 4px 0;
+    border: 1px solid #bae6fd;
+  }
+
+  /* Make deductions prominent in print */
+  .ps-deductions-highlight {
+    font-weight: 600;
+    font-size: 15px;
+    color: #dc2626;
+    background: #fef2f2;
+    padding: 10px 12px;
+    border-radius: 6px;
+    margin: 4px 0;
+    border: 1px solid #fecaca;
+  }
+
+  /* Emphasize net pay in print */
+  .ps-netpay-highlight {
+    font-weight: 700;
+    font-size: 20px;
+    color: #0e7d2a;
+    background: #ecfdf5;
+    padding: 16px 12px;
+    border-radius: 6px;
+    margin-top: 12px;
+    border: 2px solid #0e7d2a;
+  }
+
+  .ps-kv span:first-child {
+    font-weight: 600;
+    color: #4b5563;
+  }
+
+  .ps-kv span:last-child {
+    color: #111827;
+  }
+
+  /* Earnings and Deductions sections */
+  .ps-earnings,
+  .ps-deductions {
+    background: white;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 20px;
+    page-break-inside: avoid;
+  }
+
+  .ps-notes {
+    background: white;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 20px;
+    page-break-inside: avoid;
+  }
+
+  .ps-note-text {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 12px;
+    color: #374151;
+    min-height: 60px;
+    font-size: 14px;
+  }
+
+  /* Company branding for print */
+  .ps-detail::before {
+    content: "Tatay Ilio";
+    display: block;
+    text-align: center;
+    font-size: 24px;
+    font-weight: 700;
+    color: #0e7d2a;
+    margin-bottom: 16px;
+  }
+
+  /* Page break control */
+  .ps-detail {
+    page-break-after: always;
+  }
+
+  .ps-detail:last-child {
+    page-break-after: auto;
+  }
+
+  /* Ensure proper spacing */
+  @page {
+    margin: 1.5cm;
+    size: A4;
+  }
+
+  /* Hide empty states when printing */
+  .ps-empty {
+    display: none;
   }
 }
