@@ -84,18 +84,16 @@ export class SchedulesService {
       throw new BadRequestException(deleteError.message);
     }
 
-    // UUID validation regex
+    // UUID validation regex - only insert entries with valid UUIDs
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    
+
     const entries = Object.entries(dto.shifts || {})
       .map(([key, shift]) => {
         if (!shift) return null;
         const [userId, dayString] = key.split('-');
         const day = Number(dayString);
-        // Validate UUID format before including
-        if (!userId || Number.isNaN(day) || !uuidRegex.test(userId)) {
-          return null;
-        }
+        // Only include entries with valid UUIDs (skip numeric IDs)
+        if (!userId || Number.isNaN(day) || !uuidRegex.test(userId)) return null;
         return {
           user_id: userId,
           year: dto.year,
@@ -106,16 +104,16 @@ export class SchedulesService {
       })
       .filter((entry): entry is { user_id: string; year: number; month: number; day: number; shift: string } => Boolean(entry));
 
-    if (!entries.length) {
-      return;
-    }
+    // Only insert if we have valid UUID entries
+    // Note: All shifts (including numeric IDs) are still saved in the main table's JSON shifts field
+    if (entries.length > 0) {
+      const { error: insertError } = await client
+        .from(this.entriesTable)
+        .insert(entries);
 
-    const { error: insertError } = await client
-      .from(this.entriesTable)
-      .insert(entries);
-
-    if (insertError) {
-      throw new BadRequestException(insertError.message);
+      if (insertError) {
+        throw new BadRequestException(insertError.message);
+      }
     }
   }
 }

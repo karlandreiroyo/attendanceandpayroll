@@ -5,7 +5,6 @@ import "../AdminPages/admincss/adminReports.css";
 import { handleLogout as logout } from "../utils/logout";
 import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
 import { API_BASE_URL } from "../config/api";
-import { useSidebarState } from "../hooks/useSidebarState";
 
 const REPORT_TYPES = [
   { label: "Attendance Summary", value: "attendance" },
@@ -24,7 +23,6 @@ export default function AdminReports() {
     const unsubscribe = subscribeToProfileUpdates(setProfileData);
     return unsubscribe;
   }, []);
-  const { isSidebarOpen, toggleSidebar, closeSidebar, isMobileView } = useSidebarState();
   const [dept, setDept] = useState("All Departments");
   const [selectedReport, setSelectedReport] = useState("Attendance Summary");
   const [dateRange, setDateRange] = useState({
@@ -43,12 +41,6 @@ export default function AdminReports() {
     () => REPORT_TYPES.find((type) => type.label === selectedReport),
     [selectedReport]
   );
-
-  useEffect(() => {
-    if (isMobileView) {
-      closeSidebar();
-    }
-  }, [location.pathname, isMobileView, closeSidebar]);
 
   useEffect(() => {
     async function loadDepartments() {
@@ -341,8 +333,8 @@ export default function AdminReports() {
   }
 
   return (
-    <div className={`admin-layout${isSidebarOpen ? "" : " sidebar-collapsed"}`}>
-      <aside className={`admin-sidebar ${isSidebarOpen ? "open" : "collapsed"}`}>
+    <div className="admin-layout">
+      <aside className="admin-sidebar">
         <div className="brand">
           <div className="brand-avatar">TI</div>
           <div className="brand-name">Tatay Ilio</div>
@@ -353,27 +345,15 @@ export default function AdminReports() {
           <Link className={`nav-item${isActive('/admin/schedules') ? ' active' : ''}`} to="/admin/schedules">Schedules</Link>
           <Link className={`nav-item${isActive('/admin/attendance') ? ' active' : ''}`} to="/admin/attendance">Attendance</Link>
           <Link className={`nav-item${isActive('/admin/leave-requests') ? ' active' : ''}`} to="/admin/leave-requests">Leave Requests</Link>
+          <Link className={`nav-item${isActive('/admin/announcements') ? ' active' : ''}`} to="/admin/announcements">Announcements</Link>
           <Link className={`nav-item${isActive('/admin/payroll') ? ' active' : ''}`} to="/admin/payroll">Payroll</Link>
           <Link className={`nav-item${isActive('/admin/reports') ? ' active' : ''}`} to="/admin/reports">Reports</Link>
         </nav>
       </aside>
-      {isSidebarOpen && isMobileView && (
-        <div className="sidebar-backdrop open" onClick={closeSidebar} />
-      )}
 
       <main className="admin-content">
         <header className="admin-topbar">
-          <div className="topbar-left">
-            <button
-              className="sidebar-toggle"
-              type="button"
-              aria-label={isSidebarOpen ? "Collapse navigation" : "Expand navigation"}
-              onClick={toggleSidebar}
-            >
-              <span aria-hidden="true">{isSidebarOpen ? "✕" : "☰"}</span>
-            </button>
-            <h1>Reports</h1>
-          </div>
+          <h1>Reports</h1>
           <div className="top-actions">
             <button className="profile-btn" onClick={() => setIsProfileOpen(v => !v)}>
               <span className="profile-avatar">
@@ -446,9 +426,13 @@ export default function AdminReports() {
             </div>
 
             <div className="card">
-              <div className="card-title">{selectedReport} Report</div>
-              <div className="period">Period: {dateRange.start} to {dateRange.end}</div>
-              {dept && <div className="period">Department: {dept}</div>}
+              <div className="card-header">
+                <div className="card-title">{selectedReport} Report</div>
+                <div className="card-info">
+                  <div className="period">Period: {dateRange.start} to {dateRange.end}</div>
+                  {dept && <div className="department-info">Department: {dept}</div>}
+                </div>
+              </div>
 
               {loading && (
                 <div className="table-empty">Generating report...</div>

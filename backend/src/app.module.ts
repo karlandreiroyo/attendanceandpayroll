@@ -6,6 +6,8 @@ import { LeaveRequestsModule } from './leave-requests/leave-requests.module';
 import { SchedulesModule } from './schedules/schedules.module';
 import { PayrollModule } from './payroll/payroll.module';
 import { ReportsModule } from './reports/reports.module';
+import { EmployeeDashboardModule } from './employee-dashboard/employee-dashboard.module';
+import { AnnouncementsModule } from './announcements/announcements.module';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { ReportsModule } from './reports/reports.module';
     SchedulesModule,
     PayrollModule,
     ReportsModule,
+    EmployeeDashboardModule,
+    AnnouncementsModule,
   ],
 })
 export class AppModule { }

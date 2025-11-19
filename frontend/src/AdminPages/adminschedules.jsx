@@ -7,6 +7,7 @@ import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/curre
 import { API_BASE_URL } from "../config/api";
 import { useSidebarState } from "../hooks/useSidebarState";
 
+
 const SHIFT_DEFINITIONS = {
   M: { label: "Morning", hours: "8:00 AM - 4:00 PM" },
   A: { label: "Afternoon", hours: "2:00 PM - 10:00 PM" },
@@ -72,7 +73,7 @@ export default function AdminSchedules() {
 
   const monthLabel = useMemo(() =>
     new Date(current.year, current.month, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" })
-  , [current]);
+    , [current]);
 
   const [shifts, setShifts] = useState({});
 
@@ -179,6 +180,7 @@ export default function AdminSchedules() {
   async function saveSchedule() {
     setScheduleNotice(null);
     setSaving(true);
+
     try {
       const payload = {
         year: current.year,
@@ -186,6 +188,7 @@ export default function AdminSchedules() {
         shifts,
         savedBy: sessionStorage.getItem('userId') ?? null,
       };
+
       const res = await fetch(`${API_BASE_URL}/schedules`, {
         method: "POST",
         credentials: "include",
@@ -244,6 +247,7 @@ export default function AdminSchedules() {
           <Link className={`nav-item${isActive('/admin/schedules') ? ' active' : ''}`} to="/admin/schedules">Schedules</Link>
           <Link className={`nav-item${isActive('/admin/attendance') ? ' active' : ''}`} to="/admin/attendance">Attendance</Link>
           <Link className={`nav-item${isActive('/admin/leave-requests') ? ' active' : ''}`} to="/admin/leave-requests">Leave Requests</Link>
+          <Link className={`nav-item${isActive('/admin/announcements') ? ' active' : ''}`} to="/admin/announcements">Announcements</Link>
           <Link className={`nav-item${isActive('/admin/payroll') ? ' active' : ''}`} to="/admin/payroll">Payroll</Link>
           <Link className={`nav-item${isActive('/admin/reports') ? ' active' : ''}`} to="/admin/reports">Reports</Link>
         </nav>
@@ -351,7 +355,7 @@ export default function AdminSchedules() {
               {days.map(d => (
                 <div key={d.day} className="head-cell">
                   <div className="head-day">{d.day}</div>
-                  <div className="head-dow">{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.dow]}</div>
+                  <div className="head-dow">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.dow]}</div>
                 </div>
               ))}
             </div>

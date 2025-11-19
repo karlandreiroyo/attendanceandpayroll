@@ -335,6 +335,7 @@ const getInitials = () => {
           <Link className="nav-item" to="/admin/schedules">Schedules</Link>
           <Link className="nav-item" to="/admin/attendance">Attendance</Link>
           <Link className="nav-item" to="/admin/leave-requests">Leave Requests</Link>
+          <Link className="nav-item" to="/admin/announcements">Announcements</Link>
           <Link className="nav-item" to="/admin/payroll">Payroll</Link>
           <Link className="nav-item" to="/admin/reports">Reports</Link>
         </nav>

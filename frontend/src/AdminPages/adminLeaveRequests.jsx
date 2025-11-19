@@ -243,6 +243,7 @@ export default function AdminLeaveRequests() {
           <Link className={`nav-item${isActive("/admin/schedules") ? " active" : ""}`} to="/admin/schedules">Schedules</Link>
           <Link className={`nav-item${isActive("/admin/attendance") ? " active" : ""}`} to="/admin/attendance">Attendance</Link>
           <Link className={`nav-item${isActive("/admin/leave-requests") ? " active" : ""}`} to="/admin/leave-requests">Leave Requests</Link>
+          <Link className={`nav-item${isActive("/admin/announcements") ? " active" : ""}`} to="/admin/announcements">Announcements</Link>
           <Link className={`nav-item${isActive("/admin/payroll") ? " active" : ""}`} to="/admin/payroll">Payroll</Link>
           <Link className={`nav-item${isActive("/admin/reports") ? " active" : ""}`} to="/admin/reports">Reports</Link>
         </nav>
