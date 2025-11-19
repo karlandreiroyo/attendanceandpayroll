@@ -44,6 +44,7 @@ void loop() {
 
       while (!Serial.available());
       int id = Serial.parseInt();
+      Serial.readStringUntil('\n'); // Consume the newline after the ID
 
       if (id < 1 || id > 127) {
         Serial.println("Invalid ID. Must be 1–127.");
@@ -125,9 +126,11 @@ void enrollFingerprint(int id) {
   p = finger.storeModel(id);
   if (p == FINGERPRINT_OK) {
     Serial.println("✅ Enroll success!");
+    Serial.println("ENROLL_OK");
   } else {
     Serial.print("❌ Store failed, code: ");
     Serial.println(p);
+    Serial.println("ENROLL_FAIL");
   }
 }
 

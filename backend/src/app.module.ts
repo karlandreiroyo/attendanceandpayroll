@@ -8,6 +8,7 @@ import { PayrollModule } from './payroll/payroll.module';
 import { ReportsModule } from './reports/reports.module';
 import { EmployeeDashboardModule } from './employee-dashboard/employee-dashboard.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
+import { FingerprintModule } from './fingerprint/fingerprint.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { AnnouncementsModule } from './announcements/announcements.module';
     ReportsModule,
     EmployeeDashboardModule,
     AnnouncementsModule,
+    FingerprintModule,
   ],
 })
-export class AppModule { }
+export class AppModule {}
