@@ -9,6 +9,7 @@ import { ReportsModule } from './reports/reports.module';
 import { EmployeeDashboardModule } from './employee-dashboard/employee-dashboard.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { FingerprintModule } from './fingerprint/fingerprint.module';
+import { AttendanceModule } from './attendance/attendance.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { FingerprintModule } from './fingerprint/fingerprint.module';
     EmployeeDashboardModule,
     AnnouncementsModule,
     FingerprintModule,
+    AttendanceModule,
   ],
 })
 export class AppModule {}

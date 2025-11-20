@@ -5,6 +5,7 @@ import "../AdminPages/admincss/adminAttendance.css";
 import { handleLogout as logout } from "../utils/logout";
 import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
 import { useSidebarState } from "../hooks/useSidebarState";
+import { API_BASE_URL } from "../config/api";
 
 export default function AdminAttendance() {
   const navigate = useNavigate();
@@ -23,6 +24,8 @@ export default function AdminAttendance() {
   const [deptFilter, setDeptFilter] = useState("All Departments");
 
   const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [departments, setDepartments] = useState(["All Departments"]);
 
   const filtered = useMemo(() => {
     let filtered = rows;
@@ -59,6 +62,66 @@ export default function AdminAttendance() {
     }
   }, [location.pathname, isMobileView, closeSidebar]);
 
+  // Load departments
+  useEffect(() => {
+    async function loadDepartments() {
+      try {
+        const res = await fetch(`${API_BASE_URL}/users`, { credentials: "include" });
+        if (!res.ok) return;
+        const data = await res.json();
+        const unique = new Set(["All Departments"]);
+        (Array.isArray(data) ? data : []).forEach((user) => {
+          const department = user.department || user.dept || "Unassigned";
+          if (department) unique.add(department);
+        });
+        setDepartments(Array.from(unique));
+      } catch (err) {
+        console.error("Failed to load departments", err);
+      }
+    }
+    loadDepartments();
+  }, []);
+
+  // Load attendance data
+  useEffect(() => {
+    async function loadAttendance() {
+      try {
+        setLoading(true);
+        const params = new URLSearchParams({
+          date: date,
+        });
+        if (deptFilter && deptFilter !== "All Departments") {
+          params.append("department", deptFilter);
+        }
+
+        const res = await fetch(`${API_BASE_URL}/attendance/summary?${params.toString()}`, {
+          credentials: "include",
+        });
+
+        if (!res.ok) {
+          throw new Error("Failed to load attendance data");
+        }
+
+        const data = await res.json();
+        
+        // Update summary cards
+        if (data.present !== undefined) {
+          // Data is already in the right format
+          setRows(data.records || []);
+        } else {
+          setRows([]);
+        }
+      } catch (err) {
+        console.error("Error loading attendance:", err);
+        setRows([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadAttendance();
+  }, [date, deptFilter]);
+
   function exportAttendance() {
     const csvContent = [
       ["Employee", "Employee ID", "Department", "Date", "Time In", "Time Out", "Status", "Total Hours", "Overtime"],
@@ -71,7 +134,7 @@ export default function AdminAttendance() {
         row.out,
         row.status,
         row.total,
-        row.ot
+        "-"
       ])
     ].map(row => row.join(",")).join("\n");
 
@@ -189,12 +252,11 @@ export default function AdminAttendance() {
             <input className="search" placeholder="Search employee..." value={query} onChange={(e) => setQuery(e.target.value)} />
             <div className="toolbar-right">
               <select value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)}>
-                <option>All Departments</option>
-                <option>IT</option>
-                <option>HR</option>
-                <option>Finance</option>
-                <option>Marketing</option>
-                <option>Operations</option>
+                {departments.map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
+                ))}
               </select>
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                 <option>All Status</option>
@@ -219,29 +281,39 @@ export default function AdminAttendance() {
               <div>Overtime</div>
             </div>
             <div className="att-body">
-              {filtered.map(r => (
-                <div key={r.id} className="att-row">
-                  <div>
-                    <div className="emp">
-                      <div className="emp-avatar">{r.name[0]}</div>
-                      <div className="emp-meta">
-                        <div className="emp-name">{r.name}</div>
-                        <div className="emp-email">{r.empId}</div>
+              {loading ? (
+                <div style={{ padding: "40px", textAlign: "center", color: "#666" }}>
+                  Loading attendance data...
+                </div>
+              ) : filtered.length === 0 ? (
+                <div style={{ padding: "40px", textAlign: "center", color: "#666" }}>
+                  No attendance records found for this date.
+                </div>
+              ) : (
+                filtered.map((r, index) => (
+                  <div key={r.id || index} className="att-row">
+                    <div>
+                      <div className="emp">
+                        <div className="emp-avatar">{(r.name && r.name[0]) || "?"}</div>
+                        <div className="emp-meta">
+                          <div className="emp-name">{r.name || "Unknown"}</div>
+                          <div className="emp-email">{r.empId || ""}</div>
+                        </div>
                       </div>
                     </div>
+                    <div>{r.date || date}</div>
+                    <div>{r.in || "-"}</div>
+                    <div>{r.out || "-"}</div>
+                    <div>
+                      {r.status === "Present" && <span className="pill pill-success">Present</span>}
+                      {r.status === "Late" && <span className="pill pill-warn">Late</span>}
+                      {r.status === "Absent" && <span className="pill pill-danger">Absent</span>}
+                    </div>
+                    <div>{r.total || "0:00"}</div>
+                    <div>-</div>
                   </div>
-                  <div>{r.date}</div>
-                  <div>{r.in}</div>
-                  <div>{r.out}</div>
-                  <div>
-                    {r.status === "Present" && <span className="pill pill-success">Present</span>}
-                    {r.status === "Late" && <span className="pill pill-warn">Late</span>}
-                    {r.status === "Absent" && <span className="pill pill-danger">Absent</span>}
-                  </div>
-                  <div>{r.total}</div>
-                  <div>{r.ot}</div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </section>

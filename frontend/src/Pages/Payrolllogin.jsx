@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import "../Pages/employeecss/payrollLogin.css";
 import { API_BASE_URL } from "../config/api";
@@ -27,6 +27,26 @@ export default function PayrollLogin() {
       sessionStorage.clear();
     }
   }, [navigate]);
+
+  // Update current time every second
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentDateTime(new Date());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  // Auto-start fingerprint scanning on mount
+  useEffect(() => {
+    startFingerprintScanning();
+    
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, []);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -46,6 +66,15 @@ export default function PayrollLogin() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [resetError, setResetError] = useState("");
   const [resetSuccess, setResetSuccess] = useState("");
+  
+  // Time In/Out states
+  const [isListening, setIsListening] = useState(false);
+  const [lastScan, setLastScan] = useState(null);
+  const [scanStatus, setScanStatus] = useState("");
+  const [scanError, setScanError] = useState("");
+  const [scanLoading, setScanLoading] = useState(false);
+  const [currentDateTime, setCurrentDateTime] = useState(new Date());
+  const eventSourceRef = useRef(null);
 
   const validateEmail = useMemo(
     () => (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),
@@ -215,9 +244,120 @@ export default function PayrollLogin() {
     }, 2500);
   };
 
+  // Time In/Out handlers
+  const startFingerprintScanning = () => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+
+    setIsListening(true);
+    setScanError("");
+    setScanStatus("Waiting for fingerprint scan...");
+
+    const eventSource = new EventSource(`${API_BASE_URL}/fingerprint/events`);
+    eventSourceRef.current = eventSource;
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === "detected" && data.id) {
+          handleFingerprintDetected(data.id);
+        } else if (data.type === "unregistered") {
+          setScanStatus("Unregistered fingerprint. Please contact administrator.");
+          setScanError("This fingerprint is not registered in the system.");
+          setTimeout(() => {
+            setScanStatus("Waiting for fingerprint scan...");
+            setScanError("");
+          }, 3000);
+        }
+      } catch (err) {
+        console.error("Error parsing fingerprint event:", err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error("EventSource error:", err);
+      setScanError("Connection to fingerprint scanner lost. Please check if the device is connected.");
+      setIsListening(false);
+      // Try to reconnect after 3 seconds
+      setTimeout(() => {
+        if (!eventSourceRef.current || eventSourceRef.current.readyState === EventSource.CLOSED) {
+          startFingerprintScanning();
+        }
+      }, 3000);
+    };
+  };
+
+  const handleFingerprintDetected = async (fingerprintId) => {
+    setScanLoading(true);
+    setScanStatus(`Processing fingerprint ID: ${fingerprintId}...`);
+    setScanError("");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/attendance/record`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ fingerprintId }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to record attendance");
+      }
+
+      if (data.success) {
+        setLastScan({
+          type: data.type,
+          timestamp: data.timestamp,
+          employee: data.employee,
+          message: data.message,
+        });
+        setScanStatus(data.message);
+        
+        setTimeout(() => {
+          setScanStatus("Waiting for fingerprint scan...");
+        }, 8000);
+      } else {
+        throw new Error(data.message || "Failed to record attendance");
+      }
+    } catch (err) {
+      setScanError(err.message || "An error occurred while recording attendance");
+      setScanStatus("");
+      setTimeout(() => {
+        setScanError("");
+        setScanStatus("Waiting for fingerprint scan...");
+      }, 5000);
+    } finally {
+      setScanLoading(false);
+    }
+  };
+
+  const formatTime = (timestamp) => {
+    if (!timestamp) return "";
+    const date = new Date(timestamp);
+    return {
+      date: date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }),
+      time: date.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      }),
+    };
+  };
+
   return (
     <div className="login-container">
-      <div className="login-card">
+      <div className="login-layout">
+        <div className="login-card">
         <img
           src="tata_Ilio_logo-removebg-preview.png"
           alt="Company Logo"
@@ -455,6 +595,62 @@ export default function PayrollLogin() {
           </div>
         </div>
       )}
+
+        {/* Time In/Out Section */}
+        <div className="time-in-out-card">
+          <div className="time-in-out-header">
+            <h2 className="time-in-out-title">Time In / Time Out</h2>
+            <p className="time-in-out-subtitle">Automatic fingerprint capture</p>
+          </div>
+
+          <div className="attendance-display">
+            {(() => {
+              const timeData = formatTime(lastScan?.timestamp || currentDateTime.toISOString());
+              return (
+                <>
+                  {lastScan && lastScan.employee ? (
+                    <div className="success-record-display">
+                      <div className="success-record-header">
+                        <span className="success-icon-large">✅</span>
+                        <h3 className="success-record-title">Attendance Recorded</h3>
+                      </div>
+                      <div className="success-record-details">
+                        <div className="success-record-item">
+                          <strong>Employee:</strong> {lastScan.employee.name}
+                        </div>
+                        <div className="success-record-item">
+                          <strong>Date:</strong> {timeData.date}
+                        </div>
+                        <div className="success-record-item">
+                          <strong>Time:</strong> {timeData.time}
+                        </div>
+                        <div className="success-record-item">
+                          <strong>Type:</strong> <span className={`type-badge-inline ${lastScan.type === "Time In" ? "time-in" : "time-out"}`}>{lastScan.type}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="time-date-display">
+                      <div className="time-date-header">
+                        <h3 className="time-date-title">Current Time</h3>
+                      </div>
+                      <div className="time-date-details">
+                        <div className="time-date-item">
+                          <strong>Date:</strong> {timeData.date}
+                        </div>
+                        <div className="time-date-item">
+                          <strong>Time:</strong> {timeData.time}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+
+        </div>
+      </div>
     </div>
   );
 }

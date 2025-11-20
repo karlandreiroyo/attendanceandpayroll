@@ -18,6 +18,7 @@ import EmployeeSchedules from "./Pages/employeeSchedules";
 import EmployeeLeaveRequest from "./Pages/employeeLeaveRequest";
 import EmployeePayslips from "./Pages/employeePayslips";
 import EmployeeProfile from "./Pages/employeeProfile";
+import TimeInOut from "./Pages/timeInOut";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
@@ -142,6 +143,14 @@ function App() {
           element={
             <ProtectedRoute requiredRole="employee">
               <EmployeeProfile />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/employee/time-in-out" 
+          element={
+            <ProtectedRoute requiredRole="employee">
+              <TimeInOut />
             </ProtectedRoute>
           } 
         />
