@@ -31,10 +31,11 @@ export class AttendanceService {
     };
   }> {
     // Find user by fingerprint template ID
+    // Lookup user by fingerprint id (store as number in DB)
     const { data: user, error: userError } = await this.supabaseService.client
       .from('users')
       .select('user_id, id, first_name, last_name, department, status')
-      .eq('finger_template_id', String(fingerprintId))
+      .eq('finger_template_id', fingerprintId)
       .maybeSingle();
 
     if (userError) {
@@ -42,7 +43,9 @@ export class AttendanceService {
     }
 
     if (!user) {
-      throw new BadRequestException('No employee found with this fingerprint ID');
+      throw new BadRequestException(
+        'No employee found with this fingerprint ID',
+      );
     }
 
     if (user.status !== 'Active') {
@@ -54,20 +57,24 @@ export class AttendanceService {
     const todayDateStr = today.toISOString().split('T')[0]; // Format: YYYY-MM-DD
 
     // Check if there's already a record for today
-    const { data: existingRecords, error: checkError } = await this.supabaseService.client
-      .from('attendance')
-      .select('*')
-      .eq('employee_id', employeeId)
-      .eq('date', todayDateStr)
-      .order('time_in', { ascending: false });
+    const { data: existingRecords, error: checkError } =
+      await this.supabaseService.client
+        .from('attendance')
+        .select('*')
+        .eq('employee_id', employeeId)
+        .eq('date', todayDateStr)
+        .order('time_in', { ascending: false });
 
     if (checkError) {
-      throw new BadRequestException(`Error checking existing records: ${checkError.message}`);
+      throw new BadRequestException(
+        `Error checking existing records: ${checkError.message}`,
+      );
     }
 
     const now = new Date();
     const currentTime = now.toTimeString().split(' ')[0].substring(0, 5); // Format: HH:MM
-    const employeeName = `${user.first_name || ''} ${user.last_name || ''}`.trim();
+    const employeeName =
+      `${user.first_name || ''} ${user.last_name || ''}`.trim();
 
     // Determine if this is Time In or Time Out
     let isTimeIn = true;
@@ -76,7 +83,7 @@ export class AttendanceService {
     if (existingRecords && existingRecords.length > 0) {
       // Find the most recent record for today
       const latestRecord = existingRecords[0] as AttendanceRecord;
-      
+
       // If record has time_in but no time_out, this is Time Out
       if (latestRecord.time_in && !latestRecord.time_out) {
         isTimeIn = false;
@@ -91,24 +98,27 @@ export class AttendanceService {
 
     if (isTimeIn) {
       // Create new Time In record
-      const { data: newRecord, error: insertError } = await this.supabaseService.client
-        .from('attendance')
-        .insert([
-          {
-            employee_id: employeeId,
-            date: todayDateStr,
-            time_in: currentTime,
-            time_out: null,
-            total_hours: null,
-            status: 'Present',
-            record_source: 'fingerprint',
-          },
-        ])
-        .select('*')
-        .single();
+      const { data: newRecord, error: insertError } =
+        await this.supabaseService.client
+          .from('attendance')
+          .insert([
+            {
+              employee_id: employeeId,
+              date: todayDateStr,
+              time_in: currentTime,
+              time_out: null,
+              total_hours: null,
+              status: 'Present',
+              record_source: 'fingerprint',
+            },
+          ])
+          .select('*')
+          .single();
 
       if (insertError) {
-        throw new BadRequestException(`Error recording time in: ${insertError.message}`);
+        throw new BadRequestException(
+          `Error recording time in: ${insertError.message}`,
+        );
       }
 
       return {
@@ -129,29 +139,44 @@ export class AttendanceService {
       }
 
       // Calculate total hours
-      const [timeInHours, timeInMinutes] = (recordToUpdate.time_in || '00:00').split(':').map(Number);
+      const [timeInHours, timeInMinutes] = (recordToUpdate.time_in || '00:00')
+        .split(':')
+        .map(Number);
       const [timeOutHours, timeOutMinutes] = currentTime.split(':').map(Number);
-      
       const timeInTotalMinutes = timeInHours * 60 + timeInMinutes;
       const timeOutTotalMinutes = timeOutHours * 60 + timeOutMinutes;
       const diffMinutes = timeOutTotalMinutes - timeInTotalMinutes;
-      
-      // Convert to decimal hours (e.g., 8.5 for 8 hours 30 minutes)
       const totalHoursDecimal = diffMinutes / 60;
 
-      const { data: updatedRecord, error: updateError } = await this.supabaseService.client
-        .from('attendance')
-        .update({
-          time_out: currentTime,
-          total_hours: totalHoursDecimal,
-          status: 'Present', // Keep status as Present since they completed the day
-        })
-        .eq('attendance_id', recordToUpdate.attendance_id)
-        .select('*')
-        .single();
+      // Some schemas use 'attendance_id' as PK, others use 'id'. Determine which to use.
+      const pkKey = recordToUpdate.attendance_id
+        ? 'attendance_id'
+        : recordToUpdate.id
+          ? 'id'
+          : null;
+      const pkValue = pkKey ? (recordToUpdate[pkKey] as any) : null;
+      if (!pkKey || !pkValue) {
+        throw new BadRequestException(
+          'Unable to determine attendance record primary key',
+        );
+      }
+
+      const { data: updatedRecord, error: updateError } =
+        await this.supabaseService.client
+          .from('attendance')
+          .update({
+            time_out: currentTime,
+            total_hours: totalHoursDecimal,
+            status: 'Present',
+          })
+          .eq(pkKey, pkValue)
+          .select('*')
+          .single();
 
       if (updateError) {
-        throw new BadRequestException(`Error recording time out: ${updateError.message}`);
+        throw new BadRequestException(
+          `Error recording time out: ${updateError.message}`,
+        );
       }
 
       // Format total hours for display
@@ -184,7 +209,8 @@ export class AttendanceService {
   }): Promise<AttendanceRecord[]> {
     let query = this.supabaseService.client
       .from('attendance')
-      .select(`
+      .select(
+        `
         attendance_id,
         employee_id,
         date,
@@ -200,7 +226,8 @@ export class AttendanceService {
           last_name,
           department
         )
-      `)
+      `,
+      )
       .order('date', { ascending: false })
       .order('time_in', { ascending: false });
 
@@ -223,7 +250,9 @@ export class AttendanceService {
     const { data, error } = await query;
 
     if (error) {
-      throw new BadRequestException(`Error fetching attendance: ${error.message}`);
+      throw new BadRequestException(
+        `Error fetching attendance: ${error.message}`,
+      );
     }
 
     return (data as any[]) ?? [];
@@ -232,7 +261,10 @@ export class AttendanceService {
   /**
    * Get attendance summary for a specific date
    */
-  async getAttendanceSummary(date: string, department?: string): Promise<{
+  async getAttendanceSummary(
+    date: string,
+    department?: string,
+  ): Promise<{
     present: number;
     late: number;
     absent: number;
@@ -247,7 +279,7 @@ export class AttendanceService {
 
     // Process records to determine daily status
     const userRecords = new Map<string, any>();
-    
+
     records.forEach((record: any) => {
       const employeeId = record.employee_id;
       if (!userRecords.has(employeeId)) {
@@ -261,16 +293,18 @@ export class AttendanceService {
           in: record.time_in || null,
           out: record.time_out || null,
           status: 'Absent',
-          total: record.total_hours ? this.formatHours(record.total_hours) : '0:00',
+          total: record.total_hours
+            ? this.formatHours(record.total_hours)
+            : '0:00',
         });
       }
 
       const userRecord = userRecords.get(employeeId);
-      
+
       // Update with time_in if available
       if (record.time_in) {
         userRecord.in = record.time_in;
-        
+
         // Check if late (assuming 09:00 is standard start time)
         const [hours, minutes] = record.time_in.split(':').map(Number);
         if (hours > 9 || (hours === 9 && minutes > 0)) {
@@ -292,9 +326,9 @@ export class AttendanceService {
     });
 
     const recordsArray = Array.from(userRecords.values());
-    const present = recordsArray.filter(r => r.status === 'Present').length;
-    const late = recordsArray.filter(r => r.status === 'Late').length;
-    const absent = recordsArray.filter(r => r.status === 'Absent').length;
+    const present = recordsArray.filter((r) => r.status === 'Present').length;
+    const late = recordsArray.filter((r) => r.status === 'Late').length;
+    const absent = recordsArray.filter((r) => r.status === 'Absent').length;
 
     return {
       present,
@@ -311,4 +345,3 @@ export class AttendanceService {
     return `${hours}:${minutes.toString().padStart(2, '0')}`;
   }
 }
-

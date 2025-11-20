@@ -35,7 +35,7 @@ export default function TimeInOut() {
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        
+
         if (data.type === "detected" && data.id) {
           handleFingerprintDetected(data.id);
         } else if (data.type === "unregistered") {
@@ -56,7 +56,9 @@ export default function TimeInOut() {
 
     eventSource.onerror = (err) => {
       console.error("EventSource error:", err);
-      setError("Connection to fingerprint scanner lost. Please check if the device is connected.");
+      setError(
+        "Connection to fingerprint scanner lost. Please check if the device is connected."
+      );
       setIsListening(false);
       eventSource.close();
     };
@@ -72,8 +74,15 @@ export default function TimeInOut() {
   };
 
   const handleFingerprintDetected = async (fingerprintId) => {
+    const fid = Number(fingerprintId);
+    if (!Number.isFinite(fid)) {
+      setError("Invalid fingerprint ID received from scanner");
+      setTimeout(() => setError(""), 3000);
+      return;
+    }
+
     setLoading(true);
-    setStatus(`Processing fingerprint ID: ${fingerprintId}...`);
+    setStatus(`Processing fingerprint ID: ${fid}...`);
     setError("");
 
     try {
@@ -82,7 +91,7 @@ export default function TimeInOut() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ fingerprintId }),
+        body: JSON.stringify({ fingerprintId: fid }),
       });
 
       const data = await response.json();
@@ -99,7 +108,7 @@ export default function TimeInOut() {
           message: data.message,
         });
         setStatus(data.message);
-        
+
         // Reset status after 8 seconds (longer so user can see it)
         setTimeout(() => {
           setStatus("Waiting for fingerprint scan...");
@@ -176,13 +185,12 @@ export default function TimeInOut() {
 
           {status && (
             <div className={`status-message ${error ? "error" : "success"}`}>
-              {status.includes("recorded") ? "✅ " : ""}{status}
+              {status.includes("recorded") ? "✅ " : ""}
+              {status}
             </div>
           )}
 
-          {error && (
-            <div className="error-message">{error}</div>
-          )}
+          {error && <div className="error-message">{error}</div>}
 
           {loading && (
             <div className="loading-spinner">
@@ -196,19 +204,23 @@ export default function TimeInOut() {
             <h3>Last Recorded:</h3>
             <div className="scan-details">
               <div className="scan-type">
-                <span className={`type-badge ${lastScan.type === "Time In" ? "time-in" : "time-out"}`}>
+                <span
+                  className={`type-badge ${
+                    lastScan.type === "Time In" ? "time-in" : "time-out"
+                  }`}
+                >
                   {lastScan.type}
                 </span>
               </div>
               {lastScan.employee && (
                 <div className="employee-info">
                   <p className="employee-name">{lastScan.employee.name}</p>
-                  <p className="employee-dept">{lastScan.employee.department}</p>
+                  <p className="employee-dept">
+                    {lastScan.employee.department}
+                  </p>
                 </div>
               )}
-              <div className="scan-time">
-                {formatTime(lastScan.timestamp)}
-              </div>
+              <div className="scan-time">{formatTime(lastScan.timestamp)}</div>
             </div>
           </div>
         )}
@@ -225,4 +237,3 @@ export default function TimeInOut() {
     </div>
   );
 }
-
