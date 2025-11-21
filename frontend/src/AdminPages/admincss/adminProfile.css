@@ -4,29 +4,35 @@
 
 .profile-card {
   width: 100%;
-  padding: 32px;
+  padding: 24px;
   box-sizing: border-box;
   background: #f9fafb;
+  max-width: 100%;
 }
 
 .profile-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
   gap: 24px;
-  max-width: 1200px;
-  margin: 0 auto;
+  max-width: 100%;
+  width: 100%;
+  margin: 0;
+  box-sizing: border-box;
 }
 
 .profile-section {
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 16px;
-  padding: 28px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
   gap: 20px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   transition: box-shadow 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .profile-section:hover {

@@ -4,6 +4,7 @@ import "../AdminPages/admincss/adminDashboard.css";
 import "../AdminPages/admincss/adminProfile.css";
 import { API_BASE_URL } from "../config/api";
 import { notifyProfileUpdated } from "../utils/currentUser";
+import { useSidebarState } from "../hooks/useSidebarState";
 
 export default function EmployeeProfile() {
   const navigate = useNavigate();
@@ -26,6 +27,7 @@ export default function EmployeeProfile() {
   const [formErrors, setFormErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const { isSidebarOpen, toggleSidebar, closeSidebar, isMobileView } = useSidebarState();
 
   const sessionKeyMap = {
     first_name: "firstName",
@@ -367,24 +369,26 @@ export default function EmployeeProfile() {
 
   if (loading) {
     return (
-      <div className="admin-layout">
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            height: "100vh",
-          }}
-        >
+      <div className={`admin-layout${isSidebarOpen ? "" : " sidebar-collapsed"}`}>
+        <aside className={`admin-sidebar ${isSidebarOpen ? "open" : "collapsed"}`} aria-hidden={!isSidebarOpen}>
+          <div className="brand">
+            <div className="brand-avatar">TI</div>
+            <div className="brand-name">Tatay Ilio</div>
+          </div>
+        </aside>
+        {isSidebarOpen && isMobileView && (
+          <div className="sidebar-backdrop open" onClick={closeSidebar} />
+        )}
+        <main className="admin-content" style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
           <div>Loading...</div>
-        </div>
+        </main>
       </div>
     );
   }
 
   return (
-    <div className="admin-layout">
-      <aside className="admin-sidebar">
+    <div className={`admin-layout${isSidebarOpen ? "" : " sidebar-collapsed"}`}>
+      <aside className={`admin-sidebar ${isSidebarOpen ? "open" : "collapsed"}`}>
         <div className="brand">
           <div className="brand-avatar">TI</div>
           <div className="brand-name">Tatay Ilio</div>
@@ -405,9 +409,23 @@ export default function EmployeeProfile() {
         </nav>
       </aside>
 
+      {isSidebarOpen && isMobileView && (
+        <div className="sidebar-backdrop open" onClick={closeSidebar} />
+      )}
+
       <main className="admin-content">
         <header className="admin-topbar">
-          <h1>My Profile</h1>
+          <div className="topbar-left">
+            <button
+              className="sidebar-toggle"
+              type="button"
+              aria-label={isSidebarOpen ? "Collapse navigation" : "Expand navigation"}
+              onClick={toggleSidebar}
+            >
+              <span aria-hidden="true">{isSidebarOpen ? "✕" : "☰"}</span>
+            </button>
+            <h1>My Profile</h1>
+          </div>
           <div className="top-actions">
             <button
               className="profile-btn"

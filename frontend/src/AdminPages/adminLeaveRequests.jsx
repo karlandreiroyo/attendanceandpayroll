@@ -5,6 +5,7 @@ import "./admincss/adminLeaveRequests.css";
 import { handleLogout as logout } from "../utils/logout";
 import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
 import { API_BASE_URL } from "../config/api";
+import { useSidebarState } from "../hooks/useSidebarState";
 
 const STATUS_OPTIONS = ["All Statuses", "Pending", "Approved", "Rejected", "Cancelled"];
 const TYPE_OPTIONS = ["All Types", "Vacation", "Sick Leave", "Personal Leave", "Emergency Leave"];
@@ -29,7 +30,6 @@ export default function AdminLeaveRequests() {
   const location = useLocation();
   const isActive = (path) => location.pathname.startsWith(path);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [profileData, setProfileData] = useState(() => getSessionUserProfile());
   const [rawRequests, setRawRequests] = useState([]);
   const [usersById, setUsersById] = useState({});
@@ -37,6 +37,7 @@ export default function AdminLeaveRequests() {
   const [notice, setNotice] = useState(null);
   const [updating, setUpdating] = useState([]);
   const [selectedRequestId, setSelectedRequestId] = useState(null);
+  const { isSidebarOpen, toggleSidebar, closeSidebar, isMobileView } = useSidebarState();
 
   useEffect(() => {
     const unsubscribe = subscribeToProfileUpdates(setProfileData);
@@ -44,8 +45,10 @@ export default function AdminLeaveRequests() {
   }, []);
 
   useEffect(() => {
-    setIsSidebarOpen(false);
-  }, [location.pathname]);
+    if (isMobileView) {
+      closeSidebar();
+    }
+  }, [location.pathname, isMobileView, closeSidebar]);
 
   useEffect(() => {
     async function loadUsers() {
@@ -228,8 +231,8 @@ export default function AdminLeaveRequests() {
   };
 
   return (
-    <div className="admin-layout">
-      <aside className={`admin-sidebar${isSidebarOpen ? " open" : ""}`}>
+    <div className={`admin-layout${isSidebarOpen ? "" : " sidebar-collapsed"}`}>
+      <aside className={`admin-sidebar ${isSidebarOpen ? "open" : "collapsed"}`}>
         <div className="brand">
           <div className="brand-avatar">TI</div>
           <div className="brand-name">Tatay Ilio</div>
@@ -240,22 +243,25 @@ export default function AdminLeaveRequests() {
           <Link className={`nav-item${isActive("/admin/schedules") ? " active" : ""}`} to="/admin/schedules">Schedules</Link>
           <Link className={`nav-item${isActive("/admin/attendance") ? " active" : ""}`} to="/admin/attendance">Attendance</Link>
           <Link className={`nav-item${isActive("/admin/leave-requests") ? " active" : ""}`} to="/admin/leave-requests">Leave Requests</Link>
+          <Link className={`nav-item${isActive("/admin/announcements") ? " active" : ""}`} to="/admin/announcements">Announcements</Link>
           <Link className={`nav-item${isActive("/admin/payroll") ? " active" : ""}`} to="/admin/payroll">Payroll</Link>
           <Link className={`nav-item${isActive("/admin/reports") ? " active" : ""}`} to="/admin/reports">Reports</Link>
         </nav>
       </aside>
-      {isSidebarOpen && <div className="sidebar-backdrop" onClick={() => setIsSidebarOpen(false)} />}
+      {isSidebarOpen && isMobileView && (
+        <div className="sidebar-backdrop open" onClick={closeSidebar} />
+      )}
 
       <main className="admin-content">
         <header className="admin-topbar">
           <div className="topbar-left">
             <button
-              className="mobile-nav-toggle"
+              className="sidebar-toggle"
               type="button"
-              aria-label="Toggle navigation"
-              onClick={() => setIsSidebarOpen((open) => !open)}
+              aria-label={isSidebarOpen ? "Collapse navigation" : "Expand navigation"}
+              onClick={toggleSidebar}
             >
-              ☰
+              <span aria-hidden="true">{isSidebarOpen ? "✕" : "☰"}</span>
             </button>
             <h1>Leave Requests</h1>
           </div>

@@ -7,6 +7,7 @@ import { LeaveRequestsController } from './leave-requests.controller';
   imports: [SupabaseModule],
   providers: [LeaveRequestsService],
   controllers: [LeaveRequestsController],
+  exports: [LeaveRequestsService],
 })
 export class LeaveRequestsModule {}
 

@@ -5,6 +5,7 @@ import "../Pages/employeecss/employeeSchedules.css";
 import { handleLogout as logout } from "../utils/logout";
 import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
 import { API_BASE_URL } from "../config/api";
+import { useSidebarState } from "../hooks/useSidebarState";
 
 const SHIFT_DEFINITIONS = {
   M: { label: "Morning", hours: "8:00 AM - 4:00 PM" },
@@ -16,13 +17,13 @@ const SHIFT_DEFINITIONS = {
 export default function EmployeeSchedules() {
   const navigate = useNavigate();
   const [isTopUserOpen, setIsTopUserOpen] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [profileInfo, setProfileInfo] = useState(getSessionUserProfile());
   const [currentDate, setCurrentDate] = useState(new Date());
   const [scheduleEntries, setScheduleEntries] = useState([]);
   const [legendItems, setLegendItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState(null);
+  const { isSidebarOpen, toggleSidebar, closeSidebar, isMobileView } = useSidebarState();
 
   const userId = useMemo(() => sessionStorage.getItem("userId"), []);
 
@@ -140,14 +141,28 @@ export default function EmployeeSchedules() {
 
     const definition = SHIFT_DEFINITIONS[entry.shift] || {};
     const label = definition.label || entry.label || entry.shift || "Scheduled";
-    const time = definition.hours ? ` (${definition.hours})` : entry.time ? ` (${entry.time})` : "";
+    const time = definition.hours || entry.time || "";
 
-    return <div className={`shift-pill shift-${entry.shift}`}>{`${label}${time}`}</div>;
+    return (
+      <div className={`shift-pill shift-${entry.shift}`}>
+        <span className="shift-pill-label">{label}</span>
+        {time && <span className="shift-pill-hours">{time}</span>}
+      </div>
+    );
+  };
+
+  const isToday = (day) => {
+    const today = new Date();
+    return (
+      today.getFullYear() === year &&
+      today.getMonth() === month &&
+      today.getDate() === day
+    );
   };
 
   return (
-    <div className="admin-layout">
-      <aside className={`admin-sidebar employee-sidebar${isSidebarOpen ? " open" : ""}`}>
+    <div className={`admin-layout${isSidebarOpen ? "" : " sidebar-collapsed"}`}>
+      <aside className={`admin-sidebar employee-sidebar ${isSidebarOpen ? "open" : "collapsed"}`}>
         <div className="brand">
           <div className="brand-avatar">TI</div>
           <div className="brand-name">Tatay Ilio</div>
@@ -159,18 +174,20 @@ export default function EmployeeSchedules() {
           <Link className="nav-item" to="/employee/payslips">Payslips</Link>
         </nav>
       </aside>
-      {isSidebarOpen && <div className="sidebar-backdrop open" onClick={() => setIsSidebarOpen(false)} />}
+      {isSidebarOpen && isMobileView && (
+        <div className="sidebar-backdrop open" onClick={closeSidebar} />
+      )}
 
       <main className="admin-content">
         <header className="admin-topbar">
           <div className="topbar-left">
             <button
-              className="mobile-nav-toggle"
+              className="sidebar-toggle"
               type="button"
-              aria-label="Toggle navigation"
-              onClick={() => setIsSidebarOpen((open) => !open)}
+              aria-label={isSidebarOpen ? "Collapse navigation" : "Expand navigation"}
+              onClick={toggleSidebar}
             >
-              ☰
+              <span aria-hidden="true">{isSidebarOpen ? "✕" : "☰"}</span>
             </button>
             <h1>Schedules</h1>
           </div>
@@ -263,7 +280,12 @@ export default function EmployeeSchedules() {
                 d.empty ? (
                   <div key={d.key} className="calendar-cell empty"></div>
                 ) : (
-                  <div key={d.day} className="calendar-cell day">
+                  <div
+                    key={d.day}
+                    className={`calendar-cell day${isToday(d.day) ? " is-today" : ""}${
+                      scheduleLookup.has(d.day) ? " has-shift" : ""
+                    }`}
+                  >
                     <div className="cell-head">
                       <span className="cell-day-number">{d.day}</span>
                     </div>

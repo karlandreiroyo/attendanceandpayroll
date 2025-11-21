@@ -3,6 +3,9 @@
   gap: 1rem;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   margin-bottom: 1.5rem;
+  width: 100%;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .lr-card {
@@ -13,6 +16,9 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  width: 100%;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .lr-card-label {
@@ -155,7 +161,8 @@
   padding: 0;
   overflow: auto;
   border-radius: 12px;
-  max-height: 560px;
+  max-height: calc(100vh - 300px);
+  min-height: 600px;
 }
 
 .lr-table-head,
@@ -482,7 +489,8 @@
   }
 
   .lr-table {
-    max-height: none;
+    max-height: calc(100vh - 350px);
+    min-height: 500px;
   }
 
   .lr-table-head {

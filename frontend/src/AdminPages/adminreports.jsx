@@ -11,6 +11,7 @@ const REPORT_TYPES = [
   { label: "Leave Summary", value: "leave" },
   { label: "Payroll Summary", value: "payroll" },
   { label: "Employee List", value: "employees" },
+  { label: "Admin List", value: "admins" },
   { label: "Custom Report", value: "custom" },
 ];
 
@@ -170,6 +171,15 @@ export default function AdminReports() {
         const departmentsSet = Array.from(new Set(employees.map((emp) => emp.department ?? 'Unassigned')));
         return `${header}\nTotal Employees: ${employees.length}\nActive Employees: ${activeCount}\nDepartments: ${departmentsSet.join(", ")}`;
       }
+      case "admins": {
+        const admins = reportData.admins ?? [];
+        if (!admins.length) {
+          return `${header}\nNo admins found for the selected filters.`;
+        }
+        const activeCount = admins.filter((admin) => (admin.status ?? '').toLowerCase() === "active").length;
+        const departmentsSet = Array.from(new Set(admins.map((admin) => admin.department ?? 'Unassigned')));
+        return `${header}\nTotal Admins: ${admins.length}\nActive Admins: ${activeCount}\nDepartments: ${departmentsSet.join(", ")}`;
+      }
       default:
         return `${header}\nNo data available.`;
     }
@@ -287,13 +297,28 @@ export default function AdminReports() {
           ];
           break;
         }
+        case "admins": {
+          const admins = reportData.admins ?? [];
+          dataRows = [
+            ["Admin", "Department", "Position", "Status", "Join Date", "Email"],
+            ...admins.map((admin) => [
+              admin.name,
+              admin.department,
+              admin.position,
+              admin.status,
+              admin.joinDate ?? "",
+              admin.email,
+            ]),
+          ];
+          break;
+        }
         default:
           break;
       }
     }
 
     const csvContent = [...headerRows, ...dataRows].map((row) => row.join(",")).join("\n");
-    
+
     const blob = new Blob([csvContent], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -320,6 +345,7 @@ export default function AdminReports() {
           <Link className={`nav-item${isActive('/admin/schedules') ? ' active' : ''}`} to="/admin/schedules">Schedules</Link>
           <Link className={`nav-item${isActive('/admin/attendance') ? ' active' : ''}`} to="/admin/attendance">Attendance</Link>
           <Link className={`nav-item${isActive('/admin/leave-requests') ? ' active' : ''}`} to="/admin/leave-requests">Leave Requests</Link>
+          <Link className={`nav-item${isActive('/admin/announcements') ? ' active' : ''}`} to="/admin/announcements">Announcements</Link>
           <Link className={`nav-item${isActive('/admin/payroll') ? ' active' : ''}`} to="/admin/payroll">Payroll</Link>
           <Link className={`nav-item${isActive('/admin/reports') ? ' active' : ''}`} to="/admin/reports">Reports</Link>
         </nav>
@@ -369,15 +395,15 @@ export default function AdminReports() {
               <div className="param">
                 <div className="param-title">Date Range</div>
                 <div className="param-inputs">
-                  <input 
-                    type="date" 
-                    value={dateRange.start} 
+                  <input
+                    type="date"
+                    value={dateRange.start}
                     onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))}
                   />
                   <span>to</span>
-                  <input 
-                    type="date" 
-                    value={dateRange.end} 
+                  <input
+                    type="date"
+                    value={dateRange.end}
                     onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))}
                   />
                 </div>
@@ -400,9 +426,13 @@ export default function AdminReports() {
             </div>
 
             <div className="card">
-              <div className="card-title">{selectedReport} Report</div>
-              <div className="period">Period: {dateRange.start} to {dateRange.end}</div>
-              {dept && <div className="period">Department: {dept}</div>}
+              <div className="card-header">
+                <div className="card-title">{selectedReport} Report</div>
+                <div className="card-info">
+                  <div className="period">Period: {dateRange.start} to {dateRange.end}</div>
+                  {dept && <div className="department-info">Department: {dept}</div>}
+                </div>
+              </div>
 
               {loading && (
                 <div className="table-empty">Generating report...</div>
@@ -454,10 +484,10 @@ export default function AdminReports() {
                           <div>
                             {reportData.totals.totalEmployees > 0
                               ? Math.round(
-                                  (reportData.totals.present /
-                                    Math.max(reportData.totals.totalEmployees, 1)) *
-                                    100
-                                )
+                                (reportData.totals.present /
+                                  Math.max(reportData.totals.totalEmployees, 1)) *
+                                100
+                              )
                               : 0}
                             %
                           </div>
@@ -496,6 +526,41 @@ export default function AdminReports() {
                           </div>
                           <div>{emp.joinDate ? new Date(emp.joinDate).toLocaleDateString() : "-"}</div>
                           <div>{emp.email}</div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {selectedReport === "Admin List" && (
+                <div className="summary-table">
+                  {!loading && !error && (!reportData || !reportData.admins || reportData.admins.length === 0) ? (
+                    <div className="table-empty">
+                      Admin records will appear here once available.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="t-head columns-6">
+                        <div>Admin</div>
+                        <div>Department</div>
+                        <div>Position</div>
+                        <div>Status</div>
+                        <div>Join Date</div>
+                        <div>Email</div>
+                      </div>
+                      {(reportData?.admins ?? []).map((admin) => (
+                        <div key={admin.id} className="t-row columns-6">
+                          <div>{admin.name}</div>
+                          <div>{admin.department}</div>
+                          <div>{admin.position}</div>
+                          <div>
+                            <span className={`status-badge ${admin.status === "Active" ? "active" : ""}`}>
+                              {admin.status}
+                            </span>
+                          </div>
+                          <div>{admin.joinDate ? new Date(admin.joinDate).toLocaleDateString() : "-"}</div>
+                          <div>{admin.email}</div>
                         </div>
                       ))}
                     </>

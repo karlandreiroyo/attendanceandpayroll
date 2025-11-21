@@ -4,6 +4,7 @@ import "../AdminPages/admincss/adminDashboard.css";
 import "../AdminPages/admincss/adminProfile.css";
 import { API_BASE_URL } from "../config/api";
 import { notifyProfileUpdated } from "../utils/currentUser";
+import { useSidebarState } from "../hooks/useSidebarState";
 
 export default function AdminProfile() {
   const navigate = useNavigate();
@@ -27,6 +28,7 @@ export default function AdminProfile() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [profileImagePreview] = useState(null);
+  const { isSidebarOpen, toggleSidebar, closeSidebar, isMobileView } = useSidebarState();
 
   const getDisplayName = () => {
     const firstName = (formData.first_name || '').trim() || currentUser?.first_name || sessionStorage.getItem('firstName') || '';
@@ -303,17 +305,26 @@ const getInitials = () => {
 
   if (loading) {
     return (
-      <div className="admin-layout">
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <div className={`admin-layout${isSidebarOpen ? "" : " sidebar-collapsed"}`}>
+        <aside className={`admin-sidebar ${isSidebarOpen ? "open" : "collapsed"}`} aria-hidden={!isSidebarOpen}>
+          <div className="brand">
+            <div className="brand-avatar">TI</div>
+            <div className="brand-name">Tatay Ilio</div>
+          </div>
+        </aside>
+        {isSidebarOpen && isMobileView && (
+          <div className="sidebar-backdrop open" onClick={closeSidebar} />
+        )}
+        <main className="admin-content" style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
           <div>Loading...</div>
-        </div>
+        </main>
       </div>
     );
   }
 
   return (
-    <div className="admin-layout">
-      <aside className="admin-sidebar">
+    <div className={`admin-layout${isSidebarOpen ? "" : " sidebar-collapsed"}`}>
+      <aside className={`admin-sidebar ${isSidebarOpen ? "open" : "collapsed"}`}>
         <div className="brand">
           <div className="brand-avatar">TI</div>
           <div className="brand-name">Tatay Ilio</div>
@@ -324,14 +335,28 @@ const getInitials = () => {
           <Link className="nav-item" to="/admin/schedules">Schedules</Link>
           <Link className="nav-item" to="/admin/attendance">Attendance</Link>
           <Link className="nav-item" to="/admin/leave-requests">Leave Requests</Link>
+          <Link className="nav-item" to="/admin/announcements">Announcements</Link>
           <Link className="nav-item" to="/admin/payroll">Payroll</Link>
           <Link className="nav-item" to="/admin/reports">Reports</Link>
         </nav>
       </aside>
+      {isSidebarOpen && isMobileView && (
+        <div className="sidebar-backdrop open" onClick={closeSidebar} />
+      )}
 
       <main className="admin-content">
         <header className="admin-topbar">
-          <h1>My Profile</h1>
+          <div className="topbar-left">
+            <button
+              className="sidebar-toggle"
+              type="button"
+              aria-label={isSidebarOpen ? "Collapse navigation" : "Expand navigation"}
+              onClick={toggleSidebar}
+            >
+              <span aria-hidden="true">{isSidebarOpen ? "✕" : "☰"}</span>
+            </button>
+            <h1>My Profile</h1>
+          </div>
           <div className="top-actions">
             <button className="profile-btn" onClick={() => navigate(-1)}>
               <span className="profile-avatar">

@@ -5,6 +5,7 @@ import "../AdminPages/admincss/adminPayroll.css";
 import { handleLogout as logout } from "../utils/logout";
 import { getSessionUserProfile, subscribeToProfileUpdates } from "../utils/currentUser";
 import { API_BASE_URL } from "../config/api";
+import { useSidebarState } from "../hooks/useSidebarState";
 
 function peso(value) {
   return `₱${Number(value || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -25,7 +26,7 @@ export default function AdminPayroll() {
   const isActive = (path) => location.pathname.startsWith(path);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [profileData, setProfileData] = useState(() => getSessionUserProfile());
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const { isSidebarOpen, toggleSidebar, closeSidebar, isMobileView } = useSidebarState();
 
   useEffect(() => {
     const unsubscribe = subscribeToProfileUpdates(setProfileData);
@@ -120,11 +121,39 @@ export default function AdminPayroll() {
     }, { gross: 0, deduct: 0, net: 0 });
   }, [entries]);
 
+  const sanitizeNumericInput = (value) => {
+    if (!value || value === '') return '';
+    // Remove all non-numeric and non-decimal characters
+    let cleaned = value.replace(/[^0-9.]/g, '');
+    
+    // Ensure only one decimal point
+    const parts = cleaned.split('.');
+    if (parts.length > 2) {
+      cleaned = parts[0] + '.' + parts.slice(1).join('');
+    }
+    
+    // Remove leading zeros (except for "0." or standalone "0")
+    // If input is "024", it becomes "24"
+    // If input is "0", it stays "0"
+    // If input is "0.5", it stays "0.5"
+    if (cleaned.length > 1 && cleaned[0] === '0' && cleaned[1] !== '.') {
+      // Remove leading zeros but keep at least one digit
+      cleaned = cleaned.replace(/^0+/, '');
+      // If we removed everything (edge case), return empty string
+      if (cleaned === '') {
+        return '';
+      }
+    }
+    
+    return cleaned;
+  };
+
   const handleEntryChange = (userId, field, value) => {
     if (processed) return;
+    const sanitized = sanitizeNumericInput(value);
     setEntries((prev) => prev.map((entry) => {
       if (entry.userId !== userId) return entry;
-      const updated = recalcEntry({ ...entry, [field]: value });
+      const updated = recalcEntry({ ...entry, [field]: sanitized });
       return updated;
     }));
   };
@@ -224,8 +253,8 @@ export default function AdminPayroll() {
   }, [period]);
 
   return (
-    <div className="admin-layout">
-      <aside className={`admin-sidebar${isSidebarOpen ? " open" : ""}`}>
+    <div className={`admin-layout${isSidebarOpen ? "" : " sidebar-collapsed"}`}>
+      <aside className={`admin-sidebar ${isSidebarOpen ? "open" : "collapsed"}`}>
         <div className="brand">
           <div className="brand-avatar">TI</div>
           <div className="brand-name">Tatay Ilio</div>
@@ -236,22 +265,25 @@ export default function AdminPayroll() {
           <Link className={`nav-item${isActive('/admin/schedules') ? ' active' : ''}`} to="/admin/schedules">Schedules</Link>
           <Link className={`nav-item${isActive('/admin/attendance') ? ' active' : ''}`} to="/admin/attendance">Attendance</Link>
           <Link className={`nav-item${isActive('/admin/leave-requests') ? ' active' : ''}`} to="/admin/leave-requests">Leave Requests</Link>
+          <Link className={`nav-item${isActive('/admin/announcements') ? ' active' : ''}`} to="/admin/announcements">Announcements</Link>
           <Link className={`nav-item${isActive('/admin/payroll') ? ' active' : ''}`} to="/admin/payroll">Payroll</Link>
           <Link className={`nav-item${isActive('/admin/reports') ? ' active' : ''}`} to="/admin/reports">Reports</Link>
         </nav>
       </aside>
-      {isSidebarOpen && <div className="sidebar-backdrop open" onClick={() => setIsSidebarOpen(false)} />}
+      {isSidebarOpen && isMobileView && (
+        <div className="sidebar-backdrop open" onClick={closeSidebar} />
+      )}
 
       <main className="admin-content">
         <header className="admin-topbar">
           <div className="topbar-left">
             <button
-              className="mobile-nav-toggle"
+              className="sidebar-toggle"
               type="button"
-              aria-label="Toggle navigation"
-              onClick={() => setIsSidebarOpen((open) => !open)}
+              aria-label={isSidebarOpen ? "Collapse navigation" : "Expand navigation"}
+              onClick={toggleSidebar}
             >
-              ☰
+              <span aria-hidden="true">{isSidebarOpen ? "✕" : "☰"}</span>
             </button>
             <h1>Payroll</h1>
           </div>
@@ -344,15 +376,15 @@ export default function AdminPayroll() {
 
           <div className="payroll-table">
             <div className="p-head">
-              <div>Employee</div>
-              <div>Position</div>
-              <div>Daily Rate</div>
-              <div>Days Worked</div>
-              <div>Gross Pay</div>
-              <div>Deductions</div>
-              <div>Net Pay</div>
-              <div>Status</div>
-              <div>Actions</div>
+              <div className="cell heading">Employee</div>
+              <div className="cell heading">Position</div>
+              <div className="cell heading numeric">Daily Rate</div>
+              <div className="cell heading numeric">Days Worked</div>
+              <div className="cell heading numeric">Gross Pay</div>
+              <div className="cell heading numeric">Deductions</div>
+              <div className="cell heading numeric">Net Pay</div>
+              <div className="cell heading">Status</div>
+              <div className="cell heading">Actions</div>
             </div>
             <div className="p-body">
               {loading ? (
@@ -366,7 +398,7 @@ export default function AdminPayroll() {
               ) : (
                 filteredEntries.map((entry) => (
                   <div key={entry.userId} className="p-row">
-                    <div>
+                    <div className="cell">
                       <div className="emp">
                         <div className="emp-avatar">{entry.name[0] || '?'}</div>
                         <div className="emp-meta">
@@ -375,35 +407,46 @@ export default function AdminPayroll() {
                         </div>
                       </div>
                     </div>
-                    <div>
+                    <div className="cell">
                       <div>{entry.position || '—'}</div>
-                      <div className="sub">{entry.department}</div>
                     </div>
-                    <div>{peso(entry.dailyRate)}</div>
-                    <div>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        value={entry.daysWorked}
-                        disabled={processed}
-                        onChange={(e) => handleEntryChange(entry.userId, 'daysWorked', e.target.value)}
-                      />
+                    <div className="cell numeric">{peso(entry.dailyRate)}</div>
+                    <div className="cell numeric">
+                      <div className="numeric-input-wrapper">
+                        <input
+                          className="numeric-input"
+                          type="text"
+                          inputMode="decimal"
+                          value={entry.daysWorked || ''}
+                          disabled={processed}
+                          onChange={(e) => {
+                            handleEntryChange(entry.userId, 'daysWorked', e.target.value);
+                          }}
+                        />
+                      </div>
                     </div>
-                    <div>{peso(entry.grossPay)}</div>
-                    <div>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={entry.deductions}
-                        disabled={processed}
-                        onChange={(e) => handleEntryChange(entry.userId, 'deductions', e.target.value)}
-                      />
+                    <div className="cell numeric">{peso(entry.grossPay)}</div>
+                    <div className="cell numeric">
+                      <div className="numeric-input-wrapper">
+                        <input
+                          className="numeric-input"
+                          type="text"
+                          inputMode="decimal"
+                          value={entry.deductions || ''}
+                          disabled={processed}
+                          onChange={(e) => {
+                            handleEntryChange(entry.userId, 'deductions', e.target.value);
+                          }}
+                        />
+                      </div>
                     </div>
-                    <div>{peso(entry.netPay)}</div>
-                    <div><span className={`pill ${processed ? 'pill-success' : 'pill-warn'}`}>{entry.status}</span></div>
-                    <div className="actions"><button className="link" onClick={() => openPayrollDetails(entry)}>Details</button></div>
+                    <div className="cell numeric">{peso(entry.netPay)}</div>
+                    <div className="cell status">
+                      <span className={`pill ${processed ? 'pill-success' : 'pill-warn'}`}>{entry.status}</span>
+                    </div>
+                    <div className="cell actions">
+                      <button className="link" onClick={() => openPayrollDetails(entry)}>Details</button>
+                    </div>
                   </div>
                 ))
               )}

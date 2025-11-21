@@ -38,7 +38,7 @@ type PayrollSummaryItem = {
   totalDeductions: number;
 };
 
-type EmployeeListItem = {
+type BaseListItem = {
   id: string;
   name: string;
   department: string;
@@ -46,7 +46,11 @@ type EmployeeListItem = {
   status: string;
   joinDate: string | null;
   email: string;
+  role: string;
 };
+
+type EmployeeListItem = BaseListItem;
+type AdminListItem = BaseListItem;
 
 type JoinedSingle<T> = T | T[] | null | undefined;
 
@@ -59,7 +63,7 @@ const unwrapJoined = <T>(value: JoinedSingle<T>): T | undefined => {
 
 @Injectable()
 export class ReportsService {
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(private readonly supabaseService: SupabaseService) { }
 
   private normaliseDate(value?: string, fallback?: string): string {
     if (!value) {
@@ -82,10 +86,15 @@ export class ReportsService {
     return date.toISOString();
   }
 
-  private async loadEmployees(department?: string) {
+  private async loadUsers(params?: { department?: string; roles?: string[]; includeInactive?: boolean }) {
+    const { department, roles, includeInactive } = params ?? {};
     const query = this.supabaseService.client
       .from('users')
-      .select('user_id, first_name, last_name, department, position, status, date_hired, email, role');
+      .select('user_id, first_name, last_name, department, position, status, join_date, email, role');
+
+    if (!includeInactive) {
+      query.eq('status', 'Active');
+    }
 
     if (department) {
       query.eq('department', department);
@@ -97,11 +106,18 @@ export class ReportsService {
       throw new BadRequestException(error.message);
     }
 
-    const employees = (data ?? []).filter((emp) => (emp.role ?? '').toLowerCase() !== 'admin');
+    const filteredRoles = (roles ?? []).map((role) => role.toLowerCase());
 
-    return employees
+    return (data ?? [])
+      .filter((emp) => {
+        if (!filteredRoles.length) {
+          return true;
+        }
+        const role = (emp.role ?? '').toLowerCase();
+        return filteredRoles.includes(role);
+      })
       .map((emp) => ({
-      id: emp.user_id ?? '',
+        id: emp.user_id ?? '',
         name: (() => {
           const fullName = `${emp.first_name ?? ''} ${emp.last_name ?? ''}`.trim();
           if (fullName) {
@@ -110,21 +126,34 @@ export class ReportsService {
           if (emp.email) {
             return emp.email;
           }
-          return 'Unknown Employee';
+          return 'Unknown User';
         })(),
-      department: emp.department ?? 'Unassigned',
-      position: emp.position ?? '',
-      status: emp.status ?? 'Active',
-      joinDate: emp.date_hired ?? null,
-      email: emp.email ?? '',
-    }))
+        department: emp.department ?? 'Unassigned',
+        position: emp.position ?? '',
+        status: emp.status ?? 'Active',
+        joinDate: emp.join_date ?? null,
+        email: emp.email ?? '',
+        role: (emp.role ?? 'employee').toLowerCase(),
+      }))
       .filter((emp) => emp.id);
   }
 
   async getEmployeeList(params: DepartmentFilterInput): Promise<{ employees: EmployeeListItem[] }> {
-    const department = params.department && params.department !== 'All Departments' ? params.department : undefined;
-    const employees = await this.loadEmployees(department);
+    const department =
+      params.department && params.department !== 'All Departments'
+        ? params.department
+        : undefined;
+    const employees = await this.loadUsers({ department, roles: ['employee'] });
     return { employees };
+  }
+
+  async getAdminList(params: DepartmentFilterInput): Promise<{ admins: AdminListItem[] }> {
+    const department =
+      params.department && params.department !== 'All Departments'
+        ? params.department
+        : undefined;
+    const admins = await this.loadUsers({ department, roles: ['admin'] });
+    return { admins };
   }
 
   async getAttendanceSummary(params: DateRangeInput & DepartmentFilterInput): Promise<{
@@ -142,7 +171,10 @@ export class ReportsService {
         ? params.department
         : undefined;
 
-    const employees = await this.loadEmployees(departmentFilter);
+    const allEmployees = await this.loadUsers({ roles: ['employee'] });
+    const employees = departmentFilter
+      ? allEmployees.filter((emp) => emp.department === departmentFilter)
+      : allEmployees;
 
     const departmentCounts = new Map<string, AttendanceSummaryItem>();
     employees.forEach((emp) => {
@@ -183,7 +215,11 @@ export class ReportsService {
 
     if (error) {
       // If the table doesn't exist yet, return an empty set gracefully
-      if (error.code === '42P01') {
+      if (
+        error.code === '42P01' ||
+        error.code === 'PGRST114' ||
+        error.message?.includes("schema cache")
+      ) {
         return {
           departments: Array.from(departmentCounts.values()),
           totals: {
@@ -262,7 +298,11 @@ export class ReportsService {
         ? params.department
         : undefined;
 
-    const employees = await this.loadEmployees(departmentFilter);
+    const allEmployees = await this.loadUsers({ roles: ['employee'] });
+    const employees = departmentFilter
+      ? allEmployees.filter((emp) => emp.department === departmentFilter)
+      : allEmployees;
+    const employeeDepartmentMap = new Map(allEmployees.map((emp) => [emp.id, emp.department]));
 
     const summary = new Map<string, LeaveSummaryItem>();
     employees.forEach((emp) => {
@@ -281,37 +321,23 @@ export class ReportsService {
       bucket.totalEmployees += 1;
     });
 
-    const leaveQuery = this.supabaseService.client
+    const { data, error } = await this.supabaseService.client
       .from('leave_requests')
-      .select(
-        `
-        id,
-        status,
-        start_date,
-        end_date,
-        created_at,
-        employee_id,
-        users!inner (
-          department
-        )
-      `,
-      )
+      .select('id, status, start_date, end_date, employee_id')
       .gte('start_date', startIso)
       .lte('end_date', endIso);
-
-    if (departmentFilter) {
-      leaveQuery.eq('users.department', departmentFilter);
-    }
-
-    const { data, error } = await leaveQuery;
 
     if (error) {
       throw new BadRequestException(error.message);
     }
 
     (data ?? []).forEach((request) => {
-      const user = unwrapJoined<{ department?: string | null }>(request.users);
-      const department = user?.department ?? 'Unassigned';
+      const department =
+        allEmployees.find((emp) => emp.id === (request.employee_id ?? ''))?.department ??
+        'Unassigned';
+      if (departmentFilter && department !== departmentFilter) {
+        return;
+      }
       if (!summary.has(department)) {
         summary.set(department, {
           department,
@@ -383,7 +409,7 @@ export class ReportsService {
         ? params.department
         : undefined;
 
-    const employees = await this.loadEmployees(undefined);
+    const employees = await this.loadUsers({ roles: ['employee'] });
     const employeesById = new Map(employees.map((emp) => [emp.id, emp]));
 
     const entriesQuery = this.supabaseService.client
@@ -410,7 +436,11 @@ export class ReportsService {
 
     if (error) {
       // If payroll tables are missing we should respond with empty data
-      if (error.code === '42P01') {
+      if (
+        error.code === '42P01' ||
+        error.code === 'PGRST114' ||
+        error.message?.includes("schema cache")
+      ) {
         return {
           periods: [],
           totals: { headcount: 0, totalGross: 0, totalNet: 0, totalDeductions: 0 },

@@ -17,6 +17,10 @@ export class AuthService {
       throw new Error('User not found');
     }
 
+    if ((data.status && data.status !== 'Active')) {
+      throw new Error('This account has been deactivated. Please contact an administrator.');
+    }
+
     if (data.password !== password) {
       throw new Error('Invalid password');
     }
