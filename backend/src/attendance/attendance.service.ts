@@ -2,7 +2,8 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 
 type AttendanceRecord = {
-  attendance_id: string;
+  attendance_id?: string;
+  id?: string;
   employee_id: string;
   date: string;
   time_in?: string | null;
@@ -31,11 +32,11 @@ export class AttendanceService {
     };
   }> {
     // Find user by fingerprint template ID
-    // Lookup user by fingerprint id (store as number in DB)
+    // Lookup user by fingerprint id (stored as string in DB, but we receive as number)
     const { data: user, error: userError } = await this.supabaseService.client
       .from('users')
-      .select('user_id, id, first_name, last_name, department, status')
-      .eq('finger_template_id', fingerprintId)
+      .select('user_id, first_name, last_name, department, status')
+      .eq('finger_template_id', String(fingerprintId)) // Convert to string for comparison
       .maybeSingle();
 
     if (userError) {
@@ -52,7 +53,51 @@ export class AttendanceService {
       throw new BadRequestException('Employee account is not active');
     }
 
-    const employeeId = user.user_id ?? user.id;
+    // IMPORTANT: The foreign key constraint references employees.employee_id, not users.user_id
+    // We need to find the corresponding employee record, or create one if it doesn't exist
+    let { data: employee, error: employeeError } = await this.supabaseService.client
+      .from('employees')
+      .select('employee_id, user_id, first_name, last_name')
+      .eq('user_id', user.user_id) // Link users to employees via user_id
+      .maybeSingle();
+
+    if (employeeError) {
+      throw new BadRequestException(
+        `Error finding employee record: ${employeeError.message}`,
+      );
+    }
+
+    // If employee record doesn't exist, create it
+    if (!employee || !employee.employee_id) {
+      console.log(`[ATTENDANCE] Employee record not found for user_id ${user.user_id}, creating one...`);
+      
+      // Create employee record with user_id as the link
+      const { data: newEmployee, error: createError } = await this.supabaseService.client
+        .from('employees')
+        .insert([
+          {
+            user_id: user.user_id,
+            first_name: user.first_name,
+            last_name: user.last_name,
+          },
+        ])
+        .select('employee_id, user_id, first_name, last_name')
+        .single();
+
+      if (createError) {
+        throw new BadRequestException(
+          `Failed to create employee record: ${createError.message}. Please ensure the employee record exists in the employees table for user_id ${user.user_id}.`,
+        );
+      }
+
+      employee = newEmployee;
+      console.log(`[ATTENDANCE] Created employee record with employee_id: ${employee.employee_id}`);
+    }
+
+    // Use employee_id from employees table (this is what the foreign key references)
+    const employeeId = employee.employee_id;
+    console.log(`[ATTENDANCE] Using employees.employee_id (${employeeId}) for attendance record`);
+    
     const today = new Date();
     const todayDateStr = today.toISOString().split('T')[0]; // Format: YYYY-MM-DD
 
@@ -98,6 +143,9 @@ export class AttendanceService {
 
     if (isTimeIn) {
       // Create new Time In record
+      // employeeId is already determined above, just verify it exists
+      console.log(`[ATTENDANCE] Inserting attendance record with employee_id: ${employeeId}`);
+
       const { data: newRecord, error: insertError } =
         await this.supabaseService.client
           .from('attendance')
@@ -116,8 +164,15 @@ export class AttendanceService {
           .single();
 
       if (insertError) {
+        // Provide more detailed error message for foreign key constraint violations
+        const errorMsg = insertError.message || String(insertError);
+        if (errorMsg.includes('foreign key constraint') || errorMsg.includes('fkey')) {
+          throw new BadRequestException(
+            `Cannot record attendance: Employee ID "${employeeId}" does not exist in the users table or the foreign key constraint is violated. Please ensure the employee is properly registered with a valid user_id. Error: ${errorMsg}`,
+          );
+        }
         throw new BadRequestException(
-          `Error recording time in: ${insertError.message}`,
+          `Error recording time in: ${errorMsg}. Employee ID: ${employeeId}`,
         );
       }
 
@@ -149,12 +204,13 @@ export class AttendanceService {
       const totalHoursDecimal = diffMinutes / 60;
 
       // Some schemas use 'attendance_id' as PK, others use 'id'. Determine which to use.
-      const pkKey = recordToUpdate.attendance_id
+      const asAny = recordToUpdate as any;
+      const pkKey = asAny.attendance_id
         ? 'attendance_id'
-        : recordToUpdate.id
+        : asAny.id
           ? 'id'
           : null;
-      const pkValue = pkKey ? (recordToUpdate[pkKey] as any) : null;
+      const pkValue = pkKey ? asAny[pkKey] : null;
       if (!pkKey || !pkValue) {
         throw new BadRequestException(
           'Unable to determine attendance record primary key',
@@ -221,7 +277,6 @@ export class AttendanceService {
         record_source,
         users!inner (
           user_id,
-          id,
           first_name,
           last_name,
           department
@@ -287,7 +342,7 @@ export class AttendanceService {
           id: record.attendance_id,
           employee_id: employeeId,
           name: `${record.users?.first_name || ''} ${record.users?.last_name || ''}`.trim(),
-          empId: record.users?.user_id || record.users?.id,
+          empId: record.users?.user_id,
           dept: record.users?.department || '',
           date: record.date || date,
           in: record.time_in || null,

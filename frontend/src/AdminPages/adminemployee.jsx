@@ -713,20 +713,23 @@ export default function AdminEmployee() {
       errors.last_name =
         errors.last_name || "An account with this name already exists";
     }
-    // optional fingerprint id validation
-    if (
-      formData.finger_template_id &&
-      !/^\d+$/.test(String(formData.finger_template_id).trim())
-    ) {
-      errors.finger_template_id = "Invalid fingerprint template ID";
-    }
-    if (formData.finger_template_id) {
-      const existing = rows.find(
-        (r) => r.finger_template_id === formData.finger_template_id
-      );
-      if (existing) {
-        errors.finger_template_id =
-          "This fingerprint ID is already assigned to another employee";
+    // REQUIRED fingerprint id validation
+    if (!formData.finger_template_id || !formData.finger_template_id.trim()) {
+      errors.finger_template_id = "Fingerprint enrollment is required. Please enroll the employee's fingerprint before adding them.";
+    } else if (!/^\d+$/.test(String(formData.finger_template_id).trim())) {
+      errors.finger_template_id = "Invalid fingerprint template ID. Must be a number between 1-127.";
+    } else {
+      const fingerprintId = Number(formData.finger_template_id);
+      if (fingerprintId < 1 || fingerprintId > 127) {
+        errors.finger_template_id = "Fingerprint ID must be between 1 and 127.";
+      } else {
+        const existing = rows.find(
+          (r) => r.finger_template_id === formData.finger_template_id
+        );
+        if (existing) {
+          errors.finger_template_id =
+            "This fingerprint ID is already assigned to another employee";
+        }
       }
     }
 
@@ -751,7 +754,7 @@ export default function AdminEmployee() {
       status: formData.status || "Active",
       phone: formData.phone || undefined,
       address: formData.address || undefined,
-      finger_template_id: formData.finger_template_id || undefined,
+      finger_template_id: formData.finger_template_id.trim(), // Required - validation ensures it exists
       role: formData.role === "user/employee" ? "employee" : formData.role,
     };
 
@@ -830,39 +833,232 @@ export default function AdminEmployee() {
     }
   }
 
-  const startFingerprintStream = () => {
+  const startFingerprintStream = async () => {
     if (scanListening) return;
+    
+    // Check device status first
+    try {
+      const statusRes = await fetch(`${API_BASE_URL}/fingerprint/status`, {
+        credentials: "include",
+      });
+      const statusData = await statusRes.json();
+      
+      if (!statusData.connected) {
+        setScanStatus("Device not connected");
+        setScanListening(false);
+        setNotification({
+          type: "error",
+          message: statusData.message || "Fingerprint device is not connected. Please connect the device and try again, or manually enter the fingerprint ID.",
+        });
+        setTimeout(() => setNotification(null), 5000);
+        return;
+      }
+    } catch (err) {
+      console.error("Failed to check device status:", err);
+      // Continue anyway - let EventSource handle it
+    }
+    
     setScanListening(true);
-    setScanStatus("Listening for device...");
+    setScanStatus("Connecting to fingerprint scanner...");
     const url = `${API_BASE_URL}/fingerprint/events`;
     const es = new EventSource(url);
     eventSourceRef.current = es;
+    
+    console.log("🔍 Starting fingerprint stream for testing enrolled fingerprints...");
+    
+    es.onopen = () => {
+      console.log("✅ EventSource connected for fingerprint testing");
+      setScanStatus("Ready - Place your enrolled finger on the scanner");
+    };
+
     es.onmessage = (evt) => {
       try {
         const payload = JSON.parse(evt.data);
-        if (payload.type === "detected" && payload.id) {
+        console.log("📥 Fingerprint event received:", payload);
+        
+        if (payload.type === "scanning") {
+          console.log("🔍 Fingerprint scanning detected");
+          setScanStatus("🔍 Scanning fingerprint... Please keep your finger on the scanner");
+          setNotification({
+            type: "info",
+            message: "🔍 Scanning fingerprint... Please keep your finger on the scanner",
+          });
+        } else if (payload.type === "detected" && payload.id) {
+          console.log("✅ Fingerprint detected, ID:", payload.id);
+          const fingerprintId = String(payload.id);
+          // Update both add form and edit form if edit modal is open
           setFormData((prev) => ({
             ...prev,
-            finger_template_id: String(payload.id),
+            finger_template_id: fingerprintId,
           }));
-          setScanStatus(`Detected ID: ${payload.id}`);
+          // Also update edit form if it's open
+          if (isEditOpen) {
+            setEditFingerprint(fingerprintId);
+          }
+          setScanStatus(`✅ Detected ID: ${payload.id} - Fingerprint is working!`);
           setNotification({
             type: "success",
-            message: `Fingerprint ID ${payload.id} detected.`,
+            message: `✅ Fingerprint ID ${payload.id} detected successfully! The fingerprint is working correctly.`,
           });
-          setTimeout(() => setNotification(null), 3000);
+          setTimeout(() => {
+            setNotification(null);
+            setScanStatus(`Ready - Place your enrolled finger on the scanner (Last detected: ID ${payload.id})`);
+          }, 5000);
         } else if (payload.type === "unregistered") {
-          setScanStatus("Unregistered fingerprint");
-        } else if (payload.type === "raw" || payload.type === "status") {
-          setScanStatus(String(payload.raw || payload.data || ""));
+          console.log("❌ Unregistered fingerprint detected");
+          setScanStatus("❌ Unregistered fingerprint - This fingerprint is not enrolled");
+          setNotification({
+            type: "error",
+            message: "❌ Unregistered fingerprint. This fingerprint is not enrolled in the device. Please enroll it first.",
+          });
+          setTimeout(() => {
+            setNotification(null);
+            setScanStatus("Ready - Place your enrolled finger on the scanner");
+          }, 5000);
+        } else if (payload.type === "raw") {
+          console.log("📨 Raw fingerprint data:", payload.raw);
+          
+          // Check for scanning message in raw data
+          if (payload.raw && (payload.raw.includes("scanning") || payload.raw.includes("Scanning") || payload.raw.includes("Fingerprint scanning"))) {
+            setScanStatus("🔍 Scanning fingerprint... Please keep your finger on the scanner");
+            setNotification({
+              type: "info",
+              message: "🔍 Scanning fingerprint... Please keep your finger on the scanner",
+            });
+          }
+          
+          // Check for detection in raw data (fallback)
+          const detectedMatch = payload.raw?.match(/Detected ID:\s*(\d+)/i) || payload.raw?.match(/Found ID\s*#?\s*(\d+)/i);
+          if (detectedMatch && detectedMatch[1]) {
+            const id = Number(detectedMatch[1]);
+            console.log("✅ Found detection in raw data, ID:", id);
+            const fingerprintId = String(id);
+            setFormData((prev) => ({
+              ...prev,
+              finger_template_id: fingerprintId,
+            }));
+            // Also update edit form if it's open
+            if (isEditOpen) {
+              setEditFingerprint(fingerprintId);
+            }
+            setScanStatus(`✅ Detected ID: ${id} - Fingerprint is working!`);
+            setNotification({
+              type: "success",
+              message: `✅ Fingerprint ID ${id} detected successfully! The fingerprint is working correctly.`,
+            });
+            setTimeout(() => {
+              setNotification(null);
+              setScanStatus(`Ready - Place your enrolled finger on the scanner (Last detected: ID ${id})`);
+            }, 5000);
+          }
+          
+          // Check for unregistered in raw data
+          if (payload.raw && payload.raw.includes("Unregistered")) {
+            setScanStatus("❌ Unregistered fingerprint - This fingerprint is not enrolled");
+            setNotification({
+              type: "error",
+              message: "❌ Unregistered fingerprint. This fingerprint is not enrolled in the device. Please enroll it first.",
+            });
+            setTimeout(() => {
+              setNotification(null);
+              setScanStatus("Ready - Place your enrolled finger on the scanner");
+            }, 5000);
+          }
+        } else if (payload.type === "enroll_status") {
+          // Handle enrollment status messages with notifications
+          const statusMessage = payload.message || payload.raw || "";
+          setScanStatus(statusMessage);
+          
+          // Show notifications for all enrollment steps
+          if (payload.step === "enroll_started") {
+            setNotification({
+              type: "success",
+              message: statusMessage,
+            });
+            setTimeout(() => setNotification(null), 4000);
+          } else if (payload.step === "waiting_id") {
+            setNotification({
+              type: "success",
+              message: statusMessage,
+            });
+            setTimeout(() => setNotification(null), 3000);
+          } else if (payload.step === "place_finger") {
+            setNotification({
+              type: "success",
+              message: statusMessage,
+            });
+            setTimeout(() => setNotification(null), 8000); // Longer timeout for action steps
+          } else if (payload.step === "first_image") {
+            setNotification({
+              type: "success",
+              message: statusMessage,
+            });
+            setTimeout(() => setNotification(null), 6000);
+          } else if (payload.step === "remove_finger") {
+            setNotification({
+              type: "success",
+              message: statusMessage,
+            });
+            setTimeout(() => setNotification(null), 8000);
+          } else if (payload.step === "place_again") {
+            setNotification({
+              type: "success",
+              message: statusMessage,
+            });
+            setTimeout(() => setNotification(null), 8000);
+          } else if (payload.step === "second_image") {
+            setNotification({
+              type: "success",
+              message: statusMessage,
+            });
+            setTimeout(() => setNotification(null), 6000);
+          } else if (payload.step === "model_created") {
+            setNotification({
+              type: "success",
+              message: statusMessage,
+            });
+            setTimeout(() => setNotification(null), 5000);
+          } else if (payload.step === "success") {
+            setNotification({
+              type: "success",
+              message: statusMessage,
+            });
+            setTimeout(() => setNotification(null), 10000); // Keep success message longer
+          } else if (payload.step === "failed") {
+            setNotification({
+              type: "error",
+              message: statusMessage,
+            });
+            setTimeout(() => setNotification(null), 10000);
+          }
+        } else if (payload.type === "status") {
+          // Device status messages
+          console.log("📡 Device status:", payload.raw);
+          if (payload.raw && (payload.raw.includes("ready") || payload.raw.includes("READY"))) {
+            setScanStatus("Ready - Place your enrolled finger on the scanner");
+          }
         }
       } catch (err) {
-        setScanStatus(String(evt.data));
+        console.error("❌ Error parsing fingerprint event:", err, "Raw data:", evt.data);
+        setScanStatus("Error parsing event data");
       }
     };
     es.onerror = (err) => {
-      setScanStatus("EventSource error.");
-      setScanListening(false);
+      console.error("❌ EventSource error:", err);
+      console.log("EventSource readyState:", es.readyState);
+      
+      if (es.readyState === EventSource.CLOSED) {
+        setScanStatus("Connection closed. Click Listen again to reconnect.");
+        setScanListening(false);
+      } else {
+        setScanStatus("Device connection error - Check backend connection");
+        setScanListening(false);
+      }
+      setNotification({
+        type: "error",
+        message: "Unable to connect to fingerprint device. Please check the connection or manually enter the fingerprint ID.",
+      });
+      setTimeout(() => setNotification(null), 5000);
       try {
         es.close();
       } catch (e) { }
@@ -891,9 +1087,28 @@ export default function AdminEmployee() {
         type: "error",
         message: "Invalid fingerprint ID. Must be 1-127",
       });
-      setTimeout(() => setNotification(null), 3000);
+      setTimeout(() => setNotification(null), 5000);
       return;
     }
+    
+    // Make sure we're listening to enrollment events BEFORE starting enrollment
+    if (!scanListening) {
+      setNotification({
+        type: "success",
+        message: "Starting fingerprint listener... Please wait.",
+      });
+      startFingerprintStream();
+      // Wait a moment for EventSource to connect
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    // Show enrollment started message
+    setNotification({
+      type: "success",
+      message: `🚀 Starting enrollment for ID ${id}. Watch for step-by-step instructions below.`,
+    });
+    setScanStatus(`⏳ Enrolling ID ${id}... Waiting for device to respond...`);
+    
     try {
       const res = await fetch(`${API_BASE_URL}/fingerprint/enroll`, {
         method: "POST",
@@ -902,19 +1117,61 @@ export default function AdminEmployee() {
         body: JSON.stringify({ id }),
       });
       const json = await res.json();
-      if (!res.ok || !json.ok)
-        throw new Error(json.message || "Enroll request failed");
-      setNotification({
-        type: "success",
-        message: `Enroll command sent to device for ID ${id}`,
-      });
-      // Automatically set the fingerprint ID in the form
-      setFormData((prev) => ({ ...prev, finger_template_id: String(id) }));
+      if (!res.ok || !json.ok) {
+        // If device is not connected, still allow manual entry
+        if (json.deviceNotConnected) {
+          setNotification({
+            type: "error",
+            message: json.message || "Device not connected. You can manually enter the fingerprint ID above.",
+          });
+          // Still set the ID in the form so user can use it
+          const fingerprintId = String(id);
+          setFormData((prev) => ({ ...prev, finger_template_id: fingerprintId }));
+          // Also update edit form if it's open
+          if (isEditOpen) {
+            setEditFingerprint(fingerprintId);
+          }
+        } else if (json.timeout) {
+          setNotification({
+            type: "error",
+            message: json.message || "Enrollment timed out. Please try again and follow the device instructions carefully.",
+          });
+          setScanStatus("Enrollment failed - try again");
+        } else {
+          throw new Error(json.message || "Enroll request failed");
+        }
+      } else {
+        // Enrollment successful!
+        setNotification({
+          type: "success",
+          message: `✅ Fingerprint enrollment successful for ID ${id}! The fingerprint is now ready for attendance scanning.`,
+        });
+        // Automatically set the fingerprint ID in the form
+        const fingerprintId = String(id);
+        setFormData((prev) => ({ ...prev, finger_template_id: fingerprintId }));
+        // Also update edit form if it's open
+        if (isEditOpen) {
+          setEditFingerprint(fingerprintId);
+        }
+        setScanStatus(`✅ Enrollment successful! ID ${id} is ready. Click "Listen" to test it.`);
+        
+        // Show additional info about testing
+        setTimeout(() => {
+          setNotification({
+            type: "success",
+            message: `To test the enrolled fingerprint: 1) Click "Listen" button, 2) Place the enrolled finger on the scanner. It should detect ID ${id}. Then save the employee to use it for attendance.`,
+          });
+        }, 2000);
+      }
     } catch (err) {
       console.error(err);
-      setNotification({ type: "error", message: String(err) });
+      setNotification({ 
+        type: "error", 
+        message: String(err) 
+      });
+      setScanStatus("Enrollment error occurred");
     } finally {
-      setTimeout(() => setNotification(null), 3000);
+      setTimeout(() => setNotification(null), 8000);
     }
   };
 
@@ -1470,29 +1727,80 @@ export default function AdminEmployee() {
                     </div>
                   </div>
 
-                  <div className="detail-section">
+                  <div className="detail-section biometric-section">
                     <h3>Biometrics</h3>
-                    <div className="detail-item">
-                      <span className="detail-label">
-                        Fingerprint Template ID
-                      </span>
-                      <input
-                        name="finger_template_id"
-                        value={editFingerprint}
-                        onChange={(e) => setEditFingerprint(e.target.value)}
-                        placeholder="Enter template ID from the fingerprint scanner (optional)"
-                        className="detail-input"
-                      />
-                      <div
-                        className="field-info"
-                        style={{
-                          fontSize: "12px",
-                          color: "#6b7280",
-                          marginTop: "4px",
-                        }}
-                      >
-                        Update this if the employee re-enrolls on a fingerprint
-                        device.
+                    <div className="biometric-item">
+                      <div className="biometric-left">
+                        <span className="detail-label">
+                          Fingerprint Template ID
+                        </span>
+                      </div>
+                      <div className="biometric-right">
+                        <input
+                          name="finger_template_id"
+                          value={editFingerprint}
+                          onChange={(e) => setEditFingerprint(e.target.value)}
+                          placeholder="Enter template ID or scan"
+                          autoComplete="off"
+                          className="detail-input fingerprint-input"
+                        />
+                        <div className="bio-actions">
+                          <button
+                            type="button"
+                            className="btn scan-btn"
+                            onClick={startFingerprintStream}
+                            disabled={scanListening}
+                          >
+                            Listen
+                            <div
+                              className={`scan-indicator ${scanListening ? "on" : "off"
+                                }`}
+                            ></div>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={stopFingerprintStream}
+                            disabled={!scanListening}
+                          >
+                            Stop
+                          </button>
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={enrollOnDevice}
+                          >
+                            Enroll
+                          </button>
+                        </div>
+                        <div
+                          className="field-info"
+                          style={{
+                            fontSize: "12px",
+                            color: "#6b7280",
+                            marginTop: "4px",
+                            minHeight: "20px",
+                            fontWeight: scanStatus ? "500" : "400",
+                            color: scanStatus && scanStatus.includes("✅") ? "#10b981" : 
+                                   scanStatus && scanStatus.includes("❌") ? "#ef4444" : scanStatus && scanStatus.includes("🔍") ? "#3b82f6" : "#6b7280",
+                          }}
+                        >
+                          {scanStatus || (
+                            <>
+                              <strong>Instructions:</strong> 
+                              <br />
+                              1) Click <strong>"Listen"</strong> to start listening for fingerprints
+                              <br />
+                              2) Click <strong>"Enroll"</strong> and enter ID (1-127) to enroll a new fingerprint
+                              <br />
+                              3) After enrollment, click <strong>"Listen"</strong> again and place your enrolled finger to test it
+                              <br />
+                              4) The fingerprint ID will be automatically filled in
+                              <br />
+                              <em>Update this if the employee re-enrolls on a fingerprint device.</em>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1874,17 +2182,18 @@ export default function AdminEmployee() {
                   </div>
 
                   <div className="detail-section biometric-section">
-                    <h3>Biometrics</h3>
+                    <h3>Biometrics <span style={{color: "#ef4444", fontSize: "14px"}}>*Required</span></h3>
                     <div className="biometric-item">
                       <div className="biometric-left">
                         <span className="detail-label">
-                          Fingerprint Template ID
+                          Fingerprint Template ID <span style={{color: "#ef4444"}}>*</span>
                         </span>
                       </div>
                       <div className="biometric-right">
                         <input
                           name="finger_template_id"
                           placeholder="Enter template ID or scan"
+                          autoComplete="off"
                           className={`detail-input fingerprint-input ${formErrors.finger_template_id ? "error" : ""
                             }`}
                           value={formData.finger_template_id}
@@ -1894,6 +2203,7 @@ export default function AdminEmployee() {
                               finger_template_id: e.target.value,
                             }))
                           }
+                          required
                         />
                         <div className="bio-actions">
                           <button
@@ -1933,12 +2243,34 @@ export default function AdminEmployee() {
                           className="field-info"
                           style={{
                             fontSize: "12px",
-                            color: "#6b7280",
                             marginTop: "4px",
+                            minHeight: "20px",
+                            fontWeight: scanStatus ? "500" : "400",
+                            color: scanStatus && scanStatus.includes("✅") ? "#10b981" : 
+                                   scanStatus && scanStatus.includes("❌") ? "#ef4444" : "#6b7280",
                           }}
                         >
-                          {scanStatus ||
-                            "Click Listen to pick up a fingerprint scan from the attached device (COM port)."}
+                          {scanStatus ? (
+                            <div style={{color: scanStatus.includes("✅") ? "#10b981" : scanStatus.includes("❌") ? "#ef4444" : scanStatus.includes("🔍") ? "#3b82f6" : "#6b7280"}}>
+                              {scanStatus}
+                            </div>
+                          ) : (
+                            <>
+                              <strong style={{color: "#ef4444"}}>⚠️ Required:</strong> Fingerprint enrollment is mandatory. 
+                              <br />
+                              <strong>Instructions:</strong> 
+                              <br />
+                              1) Click <strong>"Listen"</strong> to start listening for fingerprints
+                              <br />
+                              2) Click <strong>"Enroll"</strong> and enter ID (1-127) to enroll a new fingerprint
+                              <br />
+                              3) After enrollment, click <strong>"Listen"</strong> again and place your enrolled finger to test it
+                              <br />
+                              4) Follow the step-by-step notifications that appear
+                              <br />
+                              <strong style={{color: "#ef4444"}}>The employee cannot be added without a fingerprint ID.</strong>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>

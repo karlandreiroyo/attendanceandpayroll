@@ -60,7 +60,36 @@ export class UsersService {
         if (!data || (data as User[]).length === 0)
             throw new Error('Failed to create user');
 
-        return (data as User[])[0];
+        const createdUser = (data as User[])[0];
+        
+        // Automatically create corresponding employee record for attendance foreign key
+        // Only create if user has a user_id (which should always be the case)
+        if (createdUser.user_id) {
+            try {
+                const { error: employeeError } = await this.supabaseService.client
+                    .from('employees')
+                    .insert([
+                        {
+                            user_id: createdUser.user_id,
+                            first_name: createdUser.first_name || '',
+                            last_name: createdUser.last_name || '',
+                        },
+                    ]);
+
+                if (employeeError) {
+                    // Log warning but don't fail user creation
+                    console.warn(`Failed to create employee record for user_id ${createdUser.user_id}:`, employeeError.message);
+                    // Employee record will be created automatically when attendance is recorded
+                } else {
+                    console.log(`✅ Created employee record for user_id ${createdUser.user_id}`);
+                }
+            } catch (err) {
+                // Don't fail user creation if employee creation fails
+                console.warn('Error creating employee record:', err);
+            }
+        }
+
+        return createdUser;
     }
 
     async update(id: number | string, user: Partial<User>): Promise<User> {

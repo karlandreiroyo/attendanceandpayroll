@@ -74,6 +74,7 @@ export default function PayrollLogin() {
   const [scanError, setScanError] = useState("");
   const [scanLoading, setScanLoading] = useState(false);
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
+  const [notification, setNotification] = useState(null);
   const eventSourceRef = useRef(null);
 
   const validateEmail = useMemo(
@@ -245,54 +246,185 @@ export default function PayrollLogin() {
   };
 
   // Time In/Out handlers
-  const startFingerprintScanning = () => {
+  const startFingerprintScanning = async () => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
     }
 
+    // Check device status first
+    try {
+      const statusRes = await fetch(`${API_BASE_URL}/fingerprint/status`, {
+        credentials: "include",
+      });
+      const statusData = await statusRes.json();
+      
+      if (!statusData.connected) {
+        setScanStatus("Device not connected");
+        setScanError(statusData.message || "Fingerprint device is not connected. Please check the connection.");
+        setIsListening(false);
+        return;
+      }
+    } catch (err) {
+      console.error("Failed to check device status:", err);
+      setScanError("Could not check device status. Please ensure the backend is running.");
+      setIsListening(false);
+      return;
+    }
+
     setIsListening(true);
     setScanError("");
-    setScanStatus("Waiting for fingerprint scan...");
+    setScanStatus("Ready - Place your finger on the scanner now");
 
     const eventSource = new EventSource(`${API_BASE_URL}/fingerprint/events`);
     eventSourceRef.current = eventSource;
 
+    eventSource.onopen = () => {
+      console.log("✅ EventSource connected to fingerprint stream");
+      console.log("EventSource readyState:", eventSource.readyState);
+      console.log("EventSource URL:", `${API_BASE_URL}/fingerprint/events`);
+      setScanStatus("Ready - Place your finger on the scanner now");
+      console.log("⏳ Now waiting for fingerprint events...");
+    };
+
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        console.log("📥 Fingerprint event received:", data);
         
-        if (data.type === "detected" && data.id) {
+        if (data.type === "scanning") {
+          console.log("🔍 Fingerprint scanning detected!");
+          setScanLoading(true);
+          setScanStatus("Scanning fingerprint... Please keep your finger on the scanner");
+          setNotification({
+            type: "info",
+            message: "🔍 Scanning fingerprint... Please keep your finger on the scanner",
+            details: null,
+          });
+        } else if (data.type === "detected" && data.id) {
+          console.log("✅ Fingerprint detected, ID:", data.id);
           handleFingerprintDetected(data.id);
         } else if (data.type === "unregistered") {
+          console.log("❌ Unregistered fingerprint detected");
+          setScanLoading(false);
           setScanStatus("Unregistered fingerprint. Please contact administrator.");
           setScanError("This fingerprint is not registered in the system.");
+          setNotification({
+            type: "error",
+            message: "❌ Unregistered fingerprint. Please contact administrator.",
+            details: null,
+          });
           setTimeout(() => {
-            setScanStatus("Waiting for fingerprint scan...");
+            setScanStatus("Ready - Place your finger on the scanner now");
             setScanError("");
+            setNotification(null);
           }, 3000);
+        } else if (data.type === "raw") {
+          // Log ALL raw data for debugging
+          console.log("📨 Raw fingerprint data:", data.raw);
+          
+          // Show scanning status if we see scanning-related messages
+          if (data.raw && (data.raw.includes("scanning") || data.raw.includes("Scanning") || data.raw.includes("Fingerprint scanning"))) {
+            console.log("🔍 Detected scanning message in raw data!");
+            setScanLoading(true);
+            setScanStatus("Scanning fingerprint... Please keep your finger on the scanner");
+            setNotification({
+              type: "info",
+              message: "🔍 Scanning fingerprint... Please keep your finger on the scanner",
+              details: null,
+            });
+          }
+          
+          // Check for detection in raw data (in case parsing missed it)
+          const detectedMatch = data.raw.match(/Detected ID:\s*(\d+)/i) || data.raw.match(/Found ID\s*#?\s*(\d+)/i);
+          if (detectedMatch && detectedMatch[1]) {
+            const id = Number(detectedMatch[1]);
+            console.log("✅ Found detection in raw data, ID:", id);
+            handleFingerprintDetected(id);
+          }
+          
+          // Check for unregistered in raw data
+          if (data.raw && data.raw.includes("Unregistered")) {
+            console.log("❌ Unregistered fingerprint in raw data");
+            setScanLoading(false);
+            setScanStatus("Unregistered fingerprint. Please contact administrator.");
+            setScanError("This fingerprint is not registered in the system.");
+            setNotification({
+              type: "error",
+              message: "❌ Unregistered fingerprint. Please contact administrator.",
+              details: null,
+            });
+            setTimeout(() => {
+              setScanStatus("Ready - Place your finger on the scanner now");
+              setScanError("");
+              setNotification(null);
+            }, 3000);
+          }
+          
+          // Log DEBUG messages from Arduino for troubleshooting
+          if (data.raw && data.raw.includes("DEBUG:")) {
+            console.log("🔧 Arduino DEBUG:", data.raw);
+            // Show sensor errors to user
+            if (data.raw.includes("error code")) {
+              setScanStatus(`Sensor issue: ${data.raw}`);
+              setScanError("Sensor error detected. Check sensor connection.");
+              setNotification({
+                type: "error",
+                message: `⚠️ Sensor error detected. Check sensor connection. ${data.raw}`,
+                details: null,
+              });
+              setTimeout(() => {
+                setScanStatus("Ready - Place your finger on the scanner now");
+                setScanError("");
+                setNotification(null);
+              }, 5000);
+            }
+          }
         }
       } catch (err) {
-        console.error("Error parsing fingerprint event:", err);
+        console.error("❌ Error parsing fingerprint event:", err, "Raw data:", event.data);
       }
     };
 
     eventSource.onerror = (err) => {
-      console.error("EventSource error:", err);
-      setScanError("Connection to fingerprint scanner lost. Please check if the device is connected.");
-      setIsListening(false);
-      // Try to reconnect after 3 seconds
-      setTimeout(() => {
-        if (!eventSourceRef.current || eventSourceRef.current.readyState === EventSource.CLOSED) {
-          startFingerprintScanning();
-        }
-      }, 3000);
+      console.error("❌ EventSource error:", err);
+      console.log("EventSource readyState:", eventSource.readyState);
+      console.log("EventSource URL:", eventSource.url);
+      
+      if (eventSource.readyState === EventSource.CLOSED) {
+        console.log("⚠️ EventSource connection closed - will attempt to reconnect");
+        setScanStatus("Connection closed. Attempting to reconnect...");
+        setScanError("Connection to fingerprint scanner closed. Attempting to reconnect...");
+        setIsListening(false);
+        // Try to reconnect after 3 seconds
+        setTimeout(() => {
+          if (!eventSourceRef.current || eventSourceRef.current.readyState === EventSource.CLOSED) {
+            console.log("🔄 Attempting to reconnect EventSource...");
+            startFingerprintScanning();
+          }
+        }, 3000);
+      } else {
+        console.log("⚠️ EventSource error state:", eventSource.readyState);
+        setScanError("Connection to fingerprint scanner lost. Please check if the device is connected.");
+        setIsListening(false);
+      }
     };
   };
 
   const handleFingerprintDetected = async (fingerprintId) => {
+    const fid = Number(fingerprintId);
+    if (!Number.isFinite(fid)) {
+      setScanError("Invalid fingerprint ID received from scanner");
+      setTimeout(() => {
+        setScanError("");
+        setScanStatus("Waiting for fingerprint scan...");
+      }, 3000);
+      return;
+    }
+
     setScanLoading(true);
-    setScanStatus(`Processing fingerprint ID: ${fingerprintId}...`);
+    setScanStatus(`Processing fingerprint ID: ${fid}...`);
     setScanError("");
+    setNotification(null);
 
     try {
       const response = await fetch(`${API_BASE_URL}/attendance/record`, {
@@ -300,7 +432,7 @@ export default function PayrollLogin() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ fingerprintId }),
+        body: JSON.stringify({ fingerprintId: fid }),
       });
 
       const data = await response.json();
@@ -310,26 +442,61 @@ export default function PayrollLogin() {
       }
 
       if (data.success) {
+        const now = new Date();
+        const formattedDate = now.toLocaleDateString("en-US", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+        const formattedTime = now.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: true,
+        });
+
         setLastScan({
           type: data.type,
           timestamp: data.timestamp,
           employee: data.employee,
           message: data.message,
         });
-        setScanStatus(data.message);
         
+        // Show success notification with all details
+        setNotification({
+          type: "success",
+          message: `✅ ${data.type} Successful!`,
+          details: {
+            employeeName: data.employee?.name || "Unknown",
+            date: formattedDate,
+            time: formattedTime,
+            type: data.type,
+            message: data.message,
+          },
+        });
+
+        setScanStatus(`${data.type} recorded successfully for ${data.employee?.name || "Employee"}`);
+        
+        // Clear notification after 10 seconds
         setTimeout(() => {
-          setScanStatus("Waiting for fingerprint scan...");
-        }, 8000);
+          setNotification(null);
+          setScanStatus("Ready - Place your finger on the scanner now");
+        }, 10000);
       } else {
         throw new Error(data.message || "Failed to record attendance");
       }
     } catch (err) {
       setScanError(err.message || "An error occurred while recording attendance");
       setScanStatus("");
+      setNotification({
+        type: "error",
+        message: `❌ ${err.message || "Failed to record attendance"}`,
+      });
       setTimeout(() => {
         setScanError("");
-        setScanStatus("Waiting for fingerprint scan...");
+        setScanStatus("Ready - Place your finger on the scanner now");
+        setNotification(null);
       }, 5000);
     } finally {
       setScanLoading(false);
@@ -596,11 +763,87 @@ export default function PayrollLogin() {
         </div>
       )}
 
+      {/* Notification Toast */}
+      {notification && (
+        <div className={`notification-toast ${notification.type}`}>
+          <div className="notification-content">
+            <div className="notification-header">
+              <span className="notification-icon">
+                {notification.type === "success" ? "✅" : "❌"}
+              </span>
+              <h3 className="notification-title">{notification.message}</h3>
+            </div>
+            {notification.details && (
+              <div className="notification-details">
+                <div className="notification-detail-item">
+                  <strong>Employee:</strong> {notification.details.employeeName}
+                </div>
+                <div className="notification-detail-item">
+                  <strong>Date:</strong> {notification.details.date}
+                </div>
+                <div className="notification-detail-item">
+                  <strong>Time:</strong> {notification.details.time}
+                </div>
+                <div className="notification-detail-item">
+                  <strong>Type:</strong>{" "}
+                  <span
+                    className={`type-badge ${
+                      notification.details.type === "Time In"
+                        ? "time-in"
+                        : "time-out"
+                    }`}
+                  >
+                    {notification.details.type}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
         {/* Time In/Out Section */}
         <div className="time-in-out-card">
           <div className="time-in-out-header">
             <h2 className="time-in-out-title">Time In / Time Out</h2>
             <p className="time-in-out-subtitle">Automatic fingerprint capture</p>
+          </div>
+
+          {/* Scanner Status Display */}
+          <div className="scanner-status-container">
+            {scanLoading && (
+              <div className="scanner-loading">
+                <div className="spinner"></div>
+                <p className="scanner-status-text">Processing fingerprint...</p>
+              </div>
+            )}
+            {!scanLoading && scanStatus && (
+              <div className={`status-message ${scanError ? "error" : "success"}`}>
+                {scanStatus}
+              </div>
+            )}
+            {scanError && !scanLoading && (
+              <div className="status-message error">{scanError}</div>
+            )}
+            {!scanLoading && !scanStatus && !scanError && (
+              <div className="scanner-ready">
+                <svg
+                  className="scanner-icon scanning"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                <p className="scanner-status-text">Ready for fingerprint scan</p>
+              </div>
+            )}
           </div>
 
           <div className="attendance-display">

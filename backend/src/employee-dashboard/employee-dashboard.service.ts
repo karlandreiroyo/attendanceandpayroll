@@ -110,12 +110,14 @@ export class EmployeeDashboardService {
   }
 
   private async loadAttendance(employeeId: string) {
+    // Fetch from the attendance table (same table used by attendance service)
     const { data, error } = await this.supabaseService.client
-      .from('employee_attendance')
-      .select('id,status,timestamp')
-      .eq('user_id', employeeId)
-      .order('timestamp', { ascending: false })
-      .limit(20);
+      .from('attendance')
+      .select('attendance_id, id, employee_id, date, time_in, time_out, status, total_hours')
+      .eq('employee_id', employeeId)
+      .order('date', { ascending: false })
+      .order('time_in', { ascending: false })
+      .limit(30);
 
     if (error) {
       if (error.code === '42P01' || error.code === 'PGRST114') {
@@ -130,17 +132,30 @@ export class EmployeeDashboardService {
     const safeStatuses = new Set(['Present', 'Late', 'Absent']);
     const summary = { Present: 0, Late: 0, Absent: 0 };
 
-    ((data as AttendanceRecord[]) ?? []).forEach((item) => {
-      const status = safeStatuses.has(item.status) ? item.status : 'Present';
+    // Process records to build summary and recent list
+    const records = (data as any[]) ?? [];
+    const recentRecords: any[] = [];
+
+    records.forEach((record) => {
+      const status = safeStatuses.has(record.status) ? record.status : 'Present';
       summary[status as keyof typeof summary] += 1;
+
+      // Create a timestamp from date and time_in for recent records
+      if (record.date && record.time_in) {
+        const timestamp = new Date(`${record.date}T${record.time_in}`).toISOString();
+        recentRecords.push({
+          id: record.attendance_id || record.id,
+          status: status,
+          timestamp: timestamp,
+        });
+      }
     });
 
+    // Sort recent records by timestamp descending
+    recentRecords.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
     return {
-      recent: ((data as AttendanceRecord[]) ?? []).map((item) => ({
-        id: item.id,
-        status: safeStatuses.has(item.status) ? item.status : 'Present',
-        timestamp: item.timestamp,
-      })),
+      recent: recentRecords.slice(0, 20), // Return top 20 most recent
       summary,
     };
   }

@@ -28,19 +28,144 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
       this.parser.on('data', (line: string) => {
         const text = (line || '').toString().trim();
         if (!text) return;
-        // Relay raw lines to listeners
+        
+        // Log all incoming data for debugging (use log instead of debug to ensure it shows)
+        // This is critical for troubleshooting - we need to see EVERYTHING from Arduino
+        this.logger.log(`[FINGERPRINT] Received from Arduino: "${text}"`);
+        
+        // Relay raw lines to listeners FIRST so frontend can see everything
+        // This ensures frontend gets all data even if parsing fails
         this.subject.next({ type: 'raw', raw: text });
 
+        // Parse enrollment status messages - check in order of specificity
+        if (/Enrolling ID/i.test(text)) {
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'enroll_started',
+            message: '✅ ID confirmed! Enrollment process starting. Get ready to place your finger...',
+            raw: text 
+          });
+        } else if (/Enter ID/i.test(text)) {
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'waiting_id',
+            message: '⏳ Waiting for ID confirmation...',
+            raw: text 
+          });
+        } else if (/Place finger/i.test(text) && !/Place finger again/i.test(text)) {
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'place_finger',
+            message: '👆 STEP 1: Please place your finger on the scanner now',
+            raw: text 
+          });
+        } else if (/First image taken/i.test(text)) {
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'first_image',
+            message: '✅ STEP 1 COMPLETE: First image captured! Now remove your finger.',
+            raw: text 
+          });
+        } else if (/Remove finger/i.test(text)) {
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'remove_finger',
+            message: '👋 STEP 2: Please remove your finger from the scanner',
+            raw: text 
+          });
+        } else if (/Place finger again/i.test(text)) {
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'place_again',
+            message: '👆 STEP 3: Please place your finger on the scanner again',
+            raw: text 
+          });
+        } else if (/Second image taken/i.test(text)) {
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'second_image',
+            message: '✅ STEP 3 COMPLETE: Second image captured! Processing fingerprint...',
+            raw: text 
+          });
+        } else if (/Model created/i.test(text)) {
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'model_created',
+            message: '✅ STEP 4: Fingerprint model created! Saving to device...',
+            raw: text 
+          });
+        } else if (/Enroll success|ENROLL_OK|enroll_ok|now stored|stored at|✅ Enroll success/i.test(text)) {
+          this.logger.log(`[FINGERPRINT] Enrollment success detected: "${text}"`);
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'success',
+            message: '🎉 SUCCESS! Enrollment completed! Your fingerprint is now ready for attendance scanning.',
+            raw: text 
+          });
+        } else if (/ENROLL_FAIL|Store failed/i.test(text)) {
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'failed',
+            message: '❌ Enrollment failed during storage. Please try again.',
+            raw: text 
+          });
+        } else if (/Model failed/i.test(text)) {
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'failed',
+            message: '❌ Enrollment failed: Could not create fingerprint model. Please try again with better finger placement.',
+            raw: text 
+          });
+        } else if (/Invalid ID/i.test(text)) {
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'failed',
+            message: '❌ Invalid ID. Must be between 1-127.',
+            raw: text 
+          });
+        }
+
+        // Check for scanning message first (when finger is placed)
+        if (/Fingerprint scanning/i.test(text)) {
+          this.logger.log(`🔍 [FINGERPRINT] Scanning detected: "${text}"`);
+          this.logger.log(`🔍 [FINGERPRINT] Sending 'scanning' event to clients`);
+          this.subject.next({ type: 'scanning', raw: text });
+          // Don't return - continue to check for detection in same message or next
+        }
+
         // Parse known messages from the Arduino
-        const found =
-          /Detected ID:\s*(\d+)/i.exec(text) ||
-          /Found ID\s*#?(\d+)/i.exec(text);
+        // Handle formats like: "✅ Detected ID: 123" or "Detected ID: 123" or "Found ID #123"
+        // Try "Detected ID:" first, then "Found ID #"
+        let found = /Detected ID:\s*(\d+)/i.exec(text);
+        if (!found) {
+          found = /Found ID\s*#\s*(\d+)/i.exec(text);
+        }
+        if (!found) {
+          found = /Found ID\s*#?(\d+)/i.exec(text);
+        }
+        
         if (found && found[1]) {
           const id = Number(found[1]);
           this.latestId = id;
-          this.logger.log(`Fingerprint detected: ${id}`);
+          this.logger.log(`✅ [FINGERPRINT] Fingerprint detected: ID ${id} (from: "${text}")`);
+          this.logger.log(`✅ [FINGERPRINT] Sending 'detected' event to clients with ID: ${id}`);
           this.subject.next({ type: 'detected', id, raw: text });
           return;
+        } else {
+          // Log if we received ID-related message but didn't parse it
+          if (text.includes('ID') && (text.includes('Detected') || text.includes('Found'))) {
+            this.logger.warn(`⚠️ [FINGERPRINT] Received ID message but couldn't parse: "${text}"`);
+          }
+        }
+        
+        // Log DEBUG messages from Arduino
+        if (text.includes('DEBUG:')) {
+          this.logger.warn(`[FINGERPRINT] Arduino DEBUG: ${text}`);
+        }
+        
+        // Also log raw messages for debugging
+        if (text.includes('ID') || text.includes('Detected') || text.includes('Found')) {
+          this.logger.debug(`Fingerprint-related message: ${text}`);
         }
 
         if (/Unregistered|Unregistered fingerprint/i.test(text)) {
@@ -50,25 +175,42 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
 
         if (
           /Device is now ready for scanning/i.test(text) ||
-          /Sensor found|Sensor not found/i.test(text)
+          /Sensor found|Sensor not found/i.test(text) ||
+          /READY/i.test(text) ||
+          /HEARTBEAT/i.test(text)
         ) {
+          this.logger.log(`[FINGERPRINT] Status message: ${text}`);
           this.subject.next({ type: 'status', raw: text });
         }
       });
 
       this.port.on('error', (err) => {
-        this.logger.warn(
-          `Serial port error (device may not be connected): ${
-            err && err.message ? err.message : String(err)
-          }`,
-        );
+        const errorMessage = err && err.message ? err.message : String(err);
+        let detailedMessage = errorMessage;
+        
+        // Provide more specific error messages
+        if (errorMessage.includes('Access denied')) {
+          detailedMessage = `Access denied to ${path}. The port may be in use by another application, or you may need administrator privileges. Close any other applications using this port and try again.`;
+        } else if (errorMessage.includes('cannot open') || errorMessage.includes('ENOENT')) {
+          detailedMessage = `Port ${path} not found. Please check that the fingerprint device is connected and the correct COM port is configured.`;
+        } else if (errorMessage.includes('EBUSY')) {
+          detailedMessage = `Port ${path} is busy. Another application may be using this port. Close other applications and try again.`;
+        }
+        
+        this.logger.warn(`Serial port error: ${detailedMessage}`);
         // Reset port on error so it can be retried later
         this.port = null;
         this.parser = null;
       });
 
       this.port.on('open', () => {
-        this.logger.log(`Serial port ${path} opened successfully`);
+        this.logger.log(`✅ Serial port ${path} opened successfully`);
+        this.logger.log(`📡 Listening for fingerprint data on ${path} @ ${baudRate} baud`);
+        // Send a test message to verify communication
+        this.subject.next({ 
+          type: 'status', 
+          raw: `Serial port ${path} opened and ready` 
+        });
       });
 
       // Handle case where port fails to open
@@ -78,10 +220,9 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
         this.parser = null;
       });
     } catch (err) {
+      const errorMessage = err && err.message ? err.message : String(err);
       this.logger.warn(
-        `Failed to initialize serial port (fingerprint device may not be connected): ${
-          err && err.message ? err.message : String(err)
-        }`,
+        `Failed to initialize serial port: ${errorMessage}`,
       );
       this.logger.log(
         'Application will continue without fingerprint functionality. Connect the device and restart to enable.',
@@ -110,7 +251,12 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
   }
 
   getEvents() {
+    this.logger.log('[FINGERPRINT] New EventSource client connected');
     return this.subject.asObservable();
+  }
+
+  isDeviceConnected(): boolean {
+    return this.port !== null && this.port.isOpen;
   }
 
   async sendCommand(cmd: string) {
@@ -119,7 +265,15 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
     }
     const write = (data: string) =>
       new Promise<void>((res, rej) => {
-        this.port!.write(data, (err) => (err ? rej(err) : res()));
+        this.port!.write(data, (err) => {
+          if (err) {
+            this.logger.error(`Failed to write command "${data}": ${err.message}`);
+            rej(err);
+          } else {
+            this.logger.log(`[FINGERPRINT] Sent command: "${data.trim()}"`);
+            res();
+          }
+        });
       });
     await write(cmd + '\n');
   }
@@ -129,35 +283,216 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
       throw new Error('Serial port not initialized or not connected');
     }
 
-    return new Promise((resolve) => {
+    this.logger.log(`[FINGERPRINT] Starting enrollment for ID: ${id}`);
+
+    return new Promise((resolve, reject) => {
+      let idSent = false;
+      let enrollmentStarted = false;
+      let enrollmentCompleted = false;
+
       // Send enroll command
-      this.sendCommand('enroll');
-      setTimeout(() => {
-        this.sendCommand(String(id));
-      }, 100); // small delay
+      this.sendCommand('enroll').catch((err) => {
+        this.logger.error(`Failed to send enroll command: ${err.message}`);
+        reject(err);
+      });
 
       // Listen for response
       const subscription = this.subject.subscribe((event) => {
+        // Wait for "Enter ID #" message before sending ID
+        if (event.type === 'raw' && /Enter ID/i.test(event.raw) && !idSent) {
+          this.logger.log(`[FINGERPRINT] Arduino requested ID, sending: ${id}`);
+          idSent = true;
+          // Send ID after Arduino is ready
+          setTimeout(() => {
+            this.sendCommand(String(id)).catch((err) => {
+              this.logger.error(`Failed to send ID: ${err.message}`);
+            });
+          }, 200);
+        }
+
+        // Check if enrollment actually started
+        if (event.type === 'raw' && /Enrolling ID/i.test(event.raw)) {
+          enrollmentStarted = true;
+          this.logger.log(`[FINGERPRINT] Enrollment started for ID: ${id}`);
+        }
+
+        // Listen for final result - check multiple success patterns
         if (event.type === 'raw') {
-          if (event.raw === 'ENROLL_OK') {
+          const rawText = event.raw.toLowerCase();
+          // Check for success - Arduino sends "ENROLL_OK" or "✅ Enroll success!"
+          if (rawText === 'enroll_ok' || 
+              rawText === 'enroll_ok\n' ||
+              /enroll success/i.test(event.raw) ||
+              /✅ enroll success/i.test(event.raw) ||
+              /now stored/i.test(event.raw) ||
+              /stored at/i.test(event.raw) ||
+              /enrollment complete/i.test(event.raw)) {
+            if (!enrollmentCompleted) {
+              enrollmentCompleted = true;
+              this.logger.log(`[FINGERPRINT] Enrollment successful for ID: ${id} (from: "${event.raw}")`);
+              subscription.unsubscribe();
+              resolve(true);
+            }
+          } else if (event.raw === 'ENROLL_FAIL' || 
+                     event.raw === 'ENROLL_FAIL\n' ||
+                     /enroll fail/i.test(event.raw) || 
+                     /store failed/i.test(event.raw) ||
+                     /enrollment failed/i.test(event.raw) ||
+                     /❌ store failed/i.test(event.raw)) {
+            if (!enrollmentCompleted) {
+              enrollmentCompleted = true;
+              this.logger.warn(`[FINGERPRINT] Enrollment failed for ID: ${id} (from: "${event.raw}")`);
+              subscription.unsubscribe();
+              resolve(false);
+            }
+          }
+        }
+        
+        // Also check enroll_status events for success
+        if (event.type === 'enroll_status') {
+          if (event.step === 'success' && !enrollmentCompleted) {
+            enrollmentCompleted = true;
+            this.logger.log(`[FINGERPRINT] Enrollment successful (via status) for ID: ${id}`);
             subscription.unsubscribe();
             resolve(true);
-          } else if (event.raw === 'ENROLL_FAIL') {
+          } else if (event.step === 'failed' && !enrollmentCompleted) {
+            enrollmentCompleted = true;
+            this.logger.warn(`[FINGERPRINT] Enrollment failed (via status) for ID: ${id}`);
             subscription.unsubscribe();
             resolve(false);
           }
         }
       });
 
-      // Timeout after 30 seconds
+      // Timeout after 90 seconds (increased for full enrollment process)
       setTimeout(() => {
-        subscription.unsubscribe();
-        resolve(false);
-      }, 30000);
+        if (!enrollmentCompleted) {
+          enrollmentCompleted = true;
+          subscription.unsubscribe();
+          if (!enrollmentStarted) {
+            this.logger.warn(`[FINGERPRINT] Enrollment timeout: Device did not start enrollment process for ID: ${id}`);
+          } else {
+            this.logger.warn(`[FINGERPRINT] Enrollment timeout: Process did not complete for ID: ${id}`);
+          }
+          resolve(false);
+        }
+      }, 90000);
     });
   }
 
   async clearDatabase() {
     await this.sendCommand('clear');
+  }
+
+  /**
+   * List all available serial ports
+   */
+  async listAvailablePorts() {
+    try {
+      const ports = await SerialPort.list();
+      return ports.map((port) => ({
+        path: port.path,
+        manufacturer: port.manufacturer || 'Unknown',
+        serialNumber: port.serialNumber || 'N/A',
+        pnpId: port.pnpId || 'N/A',
+        vendorId: port.vendorId || 'N/A',
+        productId: port.productId || 'N/A',
+      }));
+    } catch (err) {
+      this.logger.error(`Failed to list ports: ${err}`);
+      return [];
+    }
+  }
+
+  /**
+   * Check if a specific port is available (not in use)
+   */
+  async checkPortAvailability(portPath: string): Promise<{
+    available: boolean;
+    inUse: boolean;
+    error?: string;
+  }> {
+    try {
+      // First check if port exists in the list
+      const ports = await SerialPort.list();
+      const portExists = ports.some((p) => p.path === portPath);
+
+      if (!portExists) {
+        return {
+          available: false,
+          inUse: false,
+          error: `Port ${portPath} does not exist. Available ports: ${ports.map((p) => p.path).join(', ') || 'None'}`,
+        };
+      }
+
+      // Try to open the port to see if it's available
+      return new Promise((resolve) => {
+        let testPort: SerialPort | null = null;
+        const timeout = setTimeout(() => {
+          if (testPort) {
+            try {
+              testPort.close();
+            } catch (e) {
+              // Ignore close errors
+            }
+          }
+          resolve({
+            available: false,
+            inUse: true,
+            error: `Port ${portPath} appears to be in use or cannot be opened`,
+          });
+        }, 2000);
+
+        try {
+          testPort = new SerialPort({ path: portPath, baudRate: 9600 });
+
+          testPort.on('open', () => {
+            clearTimeout(timeout);
+            try {
+              testPort?.close();
+            } catch (e) {
+              // Ignore close errors
+            }
+            resolve({
+              available: true,
+              inUse: false,
+            });
+          });
+
+          testPort.on('error', (err) => {
+            clearTimeout(timeout);
+            const errorMessage = err && err.message ? err.message : String(err);
+            let inUse = false;
+            let error = errorMessage;
+
+            if (errorMessage.includes('Access denied') || errorMessage.includes('EBUSY')) {
+              inUse = true;
+              error = `Port ${portPath} is in use by another application`;
+            } else if (errorMessage.includes('cannot open') || errorMessage.includes('ENOENT')) {
+              error = `Port ${portPath} cannot be opened`;
+            }
+
+            resolve({
+              available: false,
+              inUse,
+              error,
+            });
+          });
+        } catch (err) {
+          clearTimeout(timeout);
+          resolve({
+            available: false,
+            inUse: false,
+            error: `Failed to test port: ${err && err.message ? err.message : String(err)}`,
+          });
+        }
+      });
+    } catch (err) {
+      return {
+        available: false,
+        inUse: false,
+        error: `Error checking port: ${err && err.message ? err.message : String(err)}`,
+      };
+    }
   }
 }

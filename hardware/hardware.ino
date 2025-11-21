@@ -28,10 +28,25 @@ void setup() {
   Serial.println("  enroll  - Register new fingerprint");
   Serial.println("  clear   - Clear fingerprint database");
   Serial.println("Device is now ready for scanning.");
+  Serial.println("READY"); // Send ready signal for backend to detect
 }
 
 void loop() {
   static bool enrolling = false;
+  static unsigned long lastHeartbeat = 0;
+  static unsigned long lastLoopCheck = 0;
+  
+  // Send heartbeat every 10 seconds to verify communication
+  if (millis() - lastHeartbeat > 10000) {
+    Serial.println("HEARTBEAT: Scanner is active - Loop running");
+    lastHeartbeat = millis();
+  }
+  
+  // Log that loop is running every 30 seconds (for debugging)
+  if (millis() - lastLoopCheck > 30000) {
+    Serial.println("DEBUG: Detection loop is running, waiting for finger...");
+    lastLoopCheck = millis();
+  }
 
   // --- Handle serial commands ---
   if (Serial.available()) {
@@ -72,18 +87,60 @@ void loop() {
   // --- Fingerprint matching ---
   if (!enrolling) {
     uint8_t p = finger.getImage();
+    
+    // Log sensor status for debugging (only log errors, not every NOFINGER)
+    static uint8_t lastStatus = 255;
+    if (p != FINGERPRINT_NOFINGER && p != lastStatus) {
+      lastStatus = p;
+      if (p != FINGERPRINT_OK) {
+        Serial.print("DEBUG: Sensor status code: ");
+        Serial.println(p);
+      }
+    }
+    
     if (p == FINGERPRINT_OK) {
+      // Finger detected! Send scanning message immediately
+      Serial.println("Fingerprint scanning...");
+      delay(100); // Small delay to ensure message is sent
+      
+      // Now process the fingerprint
       int id = getFingerprintID();
       if (id >= 0) {
-        Serial.print("✅ Detected ID: ");
+        // Send detection message in format that backend can parse
+        Serial.print("Detected ID: ");
         Serial.println(id);
       } else {
-        Serial.println("❌ Unregistered fingerprint.");
+        Serial.println("Unregistered fingerprint.");
       }
 
-      // Wait for finger removal
-      while (finger.getImage() != FINGERPRINT_NOFINGER) delay(50);
-      delay(500);
+      // Wait for finger removal before scanning again
+      while (finger.getImage() != FINGERPRINT_NOFINGER) {
+        delay(50);
+      }
+      delay(500); // Small delay after finger removal
+      lastStatus = 255; // Reset status tracking
+    } else if (p == FINGERPRINT_NOFINGER) {
+      // No finger on sensor - this is normal, continue loop
+      lastStatus = p;
+    } else {
+      // Other error codes - log for debugging
+      // Common codes: 
+      // 2 = packet receive error
+      // 3 = no finger (FINGERPRINT_NOFINGER)
+      // 5 = image fail
+      // 6 = image messy
+      if (p != 3) { // 3 is FINGERPRINT_NOFINGER which is normal
+        Serial.print("DEBUG: getImage error code: ");
+        Serial.print(p);
+        Serial.print(" - ");
+        switch(p) {
+          case 2: Serial.println("Packet receive error"); break;
+          case 5: Serial.println("Image fail"); break;
+          case 6: Serial.println("Image messy"); break;
+          default: Serial.println("Unknown error"); break;
+        }
+      }
+      lastStatus = p;
     }
   }
 }
@@ -137,14 +194,24 @@ void enrollFingerprint(int id) {
 // === Match fingerprint and get ID ===
 int getFingerprintID() {
   uint8_t p = finger.image2Tz(1);
-  if (p != FINGERPRINT_OK) return -1;
+  if (p != FINGERPRINT_OK) {
+    Serial.print("DEBUG: image2Tz failed with code: ");
+    Serial.println(p);
+    return -1;
+  }
 
   p = finger.fingerFastSearch();
-  if (p != FINGERPRINT_OK) return -1;
+  if (p != FINGERPRINT_OK) {
+    Serial.print("DEBUG: fingerFastSearch failed with code: ");
+    Serial.println(p);
+    return -1;
+  }
 
+  // Send in format that backend can parse: "Found ID #123"
   Serial.print("Found ID #");
-  Serial.print(finger.fingerID);
-  Serial.print("  Confidence: ");
+  Serial.println(finger.fingerID);
+  // Confidence is logged separately for debugging
+  Serial.print("Confidence: ");
   Serial.println(finger.confidence);
 
   return finger.fingerID;

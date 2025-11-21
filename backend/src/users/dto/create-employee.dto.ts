@@ -53,7 +53,7 @@ export class CreateEmployeeDto {
   @IsString()
   profile_picture?: string;
 
-  @IsOptional()
+  @IsNotEmpty()
   @IsString()
-  finger_template_id?: string;
+  finger_template_id: string;
 }

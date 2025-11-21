@@ -43,9 +43,25 @@ export class UsersController {
   @UsePipes(new ValidationPipe())
   async create(@Body() body: CreateEmployeeDto): Promise<User> {
     try {
+      // Validate fingerprint ID is provided
+      if (!body.finger_template_id || body.finger_template_id.trim() === '') {
+        throw new BadRequestException(
+          'Fingerprint enrollment is required. Please enroll the employee\'s fingerprint before adding them.',
+        );
+      }
+
+      // Validate fingerprint ID is a valid number
+      const fingerprintId = Number(body.finger_template_id);
+      if (isNaN(fingerprintId) || fingerprintId < 1 || fingerprintId > 127) {
+        throw new BadRequestException(
+          'Invalid fingerprint ID. Must be a number between 1 and 127.',
+        );
+      }
+
       // Set default values
       const employeeData = {
         ...body,
+        finger_template_id: String(fingerprintId), // Ensure it's stored as string
         role: body.role || 'employee',
         status: body.status || 'Active',
         join_date: body.join_date || new Date().toISOString().split('T')[0],
