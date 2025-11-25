@@ -8,6 +8,8 @@ import { SerialPort } from 'serialport';
 import { ReadlineParser } from '@serialport/parser-readline';
 import { Subject } from 'rxjs';
 
+type PortInfo = Awaited<ReturnType<typeof SerialPort.list>>[number];
+
 @Injectable()
 export class FingerprintService implements OnModuleInit, OnModuleDestroy {
   private logger = new Logger(FingerprintService.name);
@@ -16,13 +18,84 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
   private subject = new Subject<any>();
   private latestId: number | null = null;
 
-  onModuleInit() {
-    const path = process.env.FINGERPRINT_PORT || 'COM8';
+  private resolvePortPath(availablePorts: PortInfo[]): string | null {
+    const configuredRaw = process.env.FINGERPRINT_PORT || '';
+    const configuredPorts = configuredRaw
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean);
+
+    if (!configuredPorts.length) {
+      configuredPorts.push('auto');
+    }
+
+    const availablePaths = availablePorts.map((p) => p.path);
+
+    for (const candidate of configuredPorts) {
+      if (candidate.toLowerCase() === 'auto') {
+        return this.pickPreferredPort(availablePorts);
+      }
+
+      if (availablePaths.includes(candidate)) {
+        this.logger.log(
+          `[FINGERPRINT] Using configured serial port ${candidate}`,
+        );
+        return candidate;
+      }
+
+      this.logger.warn(
+        `[FINGERPRINT] Configured port ${candidate} not found. Available ports: ${
+          availablePaths.join(', ') || 'none'
+        }`,
+      );
+    }
+
+    return null;
+  }
+
+  private pickPreferredPort(availablePorts: PortInfo[]): string | null {
+    if (!availablePorts.length) {
+      return null;
+    }
+
+    const usbLike = availablePorts.find((port) => {
+      const path = port.path || '';
+      const manufacturer = port.manufacturer || '';
+      return (
+        /com\d+/i.test(path) ||
+        /usb|acm|ama|tty/i.test(path) ||
+        /arduino|wch|ftdi/i.test(manufacturer)
+      );
+    });
+
+    return (usbLike || availablePorts[0]).path;
+  }
+
+  async onModuleInit() {
     const baudRate = Number(process.env.FINGERPRINT_BAUD || '9600');
 
     try {
-      this.logger.log(`Attempting to open serial port ${path} @ ${baudRate}`);
-      this.port = new SerialPort({ path, baudRate });
+      const availablePorts = await SerialPort.list();
+      const portPath =
+        this.resolvePortPath(availablePorts) ||
+        this.pickPreferredPort(availablePorts);
+
+      if (!portPath) {
+        const available =
+          availablePorts.map((p) => p.path).join(', ') || 'none';
+        this.logger.warn(
+          `No fingerprint serial ports detected. Available ports: ${available}. ` +
+            `Plug in the scanner and restart the backend or set FINGERPRINT_PORT to a valid value.`,
+        );
+        return;
+      }
+
+      this.logger.log(
+        `Attempting to open serial port ${portPath} @ ${baudRate} (available ports: ${
+          availablePorts.map((p) => p.path).join(', ') || 'none'
+        })`,
+      );
+      this.port = new SerialPort({ path: portPath, baudRate });
       this.parser = this.port.pipe(new ReadlineParser({ delimiter: '\r\n' }));
 
       this.parser.on('data', (line: string) => {
@@ -184,38 +257,68 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
         }
       });
 
-      this.port.on('error', (err) => {
+      this.port.on('error', async (err) => {
         const errorMessage = err && err.message ? err.message : String(err);
         let detailedMessage = errorMessage;
         
         // Provide more specific error messages
         if (errorMessage.includes('Access denied')) {
-          detailedMessage = `Access denied to ${path}. The port may be in use by another application, or you may need administrator privileges. Close any other applications using this port and try again.`;
+          detailedMessage = `Access denied to ${portPath}. The port may be in use by another application, or you may need administrator privileges. Close any other applications using this port and try again.`;
         } else if (errorMessage.includes('cannot open') || errorMessage.includes('ENOENT')) {
-          detailedMessage = `Port ${path} not found. Please check that the fingerprint device is connected and the correct COM port is configured.`;
+          detailedMessage = `Port ${portPath} not found. Please check that the fingerprint device is connected and the correct COM port is configured.`;
         } else if (errorMessage.includes('EBUSY')) {
-          detailedMessage = `Port ${path} is busy. Another application may be using this port. Close other applications and try again.`;
+          detailedMessage = `Port ${portPath} is busy. Another application may be using this port. Close other applications and try again.`;
         }
         
         this.logger.warn(`Serial port error: ${detailedMessage}`);
         // Reset port on error so it can be retried later
         this.port = null;
         this.parser = null;
+
+        // Attempt automatic re-detection when the configured port is missing
+        if (
+          errorMessage.includes('File not found') ||
+          errorMessage.includes('cannot open')
+        ) {
+          this.logger.log(
+            '[FINGERPRINT] Attempting to auto-detect another available port...',
+          );
+          const ports = await SerialPort.list();
+          const fallback =
+            this.resolvePortPath(ports) || this.pickPreferredPort(ports);
+          if (fallback) {
+            this.logger.log(
+              `[FINGERPRINT] Retrying fingerprint connection using ${fallback}`,
+            );
+            // slight delay to avoid rapid retries
+            setTimeout(() => {
+              this.onModuleInit().catch((retryErr) =>
+                this.logger.error(
+                  `Failed to reinitialize fingerprint port: ${
+                    retryErr && retryErr.message
+                      ? retryErr.message
+                      : String(retryErr)
+                  }`,
+                ),
+              );
+            }, 1000);
+          }
+        }
       });
 
       this.port.on('open', () => {
-        this.logger.log(`✅ Serial port ${path} opened successfully`);
-        this.logger.log(`📡 Listening for fingerprint data on ${path} @ ${baudRate} baud`);
+        this.logger.log(`✅ Serial port ${portPath} opened successfully`);
+        this.logger.log(`📡 Listening for fingerprint data on ${portPath} @ ${baudRate} baud`);
         // Send a test message to verify communication
         this.subject.next({ 
           type: 'status', 
-          raw: `Serial port ${path} opened and ready` 
+          raw: `Serial port ${portPath} opened and ready` 
         });
       });
 
       // Handle case where port fails to open
       this.port.on('close', () => {
-        this.logger.warn(`Serial port ${path} closed`);
+        this.logger.warn(`Serial port ${portPath} closed`);
         this.port = null;
         this.parser = null;
       });
