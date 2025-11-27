@@ -1,10 +1,17 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { SchedulesService } from './schedules.service';
 import type { SaveScheduleDto } from './schedules.service';
 
 @Controller('schedules')
 export class SchedulesController {
-  constructor(private readonly schedulesService: SchedulesService) {}
+  constructor(private readonly schedulesService: SchedulesService) { }
 
   @Get()
   async getSchedule(
@@ -12,14 +19,16 @@ export class SchedulesController {
     @Query('month') month?: string,
   ) {
     if (!year || !month) {
-      throw new Error('year and month query parameters are required');
+      throw new BadRequestException(
+        'year and month query parameters are required',
+      );
     }
 
     const yearNum = Number(year);
     const monthNum = Number(month);
 
     if (Number.isNaN(yearNum) || Number.isNaN(monthNum)) {
-      throw new Error('year and month must be numbers');
+      throw new BadRequestException('year and month must be numbers');
     }
 
     const schedule = await this.schedulesService.getSchedule(yearNum, monthNum);

@@ -8,8 +8,9 @@
 SoftwareSerial fingerSerial(RX_PIN, TX_PIN);
 Adafruit_Fingerprint finger = Adafruit_Fingerprint(&fingerSerial);
 
-void setup()
-{
+bool captureFingerToBuffer(uint8_t bufferId);
+
+void setup() {
   Serial.begin(9600);
   while (!Serial)
     ;
@@ -19,15 +20,11 @@ void setup()
   finger.begin(57600);
   delay(500);
 
-  if (finger.verifyPassword())
-  {
+  if (finger.verifyPassword()) {
     Serial.println("✅ Sensor found!");
-  }
-  else
-  {
+  } else {
     Serial.println("❌ Sensor not found!");
-    while (true)
-    {
+    while (true) {
       delay(1);
     }
   }
@@ -39,34 +36,29 @@ void setup()
   Serial.println("READY"); // Send ready signal for backend to detect
 }
 
-void loop()
-{
+void loop() {
   static bool enrolling = false;
   static unsigned long lastHeartbeat = 0;
   static unsigned long lastLoopCheck = 0;
 
   // Send heartbeat every 10 seconds to verify communication
-  if (millis() - lastHeartbeat > 10000)
-  {
+  if (millis() - lastHeartbeat > 10000) {
     Serial.println("HEARTBEAT: Scanner is active - Loop running");
     lastHeartbeat = millis();
   }
 
   // Log that loop is running every 30 seconds (for debugging)
-  if (millis() - lastLoopCheck > 30000)
-  {
+  if (millis() - lastLoopCheck > 30000) {
     Serial.println("DEBUG: Detection loop is running, waiting for finger...");
     lastLoopCheck = millis();
   }
 
   // --- Handle serial commands ---
-  if (Serial.available())
-  {
+  if (Serial.available()) {
     String cmd = Serial.readStringUntil('\n');
     cmd.trim();
 
-    if (cmd == "enroll")
-    {
+    if (cmd == "enroll") {
       enrolling = true;
       Serial.println("Enter ID # (1-127):");
 
@@ -75,101 +67,79 @@ void loop()
       int id = Serial.parseInt();
       Serial.readStringUntil('\n'); // Consume the newline after the ID
 
-      if (id < 1 || id > 127)
-      {
+      if (id < 1 || id > 127) {
         Serial.println("Invalid ID. Must be 1–127.");
-      }
-      else
-      {
+      } else {
         enrollFingerprint(id);
       }
 
       enrolling = false;
     }
 
-    else if (cmd == "clear")
-    {
+    else if (cmd == "clear") {
       Serial.println("Clearing fingerprint database...");
-      if (finger.emptyDatabase() == FINGERPRINT_OK)
-      {
+      if (finger.emptyDatabase() == FINGERPRINT_OK) {
         Serial.println("Database cleared.");
-      }
-      else
-      {
+      } else {
         Serial.println("Failed to clear DB.");
       }
     }
 
-    else
-    {
+    else {
       Serial.println("Unknown command. Use 'enroll' or 'clear'.");
     }
   }
 
   // --- Fingerprint matching ---
-  if (!enrolling)
-  {
+  if (!enrolling) {
     uint8_t p = finger.getImage();
 
     // Log sensor status for debugging (only log errors, not every NOFINGER)
     static uint8_t lastStatus = 255;
-    if (p != FINGERPRINT_NOFINGER && p != lastStatus)
-    {
+    if (p != FINGERPRINT_NOFINGER && p != lastStatus) {
       lastStatus = p;
-      if (p != FINGERPRINT_OK)
-      {
+      if (p != FINGERPRINT_OK) {
         Serial.print("DEBUG: Sensor status code: ");
         Serial.println(p);
       }
     }
 
-    if (p == FINGERPRINT_OK)
-    {
+    if (p == FINGERPRINT_OK) {
       // Finger detected! Send scanning message immediately
       Serial.println("Fingerprint scanning...");
       delay(100); // Small delay to ensure message is sent
 
       // Now process the fingerprint
       int id = getFingerprintID();
-      if (id >= 0)
-      {
+      if (id >= 0) {
         // Send detection message in format that backend can parse
         Serial.print("Detected ID: ");
         Serial.println(id);
-      }
-      else
-      {
+      } else {
         Serial.println("Unregistered fingerprint.");
       }
 
       // Wait for finger removal before scanning again
-      while (finger.getImage() != FINGERPRINT_NOFINGER)
-      {
+      while (finger.getImage() != FINGERPRINT_NOFINGER) {
         delay(50);
       }
       delay(500);       // Small delay after finger removal
       lastStatus = 255; // Reset status tracking
-    }
-    else if (p == FINGERPRINT_NOFINGER)
-    {
+    } else if (p == FINGERPRINT_NOFINGER) {
       // No finger on sensor - this is normal, continue loop
       lastStatus = p;
-    }
-    else
-    {
+    } else {
       // Other error codes - log for debugging
       // Common codes:
       // 2 = packet receive error
       // 3 = no finger (FINGERPRINT_NOFINGER)
       // 5 = image fail
       // 6 = image messy
-      if (p != 3)
-      { // 3 is FINGERPRINT_NOFINGER which is normal
+      if (p != 3) { // 3 is FINGERPRINT_NOFINGER which is normal
         Serial.print("DEBUG: getImage error code: ");
         Serial.print(p);
         Serial.print(" - ");
-        switch (p)
-        {
+        switch (p) {
         case 2:
           Serial.println("Packet receive error");
           break;
@@ -190,18 +160,15 @@ void loop()
 }
 
 // === Enroll new fingerprint ===
-void enrollFingerprint(int id)
-{
-  int p = -1;
+void enrollFingerprint(int id) {
   Serial.print("Enrolling ID #");
   Serial.println(id);
 
   Serial.println("Place finger...");
-
-  // Capture first image
-  while ((p = finger.getImage()) != FINGERPRINT_OK)
-    delay(100);
-  finger.image2Tz(1);
+  if (!captureFingerToBuffer(1)) {
+    Serial.println("ENROLL_FAIL");
+    return;
+  }
   Serial.println("First image taken.");
 
   Serial.println("Remove finger...");
@@ -210,35 +177,29 @@ void enrollFingerprint(int id)
     delay(100);
 
   Serial.println("Place finger again...");
-
-  // Capture second image
-  while ((p = finger.getImage()) != FINGERPRINT_OK)
-    delay(100);
-  finger.image2Tz(2);
+  if (!captureFingerToBuffer(2)) {
+    Serial.println("ENROLL_FAIL");
+    return;
+  }
   Serial.println("Second image taken.");
 
   // Create model
-  p = finger.createModel();
-  if (p == FINGERPRINT_OK)
-  {
+  int p = finger.createModel();
+  if (p == FINGERPRINT_OK) {
     Serial.println("Model created.");
-  }
-  else
-  {
+  } else {
     Serial.print("Model failed, code: ");
     Serial.println(p);
+    Serial.println("ENROLL_FAIL");
     return;
   }
 
   // Store model
   p = finger.storeModel(id);
-  if (p == FINGERPRINT_OK)
-  {
+  if (p == FINGERPRINT_OK) {
     Serial.println("✅ Enroll success!");
     Serial.println("ENROLL_OK");
-  }
-  else
-  {
+  } else {
     Serial.print("❌ Store failed, code: ");
     Serial.println(p);
     Serial.println("ENROLL_FAIL");
@@ -246,30 +207,57 @@ void enrollFingerprint(int id)
 }
 
 // === Match fingerprint and get ID ===
-int getFingerprintID()
-{
+int getFingerprintID() {
   uint8_t p = finger.image2Tz(1);
-  if (p != FINGERPRINT_OK)
-  {
+  if (p != FINGERPRINT_OK) {
     Serial.print("DEBUG: image2Tz failed with code: ");
     Serial.println(p);
     return -1;
   }
 
   p = finger.fingerFastSearch();
-  if (p != FINGERPRINT_OK)
-  {
+  if (p != FINGERPRINT_OK) {
     Serial.print("DEBUG: fingerFastSearch failed with code: ");
     Serial.println(p);
     return -1;
   }
 
   // Send in format that backend can parse: "Found ID #123"
-  Serial.print("Found ID #");
-  Serial.println(finger.fingerID);
-  // Confidence is logged separately for debugging
-  Serial.print("Confidence: ");
-  Serial.println(finger.confidence);
-
   return finger.fingerID;
+}
+
+bool captureFingerToBuffer(uint8_t bufferId) {
+  const uint8_t maxAttempts = 100;
+  uint8_t attempts = 0;
+
+  while (true) {
+    uint8_t p = finger.getImage();
+    if (p == FINGERPRINT_OK) {
+      break;
+    }
+
+    if (p == FINGERPRINT_NOFINGER) {
+      if (++attempts >= maxAttempts) {
+        Serial.println("❌ Timeout waiting for finger.");
+        return false;
+      }
+      delay(50);
+      continue;
+    }
+
+    Serial.print("❌ getImage failed, code: ");
+    Serial.println(p);
+    return false;
+  }
+
+  uint8_t p = finger.image2Tz(bufferId);
+  if (p != FINGERPRINT_OK) {
+    Serial.print("❌ image2Tz failed for buffer ");
+    Serial.print(bufferId);
+    Serial.print(", code: ");
+    Serial.println(p);
+    return false;
+  }
+
+  return true;
 }

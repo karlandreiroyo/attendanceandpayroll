@@ -17,6 +17,49 @@
   text-align: center;
 }
 
+.device-status-banner {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 16px;
+  border-radius: 12px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.95rem;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+.device-status-banner .device-status-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.device-status-banner .device-status-text strong {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.device-status-banner.error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.device-status-banner.warning {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #92400e;
+}
+
+.device-status-banner.ok {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+}
+
 .time-in-out-header h1 {
   margin: 0 0 10px 0;
   color: #333;
@@ -342,6 +385,143 @@
 
 .notification-banner.error .notification-detail-item strong {
   color: #b71c1c;
+}
+
+.time-in-out-compact {
+  min-height: auto;
+  background: transparent;
+  padding: 0;
+  width: 100%;
+}
+
+.time-in-out-card-compact {
+  max-width: 100%;
+  width: 100%;
+  padding: 16px 12px;
+  border-radius: 14px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.time-in-out-card-compact .fingerprint-scanner-area {
+  margin: 10px 0;
+  padding: 10px 8px;
+}
+
+.time-in-out-card-compact .scanner-icon {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.time-in-out-card-compact .scanner-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.time-in-out-card-compact .notification-banner {
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+}
+
+.time-in-out-card-compact .stop-scan-btn {
+  width: 100%;
+  padding: 9px 0;
+  border-radius: 10px;
+  font-size: 0.9rem;
+}
+
+.time-in-out-card-compact .time-in-out-header h1 {
+  font-size: 1.1rem;
+}
+
+.time-in-out-card-compact .time-in-out-header p {
+  font-size: 0.9rem;
+  margin-bottom: 10px;
+}
+
+.time-in-out-card-compact .last-scan-info {
+  padding: 10px;
+}
+
+.time-in-out-card-compact .notification-details {
+  font-size: 0.85rem;
+}
+
+.notification-details-compact {
+  font-size: 0.78rem;
+  gap: 4px;
+}
+
+.notification-details-compact .notification-detail-item {
+  display: flex;
+  gap: 6px;
+  line-height: 1.3;
+}
+
+.notification-details-compact .notification-detail-item strong {
+  min-width: auto;
+}
+
+.time-in-out-card-compact .notification-title {
+  font-size: 0.95rem;
+}
+
+.time-in-out-card-compact .notification-icon-large {
+  font-size: 20px;
+}
+
+.time-in-out-card-compact .notification-header {
+  margin-bottom: 4px;
+}
+
+.time-in-out-card-compact .notification-content {
+  gap: 6px;
+}
+
+.time-in-out-card-compact .status-message {
+  font-size: 0.82rem;
+  padding: 8px 10px;
+  border-radius: 7px;
+}
+
+.time-in-out-card-compact .scan-details {
+  gap: 6px;
+}
+
+.time-in-out-card-compact .scan-time,
+.time-in-out-card-compact .employee-info p,
+.time-in-out-card-compact .type-badge {
+  font-size: 0.82rem;
+}
+
+.time-in-out-card-compact .notification-banner,
+.time-in-out-card-compact .status-message,
+.time-in-out-card-compact .error-message,
+.time-in-out-card-compact .last-scan-info {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.time-in-out-card-compact .error-message {
+  font-size: 0.8rem;
+  padding: 8px 10px;
+}
+
+.time-in-out-card-compact .type-badge {
+  padding: 4px 10px;
+}
+
+.time-in-out-compact .device-status-banner {
+  font-size: 0.8rem;
+  padding: 10px 12px;
+  margin-bottom: 10px;
 }
 
 @media (max-width: 768px) {

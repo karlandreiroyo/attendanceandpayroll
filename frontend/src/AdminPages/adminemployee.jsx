@@ -835,14 +835,14 @@ export default function AdminEmployee() {
 
   const startFingerprintStream = async () => {
     if (scanListening) return;
-    
+
     // Check device status first
     try {
       const statusRes = await fetch(`${API_BASE_URL}/fingerprint/status`, {
         credentials: "include",
       });
       const statusData = await statusRes.json();
-      
+
       if (!statusData.connected) {
         setScanStatus("Device not connected");
         setScanListening(false);
@@ -857,15 +857,15 @@ export default function AdminEmployee() {
       console.error("Failed to check device status:", err);
       // Continue anyway - let EventSource handle it
     }
-    
+
     setScanListening(true);
     setScanStatus("Connecting to fingerprint scanner...");
     const url = `${API_BASE_URL}/fingerprint/events`;
     const es = new EventSource(url);
     eventSourceRef.current = es;
-    
+
     console.log("🔍 Starting fingerprint stream for testing enrolled fingerprints...");
-    
+
     es.onopen = () => {
       console.log("✅ EventSource connected for fingerprint testing");
       setScanStatus("Ready - Place your enrolled finger on the scanner");
@@ -875,7 +875,7 @@ export default function AdminEmployee() {
       try {
         const payload = JSON.parse(evt.data);
         console.log("📥 Fingerprint event received:", payload);
-        
+
         if (payload.type === "scanning") {
           console.log("🔍 Fingerprint scanning detected");
           setScanStatus("🔍 Scanning fingerprint... Please keep your finger on the scanner");
@@ -917,7 +917,7 @@ export default function AdminEmployee() {
           }, 5000);
         } else if (payload.type === "raw") {
           console.log("📨 Raw fingerprint data:", payload.raw);
-          
+
           // Check for scanning message in raw data
           if (payload.raw && (payload.raw.includes("scanning") || payload.raw.includes("Scanning") || payload.raw.includes("Fingerprint scanning"))) {
             setScanStatus("🔍 Scanning fingerprint... Please keep your finger on the scanner");
@@ -926,7 +926,7 @@ export default function AdminEmployee() {
               message: "🔍 Scanning fingerprint... Please keep your finger on the scanner",
             });
           }
-          
+
           // Check for detection in raw data (fallback)
           const detectedMatch = payload.raw?.match(/Detected ID:\s*(\d+)/i) || payload.raw?.match(/Found ID\s*#?\s*(\d+)/i);
           if (detectedMatch && detectedMatch[1]) {
@@ -951,7 +951,7 @@ export default function AdminEmployee() {
               setScanStatus(`Ready - Place your enrolled finger on the scanner (Last detected: ID ${id})`);
             }, 5000);
           }
-          
+
           // Check for unregistered in raw data
           if (payload.raw && payload.raw.includes("Unregistered")) {
             setScanStatus("❌ Unregistered fingerprint - This fingerprint is not enrolled");
@@ -968,7 +968,7 @@ export default function AdminEmployee() {
           // Handle enrollment status messages with notifications
           const statusMessage = payload.message || payload.raw || "";
           setScanStatus(statusMessage);
-          
+
           // Show notifications for all enrollment steps
           if (payload.step === "enroll_started") {
             setNotification({
@@ -1046,7 +1046,7 @@ export default function AdminEmployee() {
     es.onerror = (err) => {
       console.error("❌ EventSource error:", err);
       console.log("EventSource readyState:", es.readyState);
-      
+
       if (es.readyState === EventSource.CLOSED) {
         setScanStatus("Connection closed. Click Listen again to reconnect.");
         setScanListening(false);
@@ -1090,7 +1090,7 @@ export default function AdminEmployee() {
       setTimeout(() => setNotification(null), 5000);
       return;
     }
-    
+
     // Make sure we're listening to enrollment events BEFORE starting enrollment
     if (!scanListening) {
       setNotification({
@@ -1101,14 +1101,14 @@ export default function AdminEmployee() {
       // Wait a moment for EventSource to connect
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
-    
+
     // Show enrollment started message
     setNotification({
       type: "success",
       message: `🚀 Starting enrollment for ID ${id}. Watch for step-by-step instructions below.`,
     });
     setScanStatus(`⏳ Enrolling ID ${id}... Waiting for device to respond...`);
-    
+
     try {
       const res = await fetch(`${API_BASE_URL}/fingerprint/enroll`, {
         method: "POST",
@@ -1154,7 +1154,7 @@ export default function AdminEmployee() {
           setEditFingerprint(fingerprintId);
         }
         setScanStatus(`✅ Enrollment successful! ID ${id} is ready. Click "Listen" to test it.`);
-        
+
         // Show additional info about testing
         setTimeout(() => {
           setNotification({
@@ -1165,9 +1165,9 @@ export default function AdminEmployee() {
       }
     } catch (err) {
       console.error(err);
-      setNotification({ 
-        type: "error", 
-        message: String(err) 
+      setNotification({
+        type: "error",
+        message: String(err)
       });
       setScanStatus("Enrollment error occurred");
     } finally {
@@ -1781,13 +1781,13 @@ export default function AdminEmployee() {
                             marginTop: "4px",
                             minHeight: "20px",
                             fontWeight: scanStatus ? "500" : "400",
-                            color: scanStatus && scanStatus.includes("✅") ? "#10b981" : 
-                                   scanStatus && scanStatus.includes("❌") ? "#ef4444" : scanStatus && scanStatus.includes("🔍") ? "#3b82f6" : "#6b7280",
+                            color: scanStatus && scanStatus.includes("✅") ? "#10b981" :
+                              scanStatus && scanStatus.includes("❌") ? "#ef4444" : scanStatus && scanStatus.includes("🔍") ? "#3b82f6" : "#6b7280",
                           }}
                         >
                           {scanStatus || (
                             <>
-                              <strong>Instructions:</strong> 
+                              <strong>Instructions:</strong>
                               <br />
                               1) Click <strong>"Listen"</strong> to start listening for fingerprints
                               <br />
@@ -2182,11 +2182,11 @@ export default function AdminEmployee() {
                   </div>
 
                   <div className="detail-section biometric-section">
-                    <h3>Biometrics <span style={{color: "#ef4444", fontSize: "14px"}}>*Required</span></h3>
+                    <h3>Biometrics <span style={{ color: "#ef4444", fontSize: "14px" }}>*Required</span></h3>
                     <div className="biometric-item">
                       <div className="biometric-left">
                         <span className="detail-label">
-                          Fingerprint Template ID <span style={{color: "#ef4444"}}>*</span>
+                          Fingerprint Template ID <span style={{ color: "#ef4444" }}>*</span>
                         </span>
                       </div>
                       <div className="biometric-right">
@@ -2246,19 +2246,19 @@ export default function AdminEmployee() {
                             marginTop: "4px",
                             minHeight: "20px",
                             fontWeight: scanStatus ? "500" : "400",
-                            color: scanStatus && scanStatus.includes("✅") ? "#10b981" : 
-                                   scanStatus && scanStatus.includes("❌") ? "#ef4444" : "#6b7280",
+                            color: scanStatus && scanStatus.includes("✅") ? "#10b981" :
+                              scanStatus && scanStatus.includes("❌") ? "#ef4444" : "#6b7280",
                           }}
                         >
                           {scanStatus ? (
-                            <div style={{color: scanStatus.includes("✅") ? "#10b981" : scanStatus.includes("❌") ? "#ef4444" : scanStatus.includes("🔍") ? "#3b82f6" : "#6b7280"}}>
+                            <div style={{ color: scanStatus.includes("✅") ? "#10b981" : scanStatus.includes("❌") ? "#ef4444" : scanStatus.includes("🔍") ? "#3b82f6" : "#6b7280" }}>
                               {scanStatus}
                             </div>
                           ) : (
                             <>
-                              <strong style={{color: "#ef4444"}}>⚠️ Required:</strong> Fingerprint enrollment is mandatory. 
+                              <strong style={{ color: "#ef4444" }}>⚠️ Required:</strong> Fingerprint enrollment is mandatory.
                               <br />
-                              <strong>Instructions:</strong> 
+                              <strong>Instructions:</strong>
                               <br />
                               1) Click <strong>"Listen"</strong> to start listening for fingerprints
                               <br />
@@ -2268,7 +2268,7 @@ export default function AdminEmployee() {
                               <br />
                               4) Follow the step-by-step notifications that appear
                               <br />
-                              <strong style={{color: "#ef4444"}}>The employee cannot be added without a fingerprint ID.</strong>
+                              <strong style={{ color: "#ef4444" }}>The employee cannot be added without a fingerprint ID.</strong>
                             </>
                           )}
                         </div>

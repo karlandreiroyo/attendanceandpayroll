@@ -3,26 +3,39 @@ import { useNavigate } from "react-router-dom";
 import "./employeecss/timeInOut.css";
 import { API_BASE_URL } from "../config/api";
 
-export default function TimeInOut() {
+export default function TimeInOut({
+  backTo = "/employee/dashboard",
+  backLabel = "Back to Dashboard",
+  onBack,
+  active = true,
+  variant = "default",
+  showFooter = true,
+}) {
   const navigate = useNavigate();
   const [isListening, setIsListening] = useState(false);
   const [lastScan, setLastScan] = useState(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [deviceStatus, setDeviceStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
   const eventSourceRef = useRef(null);
+  const isCompact = variant === "compact";
 
-  // Auto-start scanning when component mounts
+  // Auto-start scanning when component is active
   useEffect(() => {
+    if (!active) {
+      stopListening();
+      return;
+    }
+    setDeviceStatus(null);
+
     startListening();
-    
+
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
+      stopListening();
     };
-  }, []);
+  }, [active]);
 
   const startListening = async () => {
     if (eventSourceRef.current) {
@@ -40,11 +53,23 @@ export default function TimeInOut() {
       
       if (!statusData.connected) {
         console.error("❌ Device not connected:", statusData.message);
+        setDeviceStatus({
+          level: "error",
+          message:
+            statusData.message ||
+            "Fingerprint device is not connected. Please check the connection.",
+        });
         setStatus("Device not connected");
-        setError(statusData.message || "Fingerprint device is not connected. Please check the connection.");
+        setError(
+          statusData.message ||
+            "Fingerprint device is not connected. Please check the connection.",
+        );
         setNotification({
           type: "error",
-          message: `❌ ${statusData.message || "Device not connected. Please check the connection and restart the backend."}`,
+          message: `❌ ${
+            statusData.message ||
+            "Device not connected. Please check the connection and restart the backend."
+          }`,
           show: true,
         });
         setIsListening(false);
@@ -54,6 +79,10 @@ export default function TimeInOut() {
     } catch (err) {
       console.error("❌ Failed to check device status:", err);
       setError("Could not check device status. Please ensure the backend is running.");
+      setDeviceStatus({
+        level: "error",
+        message: "Could not check device status. Please ensure the backend is running.",
+      });
       setNotification({
         type: "error",
         message: "❌ Could not check device status. Please ensure the backend is running.",
@@ -64,6 +93,7 @@ export default function TimeInOut() {
     }
 
     setIsListening(true);
+    setDeviceStatus(null);
     setError("");
     setStatus("Ready - Place your finger on the scanner now");
     setNotification({
@@ -133,6 +163,17 @@ export default function TimeInOut() {
               show: true,
             });
           }
+        } else if (data.type === "device-error") {
+          setDeviceStatus({
+            level: "error",
+            message: data.raw || "Device reported an error.",
+          });
+          setError("Fingerprint device reported an error.");
+          setNotification({
+            type: "error",
+            message: `❌ ${data.raw || "Fingerprint device error."}`,
+            show: true,
+          });
         } else if (data.type === "raw") {
           // Log ALL raw data for debugging
           console.log("📨 Raw fingerprint data:", data.raw);
@@ -164,6 +205,10 @@ export default function TimeInOut() {
       
       if (eventSource.readyState === EventSource.CLOSED) {
         setError("Connection to fingerprint scanner closed. Attempting to reconnect...");
+        setDeviceStatus({
+          level: "warning",
+          message: "Connection closed. Reconnecting...",
+        });
         setIsListening(false);
         // Try to reconnect after 3 seconds
         setTimeout(() => {
@@ -174,6 +219,10 @@ export default function TimeInOut() {
         }, 3000);
       } else {
         setError("Connection to fingerprint scanner lost. Please check if the device is connected.");
+        setDeviceStatus({
+          level: "error",
+          message: "Scanner connection lost. Check device cabling.",
+        });
         setIsListening(false);
       }
     };
@@ -298,9 +347,36 @@ export default function TimeInOut() {
     });
   };
 
+  const containerClasses = [
+    "time-in-out-container",
+    isCompact ? "time-in-out-compact" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const cardClasses = [
+    "time-in-out-card",
+    isCompact ? "time-in-out-card-compact" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div className="time-in-out-container">
-      <div className="time-in-out-card">
+    <div className={containerClasses}>
+      {deviceStatus && deviceStatus.level !== "ok" && (
+        <div className={`device-status-banner ${deviceStatus.level}`}>
+          <span className="device-status-icon">
+            {deviceStatus.level === "error" ? "⚠️" : "⏳"}
+          </span>
+          <div className="device-status-text">
+            <strong>
+              {deviceStatus.level === "error" ? "Device Issue" : "Reconnecting"}
+            </strong>
+            <span>{deviceStatus.message}</span>
+          </div>
+        </div>
+      )}
+      <div className={cardClasses}>
         <div className="time-in-out-header">
           <h1>Time In / Time Out</h1>
           <p>Scan your fingerprint to record attendance</p>
@@ -343,15 +419,25 @@ export default function TimeInOut() {
                   <h3 className="notification-title">{notification.message}</h3>
                 </div>
                 {notification.details && (
-                  <div className="notification-details">
+                  <div
+                    className={`notification-details${
+                      isCompact ? " notification-details-compact" : ""
+                    }`}
+                  >
                     <div className="notification-detail-item">
-                      <strong>Employee:</strong> {notification.details.employeeName}
+                      <strong>Employee:</strong>{" "}
+                      {notification.details.employeeName}
                     </div>
+                    {!isCompact && (
+                      <div className="notification-detail-item">
+                        <strong>Date:</strong> {notification.details.date}
+                      </div>
+                    )}
                     <div className="notification-detail-item">
-                      <strong>Date:</strong> {notification.details.date}
-                    </div>
-                    <div className="notification-detail-item">
-                      <strong>Time:</strong> {notification.details.time}
+                      <strong>{isCompact ? "Date & Time:" : "Time:"}</strong>{" "}
+                      {isCompact
+                        ? `${notification.details.date} · ${notification.details.time}`
+                        : notification.details.time}
                     </div>
                     <div className="notification-detail-item">
                       <strong>Type:</strong>{" "}
@@ -382,18 +468,9 @@ export default function TimeInOut() {
             <div className="error-message">{error}</div>
           )}
 
-          {isListening && !loading && (
-            <button
-              className="stop-scan-btn"
-              onClick={stopListening}
-              disabled={loading}
-            >
-              Stop Scanning
-            </button>
-          )}
         </div>
 
-        {lastScan && (
+        {lastScan && !isCompact && (
           <div className="last-scan-info">
             <h3>Last Recorded:</h3>
             <div className="scan-details">
@@ -419,14 +496,16 @@ export default function TimeInOut() {
           </div>
         )}
 
-        <div className="time-in-out-footer">
-          <button
-            className="back-btn"
-            onClick={() => navigate("/employee/dashboard")}
-          >
-            Back to Dashboard
-          </button>
-        </div>
+        {showFooter && (
+          <div className="time-in-out-footer">
+            <button
+              className="back-btn"
+              onClick={() => (onBack ? onBack() : navigate(backTo))}
+            >
+              {backLabel}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

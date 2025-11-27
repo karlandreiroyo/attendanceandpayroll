@@ -30,6 +30,10 @@ function App() {
         <Route path="/" element={<PayrollLogin />} />
         <Route path="/admin" element={<PayrollLogin />} />
         <Route path="/employee" element={<PayrollLogin />} />
+        <Route
+          path="/time-in-out"
+          element={<TimeInOut backTo="/" backLabel="Back to Login" />}
+        />
 
         {/* Protected Admin Routes */}
         <Route 
@@ -150,7 +154,7 @@ function App() {
           path="/employee/time-in-out" 
           element={
             <ProtectedRoute requiredRole="employee">
-              <TimeInOut />
+              <TimeInOut backTo="/employee/dashboard" backLabel="Back to Dashboard" />
             </ProtectedRoute>
           } 
         />
