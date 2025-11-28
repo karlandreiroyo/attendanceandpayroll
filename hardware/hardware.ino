@@ -29,6 +29,15 @@ void setup() {
     }
   }
 
+  // Set security level to 1 (most lenient) for better tolerance of finger placement
+  // Security levels: 1-5 (1 = most lenient/easy to match, 5 = strictest/hardest to match)
+  // Lower value = more tolerant of finger placement variations
+  if (finger.setSecurity(1) == FINGERPRINT_OK) {
+    Serial.println("✅ Security level set to 1 (lenient matching enabled)");
+  } else {
+    Serial.println("⚠️ Warning: Could not set security level, using default");
+  }
+
   Serial.println("\nCommands:");
   Serial.println("  enroll  - Register new fingerprint");
   Serial.println("  clear   - Clear fingerprint database");
@@ -100,8 +109,31 @@ void loop() {
       }
     }
 
+    else if (cmd == "check") {
+      // Check if fingerprint matches any existing enrolled ID
+      enrolling = true; // Prevent normal scanning during check
+      Serial.println("Place finger to check for existing match...");
+      delay(500);
+      
+      if (!captureFingerToBuffer(1)) {
+        Serial.println("CHECK_FAIL: Could not capture fingerprint image.");
+        enrolling = false;
+        return;
+      }
+      
+      // Security level is set globally to 1 (most lenient)
+      uint8_t p = finger.fingerFastSearch();
+      if (p == FINGERPRINT_OK) {
+        Serial.print("CHECK_MATCH: ");
+        Serial.println(finger.fingerID);
+      } else {
+        Serial.println("CHECK_NO_MATCH: Fingerprint not found in database.");
+      }
+      enrolling = false; // Reset flag after check
+    }
+
     else {
-      Serial.println("Unknown command. Use 'enroll', 'clear', or 'delete'.");
+      Serial.println("Unknown command. Use 'enroll', 'clear', 'delete', or 'check'.");
     }
   }
 
@@ -179,34 +211,72 @@ void enrollFingerprint(int id) {
   Serial.print("Enrolling ID #");
   Serial.println(id);
 
-  Serial.println("Place finger...");
+  // First, check if this fingerprint already exists
+  Serial.println("Checking for existing match...");
+  if (captureFingerToBuffer(1)) {
+    uint8_t p = finger.fingerFastSearch(); // Uses global security level (1 = lenient)
+    if (p == FINGERPRINT_OK) {
+      Serial.print("⚠️ WARNING: This fingerprint already matches ID #");
+      Serial.println(finger.fingerID);
+      Serial.println("ENROLL_DUPLICATE");
+      // Continue with enrollment anyway, but warn the user
+    }
+  }
+
+  // Improved enrollment: Capture 3 images for better matching tolerance
+  Serial.println("Place finger on scanner (Image 1 of 3)...");
+  Serial.println("💡 TIP: Place finger naturally, don't press too hard");
   if (!captureFingerToBuffer(1)) {
     Serial.println("ENROLL_FAIL");
     return;
   }
-  Serial.println("First image taken.");
+  Serial.println("✓ First image captured.");
 
   Serial.println("Remove finger...");
   delay(2000);
   while (finger.getImage() != FINGERPRINT_NOFINGER)
     delay(100);
 
-  Serial.println("Place finger again...");
+  Serial.println("Place finger again (Image 2 of 3)...");
+  Serial.println("💡 TIP: Try a slightly different angle or position");
   if (!captureFingerToBuffer(2)) {
     Serial.println("ENROLL_FAIL");
     return;
   }
-  Serial.println("Second image taken.");
+  Serial.println("✓ Second image captured.");
 
-  // Create model
+  // Try to create model with first two images
   int p = finger.createModel();
   if (p == FINGERPRINT_OK) {
-    Serial.println("Model created.");
+    Serial.println("✓ Model created successfully from 2 images.");
   } else {
-    Serial.print("Model failed, code: ");
-    Serial.println(p);
-    Serial.println("ENROLL_FAIL");
-    return;
+    // If model creation fails, try capturing a third image
+    Serial.println("Model creation needs more data. Capturing third image...");
+    Serial.println("Remove finger...");
+    delay(2000);
+    while (finger.getImage() != FINGERPRINT_NOFINGER)
+      delay(100);
+    
+    Serial.println("Place finger one more time (Image 3 of 3)...");
+    Serial.println("💡 TIP: Use a different finger position than before");
+    if (!captureFingerToBuffer(1)) {
+      Serial.print("Model failed, code: ");
+      Serial.println(p);
+      Serial.println("ENROLL_FAIL");
+      return;
+    }
+    Serial.println("✓ Third image captured.");
+    
+    // Try creating model again with all images
+    p = finger.createModel();
+    if (p != FINGERPRINT_OK) {
+      Serial.print("Model failed after 3 images, code: ");
+      Serial.println(p);
+      Serial.println("ENROLL_FAIL");
+      Serial.println("💡 TIP: Make sure finger is clean and dry, try different positions");
+      return;
+    }
+    Serial.println("✓ Model created successfully from 3 images.");
   }
 
   // Store model
@@ -214,6 +284,7 @@ void enrollFingerprint(int id) {
   if (p == FINGERPRINT_OK) {
     Serial.println("✅ Enroll success!");
     Serial.println("ENROLL_OK");
+    Serial.println("💡 TIP: When scanning, place finger naturally - the system is now more tolerant of placement variations");
   } else {
     Serial.print("❌ Store failed, code: ");
     Serial.println(p);
@@ -230,6 +301,8 @@ int getFingerprintID() {
     return -1;
   }
 
+  // Security level is set globally in setup() to 1 (most lenient)
+  // This makes matching more tolerant of finger placement variations
   p = finger.fingerFastSearch();
   if (p != FINGERPRINT_OK) {
     Serial.print("DEBUG: fingerFastSearch failed with code: ");
@@ -281,13 +354,52 @@ void deleteFingerprint(int id) {
   Serial.print("Deleting fingerprint ID #");
   Serial.println(id);
 
-  uint8_t p = finger.deleteModel(id);
-  if (p == FINGERPRINT_OK) {
-    Serial.println("✅ Delete success!");
-    Serial.println("DELETE_OK");
+  // Try multiple times if deletion fails (sometimes device needs retry)
+  uint8_t p = FINGERPRINT_PACKETRECIEVEERR;
+  int attempts = 0;
+  const int maxAttempts = 3;
+  
+  while (attempts < maxAttempts && p != FINGERPRINT_OK) {
+    if (attempts > 0) {
+      Serial.print("Retry attempt ");
+      Serial.print(attempts + 1);
+      Serial.print(" of ");
+      Serial.println(maxAttempts);
+      delay(500); // Small delay between retries
+    }
+    
+    p = finger.deleteModel(id);
+    attempts++;
+    
+    if (p == FINGERPRINT_OK) {
+      Serial.println("✅ Delete success!");
+      Serial.println("DELETE_OK");
+      return;
+    }
+  }
+
+  // If all attempts failed, report error
+  Serial.print("❌ Delete failed after ");
+  Serial.print(maxAttempts);
+  Serial.print(" attempts, final code: ");
+  Serial.println(p);
+  Serial.print("DELETE_FAIL:");
+  Serial.println(p);
+  
+  // Provide more specific error messages based on common error codes
+  // Common Adafruit fingerprint error codes:
+  // 1 = FINGERPRINT_NOTFOUND
+  // 2 = FINGERPRINT_BADLOCATION  
+  // 3 = FINGERPRINT_FLASHERR
+  if (p == 1) {
+    Serial.println("ERROR: Fingerprint ID not found in database (may have been already deleted).");
+  } else if (p == 2) {
+    Serial.println("ERROR: Invalid location (ID out of range).");
+  } else if (p == 3) {
+    Serial.println("ERROR: Flash storage error (device memory issue).");
   } else {
-    Serial.print("❌ Delete failed, code: ");
+    Serial.print("ERROR: Unknown error code ");
     Serial.println(p);
-    Serial.println("DELETE_FAIL");
+    Serial.println("💡 TIP: Try restarting the device or clearing the database if this persists");
   }
 }

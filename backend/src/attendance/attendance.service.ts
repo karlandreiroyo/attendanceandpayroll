@@ -79,21 +79,35 @@ export class AttendanceService {
     
     // Find user by fingerprint template ID
     // Lookup user by fingerprint id (stored as string in DB, but we receive as number)
-    const { data: user, error: userError } = await this.supabaseService.client
+    // First check if there are multiple users with this fingerprint ID (shouldn't happen, but handle it)
+    const fingerprintIdStr = String(fingerprintId);
+    
+    // Use .select() without .maybeSingle() first to check for duplicates
+    const { data: users, error: userError } = await this.supabaseService.client
       .from('users')
-      .select('user_id, first_name, last_name, department, status')
-      .eq('finger_template_id', String(fingerprintId)) // Convert to string for comparison
-      .maybeSingle();
+      .select('user_id, first_name, last_name, department, status, finger_template_id')
+      .eq('finger_template_id', fingerprintIdStr)
+      .not('finger_template_id', 'is', null); // Exclude null values
 
     if (userError) {
       throw new BadRequestException(`Error finding user: ${userError.message}`);
     }
 
-    if (!user) {
+    if (!users || users.length === 0) {
       throw new BadRequestException(
-        'No employee found with this fingerprint ID',
+        `No employee found with fingerprint ID ${fingerprintId}. Please ensure the fingerprint is enrolled and assigned to an employee.`,
       );
     }
+
+    if (users.length > 1) {
+      // Multiple users have the same fingerprint ID - this is a data integrity issue
+      const userNames = users.map(u => `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'Unknown').join(', ');
+      throw new BadRequestException(
+        `Data integrity error: Multiple employees (${users.length}) have the same fingerprint ID ${fingerprintId}: ${userNames}. Please contact administrator to fix duplicate fingerprint assignments.`,
+      );
+    }
+
+    const user = users[0];
 
     if (user.status !== 'Active') {
       throw new BadRequestException('Employee account is not active');

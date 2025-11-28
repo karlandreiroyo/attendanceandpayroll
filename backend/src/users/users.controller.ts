@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Delete,
   Body,
   Param,
@@ -75,6 +76,19 @@ export class UsersController {
   @Put(':id')
   @UsePipes(new ValidationPipe())
   async update(
+    @Param('id') id: string,
+    @Body() body: UpdateEmployeeDto,
+  ): Promise<User> {
+    try {
+      return await this.usersService.update(id, body);
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  @Patch(':id')
+  @UsePipes(new ValidationPipe())
+  async patch(
     @Param('id') id: string,
     @Body() body: UpdateEmployeeDto,
   ): Promise<User> {

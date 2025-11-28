@@ -105,6 +105,36 @@ export class FingerprintController {
     }
   }
 
+  @Get('check')
+  async checkForDuplicate() {
+    try {
+      const matchedId = await this.fingerprintService.checkForExistingFingerprint();
+      if (matchedId !== null) {
+        return {
+          ok: true,
+          match: true,
+          matchedId: matchedId,
+          message: `This fingerprint already matches existing ID ${matchedId}. Consider using that ID instead of enrolling a new one.`,
+        };
+      } else {
+        return {
+          ok: true,
+          match: false,
+          message: 'No existing fingerprint match found. Safe to enroll new fingerprint.',
+        };
+      }
+    } catch (err) {
+      const errorMessage = String(err);
+      if (errorMessage.includes('not connected') || errorMessage.includes('not initialized')) {
+        return {
+          ok: false,
+          message: 'Fingerprint device is not connected. Please connect the device and try again.',
+        };
+      }
+      return { ok: false, message: errorMessage };
+    }
+  }
+
   @Post('delete')
   async delete(@Body() body: { id: number }) {
     if (!body || typeof body.id !== 'number') {
@@ -122,12 +152,19 @@ export class FingerprintController {
 
     try {
       const success = await this.fingerprintService.deleteFingerprint(body.id);
-      return {
-        ok: success,
-        message: success
-          ? `Fingerprint ID ${body.id} deleted successfully from device.`
-          : `Failed to delete fingerprint ID ${body.id}. The fingerprint may not exist on the device, or the device returned an error. If the fingerprint was already deleted or never existed, this is normal.`,
-      };
+      
+      if (success) {
+        return {
+          ok: true,
+          message: `Fingerprint ID ${body.id} deleted successfully from device.`,
+        };
+      } else {
+        // Check backend logs for more details, but provide helpful message
+        return {
+          ok: false,
+          message: `Failed to delete fingerprint ID ${body.id}. Possible reasons: (1) Fingerprint ID not found in device database (may have been already deleted), (2) Device communication error, (3) Invalid ID. Check backend logs for specific error code.`,
+        };
+      }
     } catch (err) {
       const errorMessage = String(err);
       if (errorMessage.includes('not connected') || errorMessage.includes('not initialized')) {

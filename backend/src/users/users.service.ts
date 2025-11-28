@@ -100,6 +100,11 @@ export class UsersService {
         if (Object.prototype.hasOwnProperty.call(updatePayload, 'address') && updatePayload.address === '') {
             updatePayload.address = null;
         }
+        // Handle empty fingerprint ID - set to null to clear it
+        if (Object.prototype.hasOwnProperty.call(updatePayload, 'finger_template_id') && 
+            (updatePayload.finger_template_id === '' || updatePayload.finger_template_id === null || updatePayload.finger_template_id === undefined)) {
+            updatePayload.finger_template_id = null;
+        }
 
         let { data, error } = await this.supabaseService.client
             .from('users')

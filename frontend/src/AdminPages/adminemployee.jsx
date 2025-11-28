@@ -55,6 +55,11 @@ export default function AdminEmployee() {
   const [managerScanStatus, setManagerScanStatus] = useState("");
   const [detectedFingerprintIds, setDetectedFingerprintIds] = useState(new Set());
   const managerEventSourceRef = useRef(null);
+  // Track which IDs were detected together (potential duplicates)
+  const [duplicateDetectionMap, setDuplicateDetectionMap] = useState(new Map()); // Map<timestamp, Set<fingerprintIds>>
+  const [recentScans, setRecentScans] = useState([]); // Track recent scans to detect duplicates
+  // Track successfully deleted IDs
+  const [successfullyDeletedIds, setSuccessfullyDeletedIds] = useState(new Set());
   const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
@@ -476,18 +481,41 @@ export default function AdminEmployee() {
     }
   }
 
-  // Analyze fingerprint IDs to find orphaned ones
+  // Analyze fingerprint IDs to find orphaned ones and potential duplicates
   const analyzeFingerprints = useMemo(() => {
     // Create a map of fingerprint ID to employee
     const fingerprintMap = new Map();
+    const employeeToFingerprints = new Map(); // Track multiple fingerprints per employee
+    
     rows.forEach((employee) => {
       const fpId = employee.finger_template_id;
       if (fpId && fpId.trim() !== "") {
         const id = String(fpId).trim();
+        const employeeKey = employee.id || employee.user_id;
+        
         fingerprintMap.set(id, {
-          employeeId: employee.id || employee.user_id,
+          employeeId: employeeKey,
           employeeName: employee.name || `${employee.first_name} ${employee.last_name}`.trim() || employee.username,
           status: employee.status,
+        });
+        
+        // Track all fingerprints for each employee
+        if (!employeeToFingerprints.has(employeeKey)) {
+          employeeToFingerprints.set(employeeKey, []);
+        }
+        employeeToFingerprints.get(employeeKey).push(id);
+      }
+    });
+
+    // Find potential duplicates (same employee with multiple fingerprint IDs)
+    const duplicateGroups = [];
+    employeeToFingerprints.forEach((fingerprintIds, employeeKey) => {
+      if (fingerprintIds.length > 1) {
+        const employee = fingerprintMap.get(fingerprintIds[0]);
+        duplicateGroups.push({
+          employeeId: employeeKey,
+          employeeName: employee?.employeeName || "Unknown",
+          fingerprintIds: fingerprintIds.sort((a, b) => Number(a) - Number(b)),
         });
       }
     });
@@ -497,12 +525,16 @@ export default function AdminEmployee() {
     for (let i = 1; i <= 127; i++) {
       const idStr = String(i);
       const employee = fingerprintMap.get(idStr);
+      const isDuplicate = duplicateGroups.some(group => group.fingerprintIds.includes(idStr));
+      
       allFingerprints.push({
         id: i,
         idStr: idStr,
         isUsed: !!employee,
         employee: employee || null,
         isOrphaned: false, // We can't know if it's on device without checking, so we'll mark as "potentially orphaned" if not in our DB
+        isDuplicate: isDuplicate,
+        duplicateGroup: isDuplicate ? duplicateGroups.find(g => g.fingerprintIds.includes(idStr)) : null,
       });
     }
 
@@ -510,8 +542,386 @@ export default function AdminEmployee() {
       allFingerprints,
       usedCount: fingerprintMap.size,
       availableCount: 127 - fingerprintMap.size,
+      duplicateGroups,
     };
   }, [rows]);
+
+  // Clear all fingerprint IDs from employee records in database
+  // Use this after clearing the device database to sync the database
+  async function clearAllFingerprintIdsFromDatabase() {
+    const employeesWithFingerprints = rows.filter(
+      (row) => row.finger_template_id && row.finger_template_id.trim() !== ""
+    );
+
+    if (employeesWithFingerprints.length === 0) {
+      setNotification({
+        type: "info",
+        message: "No employees have fingerprint IDs assigned. Database is already in sync.",
+      });
+      setTimeout(() => setNotification(null), 4000);
+      return;
+    }
+
+    const confirmMessage = `Are you sure you want to clear all fingerprint IDs from ${employeesWithFingerprints.length} employee record(s) in the database?\n\n` +
+      `This will remove fingerprint ID assignments from:\n` +
+      `${employeesWithFingerprints.map(e => `- ${e.name || e.username} (ID: ${e.finger_template_id})`).join('\n')}\n\n` +
+      `This action cannot be undone. Use this after clearing the device database to sync the database.`;
+    
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    setFingerprintManagerLoading(true);
+    let successCount = 0;
+    let failCount = 0;
+    const failedEmployees = [];
+
+    setNotification({
+      type: "info",
+      message: `Clearing fingerprint IDs from ${employeesWithFingerprints.length} employee record(s)...`,
+    });
+
+    for (const employee of employeesWithFingerprints) {
+      try {
+        const employeeId = employee.id || employee.user_id;
+        if (!employeeId) {
+          console.error(`Employee ${employee.name || employee.username} has no valid ID`);
+          failCount++;
+          failedEmployees.push(employee.name || employee.username);
+          continue;
+        }
+
+        const res = await fetch(`${API_BASE_URL}/users/${employeeId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ finger_template_id: "" }),
+        });
+
+        const responseData = await res.json().catch(() => ({}));
+        
+        if (res.ok) {
+          successCount++;
+          console.log(`✅ Cleared fingerprint ID for employee ${employee.name || employee.username} (ID: ${employeeId})`);
+        } else {
+          failCount++;
+          failedEmployees.push(employee.name || employee.username);
+          const errorMsg = responseData.message || responseData.error || `HTTP ${res.status}`;
+          console.error(`❌ Failed to clear fingerprint ID for employee ${employee.name || employee.username} (ID: ${employeeId}):`, errorMsg);
+        }
+      } catch (err) {
+        failCount++;
+        failedEmployees.push(employee.name || employee.username);
+        console.error(`❌ Error clearing fingerprint ID for employee ${employee.name || employee.username}:`, err);
+      }
+    }
+
+    setFingerprintManagerLoading(false);
+
+    // Reload employee list
+    try {
+      const res = await fetch(`${API_BASE_URL}/users?includeInactive=true`, {
+        credentials: "include",
+      });
+      if (res.ok) {
+        const users = await res.json();
+        const mapped = (users || []).map((u) => {
+          const fingerprintId = u.finger_template_id;
+          const fingerprintIdStr =
+            fingerprintId !== null && fingerprintId !== undefined && fingerprintId !== ""
+              ? String(fingerprintId)
+              : "";
+          
+          return {
+            id: u.id || u.user_id,
+            user_id: u.user_id || u.id,
+            name:
+              [u.first_name, u.last_name].filter(Boolean).join(" ") || u.username,
+            first_name: u.first_name || "",
+            last_name: u.last_name || "",
+            username: u.username,
+            role: u.role || "employee",
+            email: u.email,
+            phone: formatPhoneDisplay(u.phone),
+            address: u.address || "",
+            dept: u.department,
+            position: u.position,
+            status: u.status || "Active",
+            joinDate: formatDate(u.join_date),
+            finger_template_id: fingerprintIdStr,
+          };
+        });
+        const employeesOnly = mapped.filter((user) => !isAdminRole(user.role));
+        setRows(employeesOnly);
+        
+        // Update selected employee if edit modal is open
+        if (selected) {
+          const updatedEmployee = employeesOnly.find(
+            (e) => (e.id === selected.id || e.user_id === selected.user_id) || 
+                   (e.id === selected.user_id || e.user_id === selected.id)
+          );
+          if (updatedEmployee) {
+            setSelected(updatedEmployee);
+            setEditFingerprint(updatedEmployee.finger_template_id || "");
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Error reloading employees after clearing fingerprint IDs:", err);
+    }
+
+    // Show results
+    if (successCount > 0 && failCount === 0) {
+      setNotification({
+        type: "success",
+        message: `✅ Successfully cleared fingerprint IDs from ${successCount} employee record(s). Database is now in sync with the device.`,
+      });
+    } else if (successCount > 0 && failCount > 0) {
+      setNotification({
+        type: "warning",
+        message: `⚠️ Cleared fingerprint IDs from ${successCount} employee record(s), but ${failCount} failed. Failed employees: ${failedEmployees.join(", ")}. Check browser console for details.`,
+      });
+    } else {
+      setNotification({
+        type: "error",
+        message: `❌ Failed to clear fingerprint IDs from all employees. ${failCount} failed. Failed employees: ${failedEmployees.join(", ")}. Check browser console (F12) for error details. Possible causes: (1) Invalid employee IDs, (2) Database connection issue, (3) Permission error.`,
+      });
+    }
+    setTimeout(() => setNotification(null), 10000);
+  }
+
+  // Delete all orphaned fingerprints (not assigned to employees)
+  async function deleteAllOrphanedFingerprints() {
+    // Find all unassigned fingerprint IDs
+    const orphanedIds = analyzeFingerprints.allFingerprints
+      .filter(fp => !fp.isUsed)
+      .map(fp => fp.id)
+      .sort((a, b) => a - b);
+
+    if (orphanedIds.length === 0) {
+      setNotification({
+        type: "info",
+        message: "No orphaned fingerprints found. All fingerprint IDs are either assigned to employees or already deleted.",
+      });
+      setTimeout(() => setNotification(null), 4000);
+      return;
+    }
+
+    const confirmMessage = `Are you sure you want to delete ${orphanedIds.length} orphaned fingerprint ID(s) from the device?\n\n` +
+      `IDs to delete: ${orphanedIds.join(", ")}\n\n` +
+      `This action cannot be undone. Only unassigned IDs will be deleted.`;
+    
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    // Check device connection
+    try {
+      setFingerprintManagerLoading(true);
+      const statusRes = await fetch(`${API_BASE_URL}/fingerprint/status`, {
+        credentials: "include",
+      });
+      const statusData = await statusRes.json().catch(() => ({}));
+      
+      if (!statusData.connected) {
+        setNotification({
+          type: "error",
+          message: "Fingerprint device is not connected. Please connect the device and restart the backend, then try again.",
+        });
+        setTimeout(() => setNotification(null), 5000);
+        setFingerprintManagerLoading(false);
+        return;
+      }
+    } catch (err) {
+      console.error("Failed to check device status:", err);
+      setNotification({
+        type: "error",
+        message: "Unable to check device connection. Please ensure the fingerprint device is connected.",
+      });
+      setTimeout(() => setNotification(null), 5000);
+      setFingerprintManagerLoading(false);
+      return;
+    }
+
+    // Delete each orphaned fingerprint
+    let successCount = 0;
+    let failCount = 0;
+    const failedIds = [];
+
+    setNotification({
+      type: "info",
+      message: `Deleting ${orphanedIds.length} orphaned fingerprint ID(s)... This may take a while.`,
+    });
+
+    for (let i = 0; i < orphanedIds.length; i++) {
+      const id = orphanedIds[i];
+      setFingerprintManagerLoading(true);
+      
+      try {
+        setDeletingFingerprintIds((prev) => new Set(prev).add(id));
+        
+        const res = await fetch(`${API_BASE_URL}/fingerprint/delete`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ id }),
+        });
+        const data = await res.json().catch(() => ({}));
+        
+        if (res.ok && data.ok) {
+          successCount++;
+          // Mark as successfully deleted
+          setSuccessfullyDeletedIds((prev) => {
+            const newSet = new Set(prev);
+            newSet.add(String(id));
+            return newSet;
+          });
+          // Remove from detected set if it was there
+          setDetectedFingerprintIds((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(String(id));
+            return newSet;
+          });
+          
+          // Clear fingerprint ID from employee record if assigned
+          const employeeWithFingerprint = rows.find(
+            (row) => String(row.finger_template_id).trim() === String(id)
+          );
+          if (employeeWithFingerprint) {
+            try {
+              const employeeId = employeeWithFingerprint.id || employeeWithFingerprint.user_id;
+              await fetch(`${API_BASE_URL}/users/${employeeId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ finger_template_id: "" }),
+              });
+            } catch (err) {
+              console.error(`Error clearing fingerprint ID ${id} from employee:`, err);
+            }
+          }
+          
+          console.log(`✅ Successfully deleted fingerprint ID ${id}`);
+        } else {
+          // Check if error is "not found" - if so, consider it "deleted" (available)
+          const notFoundError = data.message && (
+            data.message.includes("not found") || 
+            data.message.includes("not exist") ||
+            data.message.includes("code: 1")
+          );
+          
+          if (notFoundError) {
+            // Device confirms it doesn't exist - treat as "deleted" (available for use)
+            successCount++;
+            setSuccessfullyDeletedIds((prev) => {
+              const newSet = new Set(prev);
+              newSet.add(String(id));
+              return newSet;
+            });
+            setDetectedFingerprintIds((prev) => {
+              const newSet = new Set(prev);
+              newSet.delete(String(id));
+              return newSet;
+            });
+            console.log(`✅ Fingerprint ID ${id} doesn't exist (already deleted or never existed) - treating as success`);
+          } else {
+            failCount++;
+            failedIds.push(id);
+            console.warn(`❌ Failed to delete fingerprint ID ${id}:`, data.message);
+          }
+        }
+      } catch (err) {
+        failCount++;
+        failedIds.push(id);
+        console.error(`Error deleting fingerprint ID ${id}:`, err);
+      } finally {
+        setDeletingFingerprintIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        // Small delay between deletions to avoid overwhelming the device
+        if (i < orphanedIds.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+    }
+
+    setFingerprintManagerLoading(false);
+
+    // Reload employee list to refresh UI after bulk deletion
+    if (successCount > 0) {
+      try {
+        const res = await fetch(`${API_BASE_URL}/users?includeInactive=true`, {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const users = await res.json();
+          const mapped = (users || []).map((u) => {
+            const fingerprintId = u.finger_template_id;
+            const fingerprintIdStr =
+              fingerprintId !== null && fingerprintId !== undefined && fingerprintId !== ""
+                ? String(fingerprintId)
+                : "";
+            
+            return {
+              id: u.id || u.user_id,
+              user_id: u.user_id || u.id,
+              name:
+                [u.first_name, u.last_name].filter(Boolean).join(" ") || u.username,
+              first_name: u.first_name || "",
+              last_name: u.last_name || "",
+              username: u.username,
+              role: u.role || "employee",
+              email: u.email,
+              phone: formatPhoneDisplay(u.phone),
+              address: u.address || "",
+              dept: u.department,
+              position: u.position,
+              status: u.status || "Active",
+              joinDate: formatDate(u.join_date),
+              finger_template_id: fingerprintIdStr,
+            };
+          });
+          const employeesOnly = mapped.filter((user) => !isAdminRole(user.role));
+          setRows(employeesOnly);
+          
+          // Update selected employee if edit modal is open
+          if (selected) {
+            const updatedEmployee = employeesOnly.find(
+              (e) => (e.id === selected.id || e.user_id === selected.user_id) || 
+                     (e.id === selected.user_id || e.user_id === selected.id)
+            );
+            if (updatedEmployee) {
+              setSelected(updatedEmployee);
+              setEditFingerprint(updatedEmployee.finger_template_id || "");
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error reloading employees after bulk deletion:", err);
+      }
+    }
+
+    // Show results
+    if (successCount > 0 && failCount === 0) {
+      setNotification({
+        type: "success",
+        message: `✅ Successfully deleted ${successCount} orphaned fingerprint ID(s) from the device. UI refreshed.`,
+      });
+    } else if (successCount > 0 && failCount > 0) {
+      setNotification({
+        type: "warning",
+        message: `⚠️ Deleted ${successCount} fingerprint ID(s) successfully, but ${failCount} failed. Failed IDs: ${failedIds.join(", ")}. They may not exist on the device.`,
+      });
+    } else {
+      setNotification({
+        type: "error",
+        message: `❌ Failed to delete all fingerprints. ${failCount} failed. Failed IDs: ${failedIds.join(", ")}. Check backend logs for details.`,
+      });
+    }
+    setTimeout(() => setNotification(null), 8000);
+  }
 
   // Delete an orphaned fingerprint by ID
   async function deleteOrphanedFingerprint(fingerprintId) {
@@ -555,6 +965,12 @@ export default function AdminEmployee() {
       }
       
       console.log("Device connection verified, proceeding with deletion...");
+      
+      // If fingerprint was detected, verify it still exists by trying to scan it
+      // Note: This is just a warning - we'll still try to delete
+      if (detectedFingerprintIds.has(String(id))) {
+        console.log(`Fingerprint ID ${id} was previously detected. Attempting deletion...`);
+      }
     } catch (err) {
       console.error("Failed to check device status:", err);
       setNotification({
@@ -589,26 +1005,136 @@ export default function AdminEmployee() {
         const wasDetected = detectedFingerprintIds.has(String(id));
         let errorMsg = data.message || `Failed to delete fingerprint ID ${id}.`;
         
-        if (wasDetected) {
-          // Fingerprint was detected but deletion failed - more specific error
+        // Check if the error message indicates the fingerprint doesn't exist
+        const notFoundError = data.message && (
+          data.message.includes("not found") || 
+          data.message.includes("not exist") ||
+          data.message.includes("code: 1")
+        );
+        
+        if (wasDetected && !notFoundError) {
+          // Fingerprint was detected but deletion failed - communication/device error
           errorMsg = `Failed to delete fingerprint ID ${id} even though it was detected on the device. ` +
             `This could be due to: (1) Communication timeout with device, (2) Device error during deletion, ` +
             `(3) The fingerprint may have been deleted between detection and deletion attempt. ` +
             `Try again or check backend logs for details.`;
+        } else if (wasDetected && notFoundError) {
+          // Fingerprint was detected but device says it doesn't exist - likely already deleted
+          errorMsg = `Fingerprint ID ${id} was detected earlier but the device now reports it doesn't exist. ` +
+            `It may have been deleted already, or there's a device database inconsistency. ` +
+            `The ID should be available for use.`;
+          // Remove from detected set since it doesn't exist
+          setDetectedFingerprintIds((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(String(id));
+            return newSet;
+          });
         } else {
           // Fingerprint wasn't detected, so it might not exist
           errorMsg = `Failed to delete fingerprint ID ${id}. ` +
-            `The fingerprint may not exist on the device, or the device returned an error. ` +
-            `If the fingerprint was already deleted or never existed, this is normal.`;
+            `The fingerprint may not exist on the device (error code 1 = not found), ` +
+            `or the device returned an error. If the fingerprint was already deleted or never existed, this is normal.`;
         }
         throw new Error(errorMsg);
       }
 
+      // Mark as successfully deleted for visual feedback
+      setSuccessfullyDeletedIds((prev) => {
+        const newSet = new Set(prev);
+        newSet.add(String(id));
+        return newSet;
+      });
+      
+      // Remove from detected set since it should be deleted
+      setDetectedFingerprintIds((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(String(id));
+        return newSet;
+      });
+      
+      // Check if this fingerprint ID is assigned to any employee and clear it
+      const employeeWithFingerprint = rows.find(
+        (row) => String(row.finger_template_id).trim() === String(id)
+      );
+      
+      if (employeeWithFingerprint) {
+        // Clear the fingerprint ID from the employee record in the database
+        try {
+          const employeeId = employeeWithFingerprint.id || employeeWithFingerprint.user_id;
+          const updateRes = await fetch(`${API_BASE_URL}/users/${employeeId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ finger_template_id: "" }),
+          });
+          
+          if (updateRes.ok) {
+            console.log(`Cleared fingerprint ID ${id} from employee ${employeeId}`);
+          } else {
+            console.warn(`Failed to clear fingerprint ID from employee record:`, await updateRes.json().catch(() => ({})));
+          }
+        } catch (err) {
+          console.error("Error clearing fingerprint ID from employee record:", err);
+        }
+      }
+      
+      // Reload employee list to refresh the UI
+      try {
+        const res = await fetch(`${API_BASE_URL}/users?includeInactive=true`, {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const users = await res.json();
+          const mapped = (users || []).map((u) => {
+            const fingerprintId = u.finger_template_id;
+            const fingerprintIdStr =
+              fingerprintId !== null && fingerprintId !== undefined && fingerprintId !== ""
+                ? String(fingerprintId)
+                : "";
+            
+            return {
+              id: u.id || u.user_id,
+              user_id: u.user_id || u.id,
+              name:
+                [u.first_name, u.last_name].filter(Boolean).join(" ") || u.username,
+              first_name: u.first_name || "",
+              last_name: u.last_name || "",
+              username: u.username,
+              role: u.role || "employee",
+              email: u.email,
+              phone: formatPhoneDisplay(u.phone),
+              address: u.address || "",
+              dept: u.department,
+              position: u.position,
+              status: u.status || "Active",
+              joinDate: formatDate(u.join_date),
+              finger_template_id: fingerprintIdStr,
+            };
+          });
+          const employeesOnly = mapped.filter((user) => !isAdminRole(user.role));
+          setRows(employeesOnly);
+          
+          // Update selected employee if it's the one being edited
+          if (selected && (String(selected.finger_template_id).trim() === String(id))) {
+            const updatedEmployee = employeesOnly.find(
+              (e) => (e.id === selected.id || e.user_id === selected.user_id) || 
+                     (e.id === selected.user_id || e.user_id === selected.id)
+            );
+            if (updatedEmployee) {
+              setSelected(updatedEmployee);
+              setEditFingerprint("");
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error reloading employees after deletion:", err);
+      }
+      
       setNotification({
         type: "success",
-        message: data.message || `Fingerprint ID ${id} deleted from device successfully.`,
+        message: `✅ SUCCESS: Fingerprint ID ${id} deleted from device successfully! ${employeeWithFingerprint ? 'Also cleared from employee record.' : ''} The ID is now available for use.`,
       });
-      setTimeout(() => setNotification(null), 4000);
+      setTimeout(() => setNotification(null), 6000);
     } catch (err) {
       console.error("Failed to delete orphaned fingerprint:", err);
       setNotification({
@@ -676,11 +1202,69 @@ export default function AdminEmployee() {
           const idNum = Number(payload.id);
           console.log("✅ Fingerprint detected in manager, ID:", fingerprintId);
           
+          // If this ID was marked as deleted but is detected again, it means deletion failed
+          if (successfullyDeletedIds.has(fingerprintId)) {
+            console.warn(`[Manager] Fingerprint ID ${fingerprintId} was marked as deleted but is still detected!`);
+            // Remove from deleted set since it's still on the device
+            setSuccessfullyDeletedIds((prev) => {
+              const newSet = new Set(prev);
+              newSet.delete(fingerprintId);
+              return newSet;
+            });
+            setNotification({
+              type: "warning",
+              message: `⚠️ Fingerprint ID ${fingerprintId} is still detected on the device. Deletion may have failed. Please try deleting again.`,
+            });
+            setTimeout(() => setNotification(null), 6000);
+          }
+          
           // Add to detected set
           setDetectedFingerprintIds((prev) => {
             const newSet = new Set(prev);
             newSet.add(fingerprintId);
             return newSet;
+          });
+          
+          // Track recent scans to detect potential duplicates (same person, different IDs)
+          const now = Date.now();
+          setRecentScans((prev) => {
+            const recent = prev.filter(scan => now - scan.timestamp < 5000); // Last 5 seconds
+            recent.push({ id: fingerprintId, timestamp: now });
+            
+            // If multiple different IDs detected within 5 seconds, they might be duplicates
+            if (recent.length > 1) {
+              const uniqueIds = new Set(recent.map(s => s.id));
+              if (uniqueIds.size > 1) {
+                const idsArray = Array.from(uniqueIds).sort((a, b) => Number(a) - Number(b));
+                console.log("⚠️ Potential duplicate detected: IDs", idsArray, "detected within 5 seconds");
+                
+                // Store potential duplicate group
+                setDuplicateDetectionMap((prev) => {
+                  const newMap = new Map(prev);
+                  const key = idsArray.join(",");
+                  if (!newMap.has(key)) {
+                    newMap.set(key, {
+                      ids: idsArray,
+                      detectedAt: now,
+                      count: 1,
+                    });
+                  } else {
+                    const existing = newMap.get(key);
+                    existing.count += 1;
+                  }
+                  return newMap;
+                });
+                
+                setManagerScanStatus(`⚠️ Potential duplicate: IDs ${idsArray.join(", ")} detected - Same person?`);
+                setNotification({
+                  type: "warning",
+                  message: `⚠️ Multiple IDs (${idsArray.join(", ")}) detected quickly. These might be duplicates from the same person.`,
+                });
+                setTimeout(() => setNotification(null), 5000);
+                return recent;
+              }
+            }
+            return recent;
           });
           
           setManagerScanStatus(`✅ Detected ID: ${payload.id} - Registered on device`);
@@ -1574,6 +2158,75 @@ export default function AdminEmployee() {
       startFingerprintStream();
       // Wait a moment for EventSource to connect
       await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    // First, check if this fingerprint already exists (duplicate check)
+    setNotification({
+      type: "info",
+      message: "🔍 Checking if this fingerprint already exists... Please place your finger on the scanner.",
+    });
+    setScanStatus("Checking for duplicate fingerprint... Place your finger on the scanner now.");
+    
+    try {
+      const checkRes = await fetch(`${API_BASE_URL}/fingerprint/check`, {
+        method: "GET",
+        credentials: "include",
+      });
+      const checkData = await checkRes.json().catch(() => ({}));
+      
+      if (checkData.ok && checkData.match && checkData.matchedId) {
+        // Duplicate found!
+        const matchedId = checkData.matchedId;
+        const useExisting = window.confirm(
+          `⚠️ DUPLICATE DETECTED!\n\n` +
+          `This fingerprint already matches existing ID ${matchedId}.\n\n` +
+          `This usually means:\n` +
+          `- The same person enrolled with different finger placements\n` +
+          `- You're trying to enroll the same finger again\n\n` +
+          `Do you want to:\n` +
+          `- Use existing ID ${matchedId} (recommended)\n` +
+          `- Or continue enrolling new ID ${id} (will create duplicate)\n\n` +
+          `Click OK to use existing ID ${matchedId}, or Cancel to continue with new enrollment.`
+        );
+        
+        if (useExisting) {
+          // Use the existing ID
+          const fingerprintId = String(matchedId);
+          setFormData((prev) => ({ ...prev, finger_template_id: fingerprintId }));
+          if (isEditOpen) {
+            setEditFingerprint(fingerprintId);
+          }
+          setNotification({
+            type: "success",
+            message: `✅ Using existing fingerprint ID ${matchedId}. No need to enroll again!`,
+          });
+          setScanStatus(`Using existing ID ${matchedId}`);
+          setTimeout(() => setNotification(null), 5000);
+          return;
+        }
+        // User chose to continue - show warning
+        setNotification({
+          type: "warning",
+          message: `⚠️ Warning: Continuing with enrollment will create a duplicate. Consider using ID ${matchedId} instead.`,
+        });
+        setTimeout(() => setNotification(null), 5000);
+      } else if (checkData.ok && !checkData.match) {
+        // No duplicate found - safe to enroll
+        setNotification({
+          type: "success",
+          message: "✅ No duplicate found. Safe to enroll new fingerprint.",
+        });
+        setTimeout(() => setNotification(null), 3000);
+      }
+      // If check failed, continue anyway (device might not support check)
+    } catch (err) {
+      console.error("Failed to check for duplicate:", err);
+      // Continue with enrollment if check fails
+      setNotification({
+        type: "info",
+        message: "Could not check for duplicates. Proceeding with enrollment...",
+      });
+      setTimeout(() => setNotification(null), 3000);
     }
 
     // Show enrollment started message
@@ -3046,7 +3699,166 @@ export default function AdminEmployee() {
                     <div style={{ padding: "10px", background: "#e3f2fd", borderRadius: "4px" }}>
                       <strong>Detected on Device:</strong> {detectedFingerprintIds.size}
                     </div>
+                    {analyzeFingerprints.duplicateGroups.length > 0 && (
+                      <div style={{ padding: "10px", background: "#ffebee", borderRadius: "4px" }}>
+                        <strong>⚠️ Duplicates:</strong> {analyzeFingerprints.duplicateGroups.length} employee(s) with multiple IDs
+                      </div>
+                    )}
                   </div>
+                  
+                  {/* Clear All Fingerprint IDs from Database */}
+                  {analyzeFingerprints.usedCount > 0 && (
+                    <div style={{ 
+                      marginBottom: "20px", 
+                      padding: "15px", 
+                      background: "#e3f2fd", 
+                      borderRadius: "4px",
+                      border: "1px solid #2196f3"
+                    }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+                        <div>
+                          <strong style={{ color: "#1565c0", display: "block", marginBottom: "5px" }}>
+                            Clear All Fingerprint IDs from Database
+                          </strong>
+                          <p style={{ fontSize: "12px", color: "#1565c0", margin: 0 }}>
+                            Remove fingerprint ID assignments from {analyzeFingerprints.usedCount} employee record(s) in the database. 
+                            Use this after clearing the device database (e.g., using Arduino IDE 'clear' command) to sync the database.
+                          </p>
+                        </div>
+                        <button
+                          className="btn"
+                          onClick={clearAllFingerprintIdsFromDatabase}
+                          disabled={fingerprintManagerLoading}
+                          style={{
+                            background: fingerprintManagerLoading ? "#ccc" : "#2196f3",
+                            color: "white",
+                            border: "none",
+                            padding: "10px 20px",
+                            fontWeight: "bold"
+                          }}
+                        >
+                          {fingerprintManagerLoading ? "Clearing..." : `Clear All from Database (${analyzeFingerprints.usedCount})`}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Bulk Delete Button */}
+                  {analyzeFingerprints.allFingerprints.filter(fp => !fp.isUsed).length > 0 && (
+                    <div style={{ 
+                      marginBottom: "20px", 
+                      padding: "15px", 
+                      background: "#fff3cd", 
+                      borderRadius: "4px",
+                      border: "1px solid #ffc107"
+                    }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+                        <div>
+                          <strong style={{ color: "#856404", display: "block", marginBottom: "5px" }}>
+                            Bulk Delete Orphaned Fingerprints
+                          </strong>
+                          <p style={{ fontSize: "12px", color: "#856404", margin: 0 }}>
+                            Delete all {analyzeFingerprints.allFingerprints.filter(fp => !fp.isUsed).length} unassigned fingerprint ID(s) from the device at once.
+                          </p>
+                        </div>
+                        <button
+                          className="btn"
+                          onClick={deleteAllOrphanedFingerprints}
+                          disabled={fingerprintManagerLoading || deletingFingerprintIds.size > 0}
+                          style={{
+                            background: fingerprintManagerLoading ? "#ccc" : "#f44336",
+                            color: "white",
+                            border: "none",
+                            padding: "10px 20px",
+                            fontWeight: "bold"
+                          }}
+                        >
+                          {fingerprintManagerLoading ? "Deleting..." : `Delete All Orphaned (${analyzeFingerprints.allFingerprints.filter(fp => !fp.isUsed).length})`}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Detected Duplicates from Scanning */}
+                  {duplicateDetectionMap.size > 0 && (
+                    <div style={{ 
+                      marginBottom: "20px", 
+                      padding: "15px", 
+                      background: "#fff3cd", 
+                      borderRadius: "4px",
+                      border: "1px solid #ffc107"
+                    }}>
+                      <strong style={{ color: "#856404", display: "block", marginBottom: "10px" }}>
+                        🔍 Potential Duplicates Detected from Scanning
+                      </strong>
+                      <p style={{ fontSize: "13px", color: "#856404", marginBottom: "10px" }}>
+                        The following fingerprint IDs were detected within a few seconds of each other. 
+                        This suggests they might be the same person enrolled with different finger placements.
+                      </p>
+                      {Array.from(duplicateDetectionMap.entries()).map(([key, group], idx) => (
+                        <div key={idx} style={{ 
+                          marginTop: "10px", 
+                          padding: "10px", 
+                          background: "white", 
+                          borderRadius: "4px",
+                          border: "1px solid #ffc107"
+                        }}>
+                          <div style={{ fontWeight: "bold", marginBottom: "5px" }}>
+                            IDs: {group.ids.join(", ")} (Detected {group.count} time{group.count !== 1 ? 's' : ''})
+                          </div>
+                          <div style={{ fontSize: "11px", color: "#999", marginTop: "5px" }}>
+                            💡 These IDs might belong to the same person. Check if any employee has multiple IDs assigned.
+                          </div>
+                        </div>
+                      ))}
+                      <button
+                        className="btn"
+                        onClick={() => setDuplicateDetectionMap(new Map())}
+                        style={{ marginTop: "10px", fontSize: "12px", padding: "6px 12px" }}
+                      >
+                        Clear Detection History
+                      </button>
+                    </div>
+                  )}
+                  
+                  {/* Duplicate Fingerprints Warning */}
+                  {analyzeFingerprints.duplicateGroups.length > 0 && (
+                    <div style={{ 
+                      marginBottom: "20px", 
+                      padding: "15px", 
+                      background: "#fff3cd", 
+                      borderRadius: "4px",
+                      border: "1px solid #ffc107"
+                    }}>
+                      <strong style={{ color: "#856404", display: "block", marginBottom: "10px" }}>
+                        ⚠️ Duplicate Fingerprint IDs Detected
+                      </strong>
+                      <p style={{ fontSize: "13px", color: "#856404", marginBottom: "10px" }}>
+                        The following employees have multiple fingerprint IDs assigned. This usually happens when the same person 
+                        enrolled their fingerprint multiple times with different finger placements. You should keep only one ID per employee.
+                      </p>
+                      {analyzeFingerprints.duplicateGroups.map((group, idx) => (
+                        <div key={idx} style={{ 
+                          marginTop: "10px", 
+                          padding: "10px", 
+                          background: "white", 
+                          borderRadius: "4px",
+                          border: "1px solid #ffc107"
+                        }}>
+                          <div style={{ fontWeight: "bold", marginBottom: "5px" }}>
+                            {group.employeeName}
+                          </div>
+                          <div style={{ fontSize: "12px", color: "#666" }}>
+                            Fingerprint IDs: {group.fingerprintIds.join(", ")}
+                          </div>
+                          <div style={{ fontSize: "11px", color: "#999", marginTop: "5px" }}>
+                            💡 Recommendation: Keep ID {group.fingerprintIds[0]} and delete the others from the device, 
+                            then update the employee record to use only one ID.
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   
                   {/* Listen Controls */}
                   <div style={{ 
@@ -3120,21 +3932,40 @@ export default function AdminEmployee() {
                 }}>
                   {analyzeFingerprints.allFingerprints.map((fp) => {
                     const isDetected = detectedFingerprintIds.has(fp.idStr);
+                    const isDeleted = successfullyDeletedIds.has(fp.idStr);
                     return (
                       <div
                         key={fp.id}
                         style={{
                           padding: "12px",
-                          border: isDetected ? "2px solid #2196f3" : "1px solid #ddd",
+                          border: isDetected ? "2px solid #2196f3" : 
+                                  fp.isDuplicate ? "2px solid #ff9800" : 
+                                  isDeleted ? "2px solid #4caf50" : 
+                                  "1px solid #ddd",
                           borderRadius: "4px",
-                          background: fp.isUsed ? "#e8f5e9" : isDetected ? "#e3f2fd" : "#fff",
+                          background: fp.isUsed ? (fp.isDuplicate ? "#fff3e0" : "#e8f5e9") : 
+                                     isDetected ? "#e3f2fd" : 
+                                     isDeleted ? "#e8f5e9" : 
+                                     "#fff",
                           position: "relative",
+                          opacity: isDeleted ? 0.7 : 1,
                         }}
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                           <strong>ID: {fp.id}</strong>
                           <div style={{ display: "flex", gap: "5px", alignItems: "center" }}>
-                            {isDetected && (
+                            {isDeleted && (
+                              <span style={{ 
+                                fontSize: "10px", 
+                                background: "#4caf50", 
+                                color: "white", 
+                                padding: "2px 6px", 
+                                borderRadius: "10px" 
+                              }}>
+                                ✓ DELETED
+                              </span>
+                            )}
+                            {isDetected && !isDeleted && (
                               <span style={{ 
                                 fontSize: "10px", 
                                 background: "#2196f3", 
@@ -3143,6 +3974,17 @@ export default function AdminEmployee() {
                                 borderRadius: "10px" 
                               }}>
                                 ON DEVICE
+                              </span>
+                            )}
+                            {fp.isDuplicate && (
+                              <span style={{ 
+                                fontSize: "10px", 
+                                background: "#ff9800", 
+                                color: "white", 
+                                padding: "2px 6px", 
+                                borderRadius: "10px" 
+                              }}>
+                                DUPLICATE
                               </span>
                             )}
                             {fp.isUsed && (
@@ -3165,16 +4007,30 @@ export default function AdminEmployee() {
                           </div>
                         ) : (
                           <div style={{ fontSize: "12px", color: "#999" }}>
-                            {isDetected ? (
+                            {isDeleted && (
+                              <div style={{ color: "#4caf50", fontWeight: "600", marginBottom: "4px" }}>
+                                ✅ Successfully deleted from device
+                              </div>
+                            )}
+                            {fp.isDuplicate && fp.duplicateGroup && !isDeleted && (
+                              <div style={{ color: "#ff9800", fontWeight: "500", marginBottom: "4px" }}>
+                                ⚠️ Duplicate: {fp.duplicateGroup.employeeName} has {fp.duplicateGroup.fingerprintIds.length} IDs
+                              </div>
+                            )}
+                            {isDetected && !isDeleted ? (
                               <span style={{ color: "#2196f3", fontWeight: "500" }}>
                                 ✓ Registered on device (not assigned to employee)
                               </span>
-                            ) : (
+                            ) : !isDeleted ? (
                               "Not assigned"
+                            ) : (
+                              <span style={{ color: "#4caf50", fontWeight: "500" }}>
+                                Available for use
+                              </span>
                             )}
                           </div>
                         )}
-                        {!fp.isUsed && (
+                        {!fp.isUsed && !isDeleted && (
                           <button
                             className="btn"
                             style={{
@@ -3192,6 +4048,25 @@ export default function AdminEmployee() {
                           >
                             {deletingFingerprintIds.has(fp.id) ? "Deleting..." : "Delete from Device"}
                           </button>
+                        )}
+                        {isDeleted && (
+                          <div style={{
+                            marginTop: "8px",
+                            padding: "8px",
+                            background: "#e8f5e9",
+                            borderRadius: "4px",
+                            fontSize: "11px",
+                            color: "#2e7d32",
+                            fontWeight: "500",
+                            textAlign: "center"
+                          }}>
+                            <div style={{ marginBottom: "4px" }}>
+                              ✓ Deleted Successfully
+                            </div>
+                            <div style={{ fontSize: "10px", color: "#4caf50", fontStyle: "italic" }}>
+                              Click "Listen" to verify it's removed from device
+                            </div>
+                          </div>
                         )}
                       </div>
                     );

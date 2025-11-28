@@ -419,6 +419,21 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
           this.logger.log(`[FINGERPRINT] Enrollment started for ID: ${id}`);
         }
 
+        // Check for duplicate warning during enrollment
+        if (event.type === 'raw' && /WARNING.*already matches ID/i.test(event.raw)) {
+          const match = event.raw.match(/already matches ID #?(\d+)/i);
+          if (match && match[1]) {
+            const existingId = Number(match[1]);
+            this.logger.warn(`[FINGERPRINT] Duplicate detected during enrollment: Fingerprint matches existing ID ${existingId}`);
+            // Log warning but continue enrollment
+          }
+        }
+        
+        if (event.type === 'raw' && /ENROLL_DUPLICATE/i.test(event.raw)) {
+          this.logger.warn(`[FINGERPRINT] Enrollment duplicate warning for ID: ${id}`);
+          // Continue with enrollment but this will be noted
+        }
+
         // Listen for final result - check multiple success patterns
         if (event.type === 'raw') {
           const rawText = event.raw.toLowerCase();
@@ -485,6 +500,83 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
 
   async clearDatabase() {
     await this.sendCommand('clear');
+  }
+
+  /**
+   * Check if a fingerprint matches any existing enrolled ID
+   * Returns the matched ID if found, or null if no match
+   */
+  async checkForExistingFingerprint(): Promise<number | null> {
+    if (!this.port || !this.port.isOpen) {
+      throw new Error('Serial port not initialized or not connected');
+    }
+
+    this.logger.log(`[FINGERPRINT] Checking for existing fingerprint match...`);
+
+    return new Promise((resolve, reject) => {
+      let completed = false;
+      let matchFound = false;
+      let matchedId: number | null = null;
+
+      const cleanup = (result?: number | null) => {
+        if (completed) return;
+        completed = true;
+        clearTimeout(timeout);
+        subscription.unsubscribe();
+        if (typeof result === 'number') {
+          resolve(result);
+        } else if (result === null) {
+          resolve(null);
+        } else {
+          resolve(null);
+        }
+      };
+
+      const subscription = this.subject.subscribe((event) => {
+        if (event.type === 'raw') {
+          const raw = (event.raw || '').trim();
+          
+          // Check for match
+          if (/CHECK_MATCH:\s*(\d+)/i.test(raw)) {
+            const match = raw.match(/CHECK_MATCH:\s*(\d+)/i);
+            if (match && match[1]) {
+              matchedId = Number(match[1]);
+              this.logger.log(`[FINGERPRINT] Found existing match: ID ${matchedId}`);
+              matchFound = true;
+              cleanup(matchedId);
+              return;
+            }
+          }
+          
+          // Check for no match
+          if (/CHECK_NO_MATCH/i.test(raw)) {
+            this.logger.log(`[FINGERPRINT] No existing match found`);
+            cleanup(null);
+            return;
+          }
+          
+          // Check for failure
+          if (/CHECK_FAIL/i.test(raw)) {
+            this.logger.warn(`[FINGERPRINT] Check failed: ${raw}`);
+            cleanup(null);
+            return;
+          }
+        }
+      });
+
+      const timeout = setTimeout(() => {
+        this.logger.warn(`[FINGERPRINT] Check command timed out`);
+        cleanup(null);
+      }, 15000);
+
+      // Send check command
+      this.logger.log(`[FINGERPRINT] Sending 'check' command to Arduino`);
+      this.sendCommand('check').catch((err) => {
+        this.logger.error(`Failed to send check command: ${err.message}`);
+        cleanup(null);
+        reject(err);
+      });
+    });
   }
 
   async deleteFingerprint(id: number): Promise<boolean> {
@@ -576,12 +668,39 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
             /delete failed/i.test(raw) ||
             /❌ delete failed/i.test(raw) ||
             /❌.*delete.*failed/i.test(raw) ||
-            /delete failed, code/i.test(raw)
+            /delete failed, code/i.test(raw) ||
+            /delete_fail:\s*(\d+)/i.test(raw)
           ) {
             if (!completed) {
-              this.logger.warn(
-                `[FINGERPRINT] ❌ Delete FAILED for ID ${id} (raw: "${raw}")`,
-              );
+              // Try to extract error code for more specific error message
+              const errorCodeMatch = raw.match(/delete_fail:\s*(\d+)/i) || raw.match(/code:\s*(\d+)/i);
+              const errorCode = errorCodeMatch ? Number(errorCodeMatch[1]) : null;
+              
+              let errorMsg = `[FINGERPRINT] ❌ Delete FAILED for ID ${id}`;
+              if (errorCode !== null) {
+                // Common error codes from Adafruit library
+                if (errorCode === 1) {
+                  errorMsg += ` - Fingerprint ID not found in database (code: ${errorCode})`;
+                } else if (errorCode === 2) {
+                  errorMsg += ` - Invalid location/ID out of range (code: ${errorCode})`;
+                } else if (errorCode === 3) {
+                  errorMsg += ` - Flash storage error (code: ${errorCode})`;
+                } else {
+                  errorMsg += ` - Device error code: ${errorCode}`;
+                }
+              }
+              errorMsg += ` (raw: "${raw}")`;
+              
+              this.logger.warn(errorMsg);
+              cleanup(false);
+            }
+            return;
+          }
+          
+          // Check for specific error messages
+          if (/ERROR:.*Fingerprint ID not found/i.test(raw)) {
+            if (!completed) {
+              this.logger.warn(`[FINGERPRINT] ❌ Delete FAILED: Fingerprint ID ${id} not found in device database`);
               cleanup(false);
             }
             return;
