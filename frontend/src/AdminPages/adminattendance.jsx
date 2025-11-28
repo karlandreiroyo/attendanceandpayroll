@@ -297,7 +297,6 @@ export default function AdminAttendance() {
                         <div className="emp-avatar">{(r.name && r.name[0]) || "?"}</div>
                         <div className="emp-meta">
                           <div className="emp-name">{r.name || "Unknown"}</div>
-                          <div className="emp-email">{r.empId || ""}</div>
                         </div>
                       </div>
                     </div>
