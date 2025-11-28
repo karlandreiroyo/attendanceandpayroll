@@ -56,11 +56,11 @@ export class AttendanceController {
       checks: {},
     };
 
-    // Check if exists in users by user_id
+    // Users table only has user_id column, not id
     const { data: userByUserId, error: userByIdError } =
       await this.attendanceService['supabaseService'].client
         .from('users')
-        .select('user_id, id, first_name, last_name')
+        .select('user_id, first_name, last_name')
         .eq('user_id', employeeId)
         .maybeSingle();
 
@@ -70,30 +70,10 @@ export class AttendanceController {
       error: userByIdError?.message || null,
     };
 
-    // Check if exists in users by id
-    const { data: userById, error: userByIdError2 } =
-      await this.attendanceService['supabaseService'].client
-        .from('users')
-        .select('user_id, id, first_name, last_name')
-        .eq('id', employeeId)
-        .maybeSingle();
-
-    result.checks.by_id = {
-      exists: !!userById,
-      data: userById || null,
-      error: userByIdError2?.message || null,
-    };
-
-    // Recommendation
-    if (userById && !userByUserId) {
-      result.recommendation = 'Foreign key likely references users.id. Use users.id for employee_id.';
-      result.correctId = userById.id;
-    } else if (userByUserId && !userById) {
-      result.recommendation = 'Foreign key likely references users.user_id. Use users.user_id for employee_id.';
+    // Recommendation - users table only has user_id
+    if (userByUserId) {
+      result.recommendation = 'Users table uses user_id as primary key. Use users.user_id for employee_id.';
       result.correctId = userByUserId.user_id;
-    } else if (userById && userByUserId) {
-      result.recommendation = 'Both columns exist. Foreign key likely references users.id (primary key).';
-      result.correctId = userById.id;
     } else {
       result.recommendation = 'Employee ID not found in users table. Employee does not exist.';
       result.correctId = null;

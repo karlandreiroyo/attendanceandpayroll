@@ -132,22 +132,12 @@ export class UsersService {
             // If already hashed, keep it as is
         }
 
-        let { data, error } = await this.supabaseService.client
+        // Users table only has user_id column, not id
+        const { data, error } = await this.supabaseService.client
             .from('users')
             .update(updatePayload)
             .eq('user_id', id)
             .select('*');
-
-        if (!error && (!data || (data as User[]).length === 0)) {
-            const { data: dataById, error: errorById } = await this.supabaseService.client
-                .from('users')
-                .update(updatePayload)
-                .eq('id', id)
-                .select('*');
-
-            data = dataById;
-            error = errorById;
-        }
 
         if (error) throw new Error(error.message);
         if (!data || (data as User[]).length === 0)
@@ -161,21 +151,12 @@ export class UsersService {
             status: 'Inactive' as const,
         };
 
-        let { data, error } = await this.supabaseService.client
+        // Users table only has user_id column, not id
+        const { data, error } = await this.supabaseService.client
             .from('users')
             .update(updatePayload)
             .eq('user_id', id)
             .select('user_id');
-
-        if (!error && (!data || data.length === 0)) {
-            const responseById = await this.supabaseService.client
-                .from('users')
-                .update(updatePayload)
-                .eq('id', id)
-                .select('user_id');
-            data = responseById.data;
-            error = responseById.error;
-        }
 
         if (error) throw new Error(error.message || 'Failed to deactivate user');
         if (!data || data.length === 0) throw new Error('User not found');

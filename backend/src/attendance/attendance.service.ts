@@ -83,9 +83,10 @@ export class AttendanceService {
     const fingerprintIdStr = String(fingerprintId);
     
     // Use .select() without .maybeSingle() first to check for duplicates
+    // Users table only has user_id column, not id
     const { data: users, error: userError } = await this.supabaseService.client
       .from('users')
-      .select('user_id, first_name, last_name, department, status, finger_template_id')
+      .select('user_id, username, first_name, last_name, department, status, finger_template_id')
       .eq('finger_template_id', fingerprintIdStr)
       .not('finger_template_id', 'is', null); // Exclude null values
 
@@ -101,9 +102,16 @@ export class AttendanceService {
 
     if (users.length > 1) {
       // Multiple users have the same fingerprint ID - this is a data integrity issue
-      const userNames = users.map(u => `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'Unknown').join(', ');
+      // Show detailed information to help identify the problematic records
+      // Users table only has user_id, not id
+      const userDetails = users.map(u => {
+        const name = `${u.first_name || ''} ${u.last_name || ''}`.trim();
+        const displayName = name || u.username || `User ID ${u.user_id}` || 'Unknown';
+        return `${displayName} (User ID: ${u.user_id}${u.username ? `, Username: ${u.username}` : ''})`;
+      }).join(', ');
+      
       throw new BadRequestException(
-        `Data integrity error: Multiple employees (${users.length}) have the same fingerprint ID ${fingerprintId}: ${userNames}. Please contact administrator to fix duplicate fingerprint assignments.`,
+        `Data integrity error: Multiple employees (${users.length}) have the same fingerprint ID ${fingerprintId}: ${userDetails}. Please contact administrator to fix duplicate fingerprint assignments. You can use the Fingerprint Management modal to clear this ID from all employees.`,
       );
     }
 

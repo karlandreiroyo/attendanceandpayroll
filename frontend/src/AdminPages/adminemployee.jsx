@@ -3874,13 +3874,99 @@ export default function AdminEmployee() {
                           </div>
                           {dup.employees.map((emp, empIdx) => (
                             <div key={empIdx} style={{ 
-                              padding: "6px", 
-                              marginBottom: "4px",
+                              padding: "8px", 
+                              marginBottom: "6px",
                               background: "#fff3e0",
                               borderRadius: "4px",
-                              fontSize: "13px"
+                              fontSize: "13px",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              gap: "10px"
                             }}>
-                              • {emp.employeeName} (Status: {emp.status})
+                              <div>
+                                • <strong>{emp.employeeName}</strong> (Status: {emp.status}, ID: {emp.employeeId})
+                              </div>
+                              <button
+                                className="btn"
+                                onClick={async () => {
+                                  if (window.confirm(`Are you sure you want to DELETE employee "${emp.employeeName}" (ID: ${emp.employeeId})?\n\nThis will permanently remove this employee from the system. This action cannot be undone.`)) {
+                                    setFingerprintManagerLoading(true);
+                                    try {
+                                      const res = await fetch(`${API_BASE_URL}/users/${emp.employeeId}`, {
+                                        method: "DELETE",
+                                        credentials: "include",
+                                      });
+                                      
+                                      if (res.ok) {
+                                        // Reload employees
+                                        const reloadRes = await fetch(`${API_BASE_URL}/users?includeInactive=true`, {
+                                          credentials: "include",
+                                        });
+                                        if (reloadRes.ok) {
+                                          const users = await reloadRes.json();
+                                          const mapped = (users || []).map((u) => {
+                                            const fingerprintId = u.finger_template_id;
+                                            const fingerprintIdStr =
+                                              fingerprintId !== null && fingerprintId !== undefined && fingerprintId !== ""
+                                                ? String(fingerprintId)
+                                                : "";
+                                            
+                                            return {
+                                              id: u.id || u.user_id,
+                                              user_id: u.user_id || u.id,
+                                              name:
+                                                [u.first_name, u.last_name].filter(Boolean).join(" ") || u.username,
+                                              first_name: u.first_name || "",
+                                              last_name: u.last_name || "",
+                                              username: u.username,
+                                              role: u.role || "employee",
+                                              email: u.email,
+                                              phone: formatPhoneDisplay(u.phone),
+                                              address: u.address || "",
+                                              dept: u.department,
+                                              position: u.position,
+                                              status: u.status || "Active",
+                                              joinDate: formatDate(u.join_date),
+                                              finger_template_id: fingerprintIdStr,
+                                            };
+                                          });
+                                          const employeesOnly = mapped.filter((user) => !isAdminRole(user.role));
+                                          setRows(employeesOnly);
+                                        }
+                                        setNotification({
+                                          type: "success",
+                                          message: `✅ Employee "${emp.employeeName}" has been deleted successfully.`,
+                                        });
+                                        setTimeout(() => setNotification(null), 5000);
+                                      } else {
+                                        const errorData = await res.json().catch(() => ({}));
+                                        throw new Error(errorData.message || "Failed to delete employee");
+                                      }
+                                    } catch (err) {
+                                      console.error("Failed to delete employee:", err);
+                                      setNotification({
+                                        type: "error",
+                                        message: `❌ Failed to delete employee: ${err.message || "Unknown error"}`,
+                                      });
+                                      setTimeout(() => setNotification(null), 5000);
+                                    } finally {
+                                      setFingerprintManagerLoading(false);
+                                    }
+                                  }
+                                }}
+                                style={{ 
+                                  fontSize: "11px", 
+                                  padding: "4px 8px",
+                                  background: "#d32f2f",
+                                  color: "white",
+                                  border: "none",
+                                  borderRadius: "4px",
+                                  cursor: "pointer"
+                                }}
+                              >
+                                Delete Employee
+                              </button>
                             </div>
                           ))}
                           <button
