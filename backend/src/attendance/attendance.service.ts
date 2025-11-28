@@ -19,6 +19,7 @@ type AttendanceRecord = {
   total_hours?: number | null;
   status: string;
   record_source?: string | null;
+  employees?: any; // Nested employee data from join
 };
 
 @Injectable()

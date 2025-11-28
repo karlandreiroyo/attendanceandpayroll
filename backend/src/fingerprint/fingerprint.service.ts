@@ -111,7 +111,78 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
         this.subject.next({ type: 'raw', raw: text });
 
         // Parse enrollment status messages - check in order of specificity
-        if (/Enrolling ID/i.test(text)) {
+        // First check for the new phone-like enrollment steps (SCAN 1 of 4, etc.)
+        if (/SCAN\s+1\s+of\s+4.*FINGER\s+TIP/i.test(text)) {
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'scan_1_tip',
+            message: '📸 SCAN 1 of 4: FINGER TIP AREA\n👆 Place the TIP (top part) of your finger on the scanner\n💡 Focus on the top/upper part of your finger',
+            raw: text 
+          });
+        } else if (/SCAN\s+2\s+of\s+4.*FINGER\s+MIDDLE/i.test(text)) {
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'scan_2_middle',
+            message: '📸 SCAN 2 of 4: FINGER MIDDLE AREA\n👆 Place the MIDDLE/CENTER part of your finger on the scanner\n💡 Make sure this is a DIFFERENT area than the tip',
+            raw: text 
+          });
+        } else if (/SCAN\s+3\s+of\s+4.*FINGER\s+LEFT\s+SIDE/i.test(text)) {
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'scan_3_left',
+            message: '📸 SCAN 3 of 4: FINGER LEFT SIDE AREA\n👆 Place your finger with the LEFT SIDE touching the scanner\n💡 Rotate or tilt your finger so the LEFT EDGE is on the scanner',
+            raw: text 
+          });
+        } else if (/SCAN\s+4\s+of\s+4.*FINGER\s+RIGHT\s+SIDE/i.test(text)) {
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'scan_4_right',
+            message: '📸 SCAN 4 of 4: FINGER RIGHT SIDE AREA\n👆 Place your finger with the RIGHT SIDE touching the scanner\n💡 Rotate or tilt your finger so the RIGHT EDGE is on the scanner',
+            raw: text 
+          });
+        } else if (/Finger tip area captured|Finger middle area captured|Finger left side area captured|Finger right side area captured/i.test(text)) {
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'area_captured',
+            message: `✅ ${text.trim()}`,
+            raw: text 
+          });
+        } else if (/FINGERPRINT ENROLLMENT.*Scanning Different Areas/i.test(text)) {
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'enroll_intro',
+            message: '📱 FINGERPRINT ENROLLMENT - Scanning Different Areas\n   We will scan 4 DIFFERENT AREAS of your finger\n   This creates a complete fingerprint profile for reliable matching',
+            raw: text 
+          });
+        } else if (/We will scan 4 DIFFERENT AREAS/i.test(text)) {
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'enroll_intro',
+            message: '📱 Phone-like enrollment: We will scan 4 different areas of your finger\n   This creates a complete fingerprint profile for better matching!',
+            raw: text 
+          });
+        } else if (/Remove finger completely/i.test(text)) {
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'remove_finger',
+            message: '👋 Remove your finger completely from the scanner\n   Wait for the next scan instruction...',
+            raw: text 
+          });
+        } else if (/Creating comprehensive fingerprint model|Combining features from all 4/i.test(text)) {
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'creating_model',
+            message: '⏳ Creating comprehensive fingerprint model...\n   Combining features from all 4 finger areas...',
+            raw: text 
+          });
+        } else if (/All 4 finger areas have been scanned|Your fingerprint profile is now complete/i.test(text)) {
+          this.subject.next({ 
+            type: 'enroll_status', 
+            step: 'model_created',
+            message: '✅ Fingerprint model successfully created!\n   ✓ All 4 finger areas have been scanned and combined\n   ✓ Your fingerprint profile is now complete!',
+            raw: text 
+          });
+        } else if (/Enrolling ID/i.test(text)) {
           this.subject.next({ 
             type: 'enroll_status', 
             step: 'enroll_started',
@@ -125,11 +196,11 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
             message: '⏳ Waiting for ID confirmation...',
             raw: text 
           });
-        } else if (/Place finger/i.test(text) && !/Place finger again/i.test(text)) {
+        } else if (/Place finger/i.test(text) && !/Place finger again/i.test(text) && !/SCAN/i.test(text)) {
           this.subject.next({ 
             type: 'enroll_status', 
             step: 'place_finger',
-            message: '👆 STEP 1: Please place your finger on the scanner now',
+            message: '👆 Please place your finger on the scanner now',
             raw: text 
           });
         } else if (/First image taken/i.test(text)) {
@@ -139,18 +210,11 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
             message: '✅ STEP 1 COMPLETE: First image captured! Now remove your finger.',
             raw: text 
           });
-        } else if (/Remove finger/i.test(text)) {
-          this.subject.next({ 
-            type: 'enroll_status', 
-            step: 'remove_finger',
-            message: '👋 STEP 2: Please remove your finger from the scanner',
-            raw: text 
-          });
         } else if (/Place finger again/i.test(text)) {
           this.subject.next({ 
             type: 'enroll_status', 
             step: 'place_again',
-            message: '👆 STEP 3: Please place your finger on the scanner again',
+            message: '👆 Please place your finger on the scanner again',
             raw: text 
           });
         } else if (/Second image taken/i.test(text)) {
@@ -164,10 +228,12 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
           this.subject.next({ 
             type: 'enroll_status', 
             step: 'model_created',
-            message: '✅ STEP 4: Fingerprint model created! Saving to device...',
+            message: '✅ Fingerprint model created! Saving to device...',
             raw: text 
           });
-        } else if (/Enroll success|ENROLL_OK|enroll_ok|now stored|stored at|✅ Enroll success/i.test(text)) {
+        } else if (/^ENROLL_OK$/i.test(text.trim())) {
+          // ONLY match exact "ENROLL_OK" - this ensures all 4 scans are complete
+          // Do NOT match "Enrollment Complete" or other intermediate messages
           this.logger.log(`[FINGERPRINT] Enrollment success detected: "${text}"`);
           this.subject.next({ 
             type: 'enroll_status', 
@@ -182,7 +248,7 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
             message: '❌ Enrollment failed during storage. Please try again.',
             raw: text 
           });
-        } else if (/Model failed/i.test(text)) {
+        } else if (/Model failed|Model creation failed/i.test(text)) {
           this.subject.next({ 
             type: 'enroll_status', 
             step: 'failed',
@@ -434,35 +500,32 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
           // Continue with enrollment but this will be noted
         }
 
-        // Listen for final result - check multiple success patterns
+        // Listen for final result - ONLY accept "ENROLL_OK" as success
+        // This ensures we don't complete enrollment prematurely
         if (event.type === 'raw') {
-          const rawText = event.raw.toLowerCase();
-          // Check for success - Arduino sends "ENROLL_OK" or "✅ Enroll success!"
-          if (rawText === 'enroll_ok' || 
-              rawText === 'enroll_ok\n' ||
-              /enroll success/i.test(event.raw) ||
-              /✅ enroll success/i.test(event.raw) ||
-              /now stored/i.test(event.raw) ||
-              /stored at/i.test(event.raw) ||
-              /enrollment complete/i.test(event.raw)) {
+          const rawText = (event.raw || '').trim().toLowerCase();
+          // ONLY check for exact "ENROLL_OK" - nothing else should trigger success
+          // This prevents early completion before all 4 scans are done
+          if (rawText === 'enroll_ok') {
             if (!enrollmentCompleted) {
               enrollmentCompleted = true;
-              this.logger.log(`[FINGERPRINT] Enrollment successful for ID: ${id} (from: "${event.raw}")`);
+              this.logger.log(`[FINGERPRINT] Enrollment successful for ID: ${id} - Received ENROLL_OK`);
               subscription.unsubscribe();
               resolve(true);
             }
           } else if (event.raw === 'ENROLL_FAIL' || 
                      event.raw === 'ENROLL_FAIL\n' ||
-                     /enroll fail/i.test(event.raw) || 
-                     /store failed/i.test(event.raw) ||
-                     /enrollment failed/i.test(event.raw) ||
-                     /❌ store failed/i.test(event.raw)) {
+                     (event.raw && event.raw.trim() === 'ENROLL_FAIL')) {
             if (!enrollmentCompleted) {
               enrollmentCompleted = true;
-              this.logger.warn(`[FINGERPRINT] Enrollment failed for ID: ${id} (from: "${event.raw}")`);
+              this.logger.warn(`[FINGERPRINT] Enrollment failed for ID: ${id} - Received ENROLL_FAIL`);
               subscription.unsubscribe();
               resolve(false);
             }
+          }
+          // Log other messages for debugging but don't treat as completion
+          if (event.raw && (event.raw.includes('Enrollment Complete') || event.raw.includes('Enroll success'))) {
+            this.logger.log(`[FINGERPRINT] Received intermediate message (not completion): "${event.raw}"`);
           }
         }
         

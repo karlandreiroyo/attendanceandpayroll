@@ -2052,7 +2052,50 @@ export default function AdminEmployee() {
           setScanStatus(statusMessage);
 
           // Show notifications for all enrollment steps
-          if (payload.step === "enroll_started") {
+          // New phone-like enrollment steps (SCAN 1-4)
+          if (payload.step === "enroll_intro") {
+            setNotification({
+              type: "success",
+              message: statusMessage,
+            });
+            setTimeout(() => setNotification(null), 6000);
+          } else if (payload.step === "scan_1_tip") {
+            setNotification({
+              type: "success",
+              message: statusMessage,
+            });
+            setTimeout(() => setNotification(null), 12000); // Longer for action steps
+          } else if (payload.step === "scan_2_middle") {
+            setNotification({
+              type: "success",
+              message: statusMessage,
+            });
+            setTimeout(() => setNotification(null), 12000);
+          } else if (payload.step === "scan_3_left") {
+            setNotification({
+              type: "success",
+              message: statusMessage,
+            });
+            setTimeout(() => setNotification(null), 12000);
+          } else if (payload.step === "scan_4_right") {
+            setNotification({
+              type: "success",
+              message: statusMessage,
+            });
+            setTimeout(() => setNotification(null), 12000);
+          } else if (payload.step === "area_captured") {
+            setNotification({
+              type: "success",
+              message: statusMessage,
+            });
+            setTimeout(() => setNotification(null), 5000);
+          } else if (payload.step === "creating_model") {
+            setNotification({
+              type: "success",
+              message: statusMessage,
+            });
+            setTimeout(() => setNotification(null), 6000);
+          } else if (payload.step === "enroll_started") {
             setNotification({
               type: "success",
               message: statusMessage,
@@ -2112,6 +2155,13 @@ export default function AdminEmployee() {
               message: statusMessage,
             });
             setTimeout(() => setNotification(null), 10000);
+          } else {
+            // For any other enrollment status, show it as a notification
+            setNotification({
+              type: "success",
+              message: statusMessage,
+            });
+            setTimeout(() => setNotification(null), 8000);
           }
         } else if (payload.type === "status") {
           // Device status messages
@@ -2966,7 +3016,9 @@ export default function AdminEmployee() {
                             minHeight: "20px",
                             fontWeight: scanStatus ? "500" : "400",
                             color: scanStatus && scanStatus.includes("✅") ? "#10b981" :
-                              scanStatus && scanStatus.includes("❌") ? "#ef4444" : scanStatus && scanStatus.includes("🔍") ? "#3b82f6" : "#6b7280",
+                              scanStatus && scanStatus.includes("❌") ? "#ef4444" : scanStatus && scanStatus.includes("🔍") ? "#3b82f6" : scanStatus && scanStatus.includes("📸") ? "#3b82f6" : "#6b7280",
+                            whiteSpace: scanStatus ? "pre-line" : "normal",
+                            lineHeight: scanStatus ? "1.6" : "normal",
                           }}
                         >
                           {scanStatus || (
@@ -3456,7 +3508,11 @@ export default function AdminEmployee() {
                           }}
                         >
                           {scanStatus ? (
-                            <div style={{ color: scanStatus.includes("✅") ? "#10b981" : scanStatus.includes("❌") ? "#ef4444" : scanStatus.includes("🔍") ? "#3b82f6" : "#6b7280" }}>
+                            <div style={{ 
+                              color: scanStatus.includes("✅") ? "#10b981" : scanStatus.includes("❌") ? "#ef4444" : scanStatus.includes("🔍") ? "#3b82f6" : scanStatus.includes("📸") ? "#3b82f6" : "#6b7280",
+                              whiteSpace: "pre-line",
+                              lineHeight: "1.6"
+                            }}>
                               {scanStatus}
                             </div>
                           ) : (
