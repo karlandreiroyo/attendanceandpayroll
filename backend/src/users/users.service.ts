@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
+import * as bcrypt from 'bcryptjs';
 
 export interface User { // ✅ Export it so controller can import
     user_id?: number;
@@ -51,9 +52,22 @@ export class UsersService {
     }
 
     async create(user: User): Promise<User> {
+        // Hash password before storing (if not already hashed)
+        const userToInsert = { ...user };
+        if (userToInsert.password) {
+            // Check if password is already hashed (starts with $2a$, $2b$, or $2y$)
+            const isHashed = /^\$2[ayb]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(userToInsert.password);
+            if (!isHashed) {
+                // Hash the password with bcrypt (10 rounds) for new users
+                // Old users with plain text passwords will still work via verifyPassword
+                userToInsert.password = await bcrypt.hash(userToInsert.password, 10);
+            }
+            // If already hashed, keep it as is (shouldn't happen for new users, but safe to handle)
+        }
+
         const { data, error } = await this.supabaseService.client
             .from('users') // ✅ remove <User>
-            .insert([user])
+            .insert([userToInsert])
             .select('*'); // ✅ ensures Supabase returns the new row
 
         if (error) throw new Error(error.message);
@@ -104,6 +118,18 @@ export class UsersService {
         if (Object.prototype.hasOwnProperty.call(updatePayload, 'finger_template_id') && 
             (updatePayload.finger_template_id === '' || updatePayload.finger_template_id === null || updatePayload.finger_template_id === undefined)) {
             updatePayload.finger_template_id = null;
+        }
+        // Hash password if it's being updated (and not already hashed)
+        if (Object.prototype.hasOwnProperty.call(updatePayload, 'password') && updatePayload.password) {
+            // Check if password is already hashed
+            const isHashed = /^\$2[ayb]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(updatePayload.password);
+            if (!isHashed) {
+                // Hash the new password with bcrypt (10 rounds)
+                // This will upgrade plain text passwords to hashed when users change their password
+                // Old plain text passwords will still work for login until they're changed
+                updatePayload.password = await bcrypt.hash(updatePayload.password, 10);
+            }
+            // If already hashed, keep it as is
         }
 
         let { data, error } = await this.supabaseService.client

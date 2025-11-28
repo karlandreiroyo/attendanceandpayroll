@@ -483,8 +483,8 @@ export default function AdminEmployee() {
 
   // Analyze fingerprint IDs to find orphaned ones and potential duplicates
   const analyzeFingerprints = useMemo(() => {
-    // Create a map of fingerprint ID to employee
-    const fingerprintMap = new Map();
+    // Create a map of fingerprint ID to employees (can have multiple employees per ID)
+    const fingerprintToEmployees = new Map(); // Map<fingerprintId, Array<employee>>
     const employeeToFingerprints = new Map(); // Track multiple fingerprints per employee
     
     rows.forEach((employee) => {
@@ -492,12 +492,17 @@ export default function AdminEmployee() {
       if (fpId && fpId.trim() !== "") {
         const id = String(fpId).trim();
         const employeeKey = employee.id || employee.user_id;
-        
-        fingerprintMap.set(id, {
+        const employeeInfo = {
           employeeId: employeeKey,
           employeeName: employee.name || `${employee.first_name} ${employee.last_name}`.trim() || employee.username,
           status: employee.status,
-        });
+        };
+        
+        // Track which employees have this fingerprint ID
+        if (!fingerprintToEmployees.has(id)) {
+          fingerprintToEmployees.set(id, []);
+        }
+        fingerprintToEmployees.get(id).push(employeeInfo);
         
         // Track all fingerprints for each employee
         if (!employeeToFingerprints.has(employeeKey)) {
@@ -511,7 +516,8 @@ export default function AdminEmployee() {
     const duplicateGroups = [];
     employeeToFingerprints.forEach((fingerprintIds, employeeKey) => {
       if (fingerprintIds.length > 1) {
-        const employee = fingerprintMap.get(fingerprintIds[0]);
+        const employees = fingerprintToEmployees.get(fingerprintIds[0]) || [];
+        const employee = employees[0];
         duplicateGroups.push({
           employeeId: employeeKey,
           employeeName: employee?.employeeName || "Unknown",
@@ -520,29 +526,47 @@ export default function AdminEmployee() {
       }
     });
 
+    // Find fingerprint IDs assigned to multiple employees (the critical issue)
+    const duplicateFingerprintIds = [];
+    fingerprintToEmployees.forEach((employees, fingerprintId) => {
+      if (employees.length > 1) {
+        duplicateFingerprintIds.push({
+          fingerprintId: fingerprintId,
+          employees: employees,
+          count: employees.length,
+        });
+      }
+    });
+
     // Generate list of all possible IDs (1-127) with their status
     const allFingerprints = [];
     for (let i = 1; i <= 127; i++) {
       const idStr = String(i);
-      const employee = fingerprintMap.get(idStr);
+      const employees = fingerprintToEmployees.get(idStr) || [];
+      const employee = employees[0] || null; // Get first employee if multiple exist
       const isDuplicate = duplicateGroups.some(group => group.fingerprintIds.includes(idStr));
+      const hasMultipleEmployees = employees.length > 1;
       
       allFingerprints.push({
         id: i,
         idStr: idStr,
-        isUsed: !!employee,
-        employee: employee || null,
+        isUsed: employees.length > 0,
+        employee: employee,
+        employees: employees, // All employees with this ID
         isOrphaned: false, // We can't know if it's on device without checking, so we'll mark as "potentially orphaned" if not in our DB
         isDuplicate: isDuplicate,
         duplicateGroup: isDuplicate ? duplicateGroups.find(g => g.fingerprintIds.includes(idStr)) : null,
+        hasMultipleEmployees: hasMultipleEmployees,
+        duplicateFingerprintInfo: hasMultipleEmployees ? duplicateFingerprintIds.find(d => d.fingerprintId === idStr) : null,
       });
     }
 
     return {
       allFingerprints,
-      usedCount: fingerprintMap.size,
-      availableCount: 127 - fingerprintMap.size,
+      usedCount: fingerprintToEmployees.size,
+      availableCount: 127 - fingerprintToEmployees.size,
       duplicateGroups,
+      duplicateFingerprintIds, // Fingerprint IDs assigned to multiple employees
     };
   }, [rows]);
 
@@ -3821,7 +3845,125 @@ export default function AdminEmployee() {
                     </div>
                   )}
                   
-                  {/* Duplicate Fingerprints Warning */}
+                  {/* CRITICAL: Fingerprint IDs assigned to multiple employees */}
+                  {analyzeFingerprints.duplicateFingerprintIds && analyzeFingerprints.duplicateFingerprintIds.length > 0 && (
+                    <div style={{ 
+                      marginBottom: "20px", 
+                      padding: "15px", 
+                      background: "#ffebee", 
+                      borderRadius: "4px",
+                      border: "2px solid #f44336"
+                    }}>
+                      <strong style={{ color: "#c62828", display: "block", marginBottom: "10px", fontSize: "16px" }}>
+                        🚨 CRITICAL: Duplicate Fingerprint IDs
+                      </strong>
+                      <p style={{ fontSize: "13px", color: "#c62828", marginBottom: "15px" }}>
+                        The following fingerprint IDs are assigned to multiple employees. This will cause errors during time in/out. 
+                        Please fix these duplicates immediately.
+                      </p>
+                      {analyzeFingerprints.duplicateFingerprintIds.map((dup, idx) => (
+                        <div key={idx} style={{ 
+                          marginTop: "10px", 
+                          padding: "12px", 
+                          background: "white", 
+                          borderRadius: "4px",
+                          border: "1px solid #f44336"
+                        }}>
+                          <div style={{ fontWeight: "bold", marginBottom: "8px", color: "#c62828" }}>
+                            Fingerprint ID {dup.fingerprintId} is assigned to {dup.count} employee(s):
+                          </div>
+                          {dup.employees.map((emp, empIdx) => (
+                            <div key={empIdx} style={{ 
+                              padding: "6px", 
+                              marginBottom: "4px",
+                              background: "#fff3e0",
+                              borderRadius: "4px",
+                              fontSize: "13px"
+                            }}>
+                              • {emp.employeeName} (Status: {emp.status})
+                            </div>
+                          ))}
+                          <button
+                            className="btn"
+                            onClick={async () => {
+                              if (window.confirm(`Clear fingerprint ID ${dup.fingerprintId} from all ${dup.count} employees? This will fix the duplicate assignment.`)) {
+                                setFingerprintManagerLoading(true);
+                                let cleared = 0;
+                                for (const emp of dup.employees) {
+                                  try {
+                                    const res = await fetch(`${API_BASE_URL}/users/${emp.employeeId}`, {
+                                      method: "PUT",
+                                      headers: { "Content-Type": "application/json" },
+                                      credentials: "include",
+                                      body: JSON.stringify({ finger_template_id: "" }),
+                                    });
+                                    if (res.ok) cleared++;
+                                  } catch (err) {
+                                    console.error(`Failed to clear fingerprint ID for ${emp.employeeName}:`, err);
+                                  }
+                                }
+                                setFingerprintManagerLoading(false);
+                                // Reload employees
+                                const res = await fetch(`${API_BASE_URL}/users?includeInactive=true`, {
+                                  credentials: "include",
+                                });
+                                if (res.ok) {
+                                  const users = await res.json();
+                                  const mapped = (users || []).map((u) => {
+                                    const fingerprintId = u.finger_template_id;
+                                    const fingerprintIdStr =
+                                      fingerprintId !== null && fingerprintId !== undefined && fingerprintId !== ""
+                                        ? String(fingerprintId)
+                                        : "";
+                                    
+                                    return {
+                                      id: u.id || u.user_id,
+                                      user_id: u.user_id || u.id,
+                                      name:
+                                        [u.first_name, u.last_name].filter(Boolean).join(" ") || u.username,
+                                      first_name: u.first_name || "",
+                                      last_name: u.last_name || "",
+                                      username: u.username,
+                                      role: u.role || "employee",
+                                      email: u.email,
+                                      phone: formatPhoneDisplay(u.phone),
+                                      address: u.address || "",
+                                      dept: u.department,
+                                      position: u.position,
+                                      status: u.status || "Active",
+                                      joinDate: formatDate(u.join_date),
+                                      finger_template_id: fingerprintIdStr,
+                                    };
+                                  });
+                                  const employeesOnly = mapped.filter((user) => !isAdminRole(user.role));
+                                  setRows(employeesOnly);
+                                }
+                                setNotification({
+                                  type: cleared === dup.count ? "success" : "warning",
+                                  message: cleared === dup.count 
+                                    ? `✅ Cleared fingerprint ID ${dup.fingerprintId} from all ${cleared} employees.`
+                                    : `⚠️ Cleared fingerprint ID ${dup.fingerprintId} from ${cleared} of ${dup.count} employees.`,
+                                });
+                                setTimeout(() => setNotification(null), 5000);
+                              }
+                            }}
+                            style={{ 
+                              marginTop: "8px", 
+                              fontSize: "12px", 
+                              padding: "6px 12px",
+                              background: "#f44336",
+                              color: "white",
+                              border: "none"
+                            }}
+                          >
+                            Fix: Clear ID {dup.fingerprintId} from All Employees
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Duplicate Fingerprints Warning (one employee with multiple IDs) */}
                   {analyzeFingerprints.duplicateGroups.length > 0 && (
                     <div style={{ 
                       marginBottom: "20px", 
