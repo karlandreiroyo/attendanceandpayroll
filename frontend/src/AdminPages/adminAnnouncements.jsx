@@ -25,6 +25,7 @@ export default function AdminAnnouncements() {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState({ type: "", message: "" });
   const [deletingId, setDeletingId] = useState(null);
+  const [departments, setDepartments] = useState([]);
 
   useEffect(() => {
     const unsubscribe = subscribeToProfileUpdates(setProfileData);
@@ -57,6 +58,28 @@ export default function AdminAnnouncements() {
   useEffect(() => {
     loadAnnouncements();
   }, [loadAnnouncements]);
+
+  // Load departments for audience dropdown
+  useEffect(() => {
+    async function loadDepartments() {
+      try {
+        const res = await fetch(`${API_BASE_URL}/users`, { credentials: "include" });
+        if (!res.ok) return;
+        const data = await res.json();
+        const unique = new Set(["All employees"]);
+        (Array.isArray(data) ? data : []).forEach((user) => {
+          const department = user.department || user.dept || "Unassigned";
+          if (department && department !== "Unassigned") {
+            unique.add(department);
+          }
+        });
+        setDepartments(Array.from(unique).sort());
+      } catch (err) {
+        console.error("Failed to load departments", err);
+      }
+    }
+    loadDepartments();
+  }, []);
 
   const handleLogout = () => {
     setIsProfileOpen(false);
@@ -245,12 +268,17 @@ export default function AdminAnnouncements() {
               </label>
               <label className="form-field">
                 <span>Audience (Optional)</span>
-                <input
-                  type="text"
-                  value={formData.audience}
+                <select
+                  value={formData.audience || ""}
                   onChange={(e) => handleInputChange("audience", e.target.value)}
-                  placeholder="Leave blank for all employees (e.g. Finance)"
-                />
+                >
+                  <option value="">All employees</option>
+                  {departments.filter(dept => dept !== "All employees").map((dept) => (
+                    <option key={dept} value={dept}>
+                      {dept}
+                    </option>
+                  ))}
+                </select>
               </label>
               {status.message && (
                 <div className={`form-status ${status.type}`}>
