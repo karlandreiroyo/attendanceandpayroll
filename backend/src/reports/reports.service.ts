@@ -191,25 +191,23 @@ export class ReportsService {
       item.totalEmployees += 1;
     });
 
+    // Use the attendance table (same as attendance service)
+    // Join with employees to get user_id, then match with allEmployees to get department
     const attendanceQuery = this.supabaseService.client
-      .from('employee_attendance')
+      .from('attendance')
       .select(
         `
-        id,
-        user_id,
+        attendance_id,
+        employee_id,
+        date,
         status,
-        timestamp,
-        users!inner (
-          department
+        employees!inner (
+          user_id
         )
       `,
       )
-      .gte('timestamp', startIso)
-      .lte('timestamp', endIso);
-
-    if (departmentFilter) {
-      attendanceQuery.eq('users.department', departmentFilter);
-    }
+      .gte('date', startIso.split('T')[0])
+      .lte('date', endIso.split('T')[0]);
 
     const { data, error } = await attendanceQuery;
 
@@ -234,11 +232,32 @@ export class ReportsService {
       throw new BadRequestException(error.message);
     }
 
-    const safeStatuses = new Set(['Present', 'Late', 'Absent']);
+    // Create a map of user_id to department from allEmployees
+    const userToDepartment = new Map<string, string>();
+    allEmployees.forEach((emp) => {
+      userToDepartment.set(emp.id, emp.department);
+    });
 
-    (data ?? []).forEach((record) => {
-      const user = unwrapJoined<{ department?: string | null }>(record.users);
-      const department = user?.department ?? 'Unassigned';
+    const safeStatuses = new Set(['Present', 'Late', 'Absent']);
+    const processedEmployees = new Set<string>(); // Track unique employees per day
+
+    (data ?? []).forEach((record: any) => {
+      const employee = unwrapJoined<{ user_id?: string }>(record.employees);
+      const userId = employee?.user_id;
+      const department = userId ? (userToDepartment.get(String(userId)) ?? 'Unassigned') : 'Unassigned';
+      
+      // Apply department filter if specified
+      if (departmentFilter && department !== departmentFilter) {
+        return; // Skip records not in the filtered department
+      }
+      
+      // Create unique key for employee + date to avoid double counting
+      const uniqueKey = `${record.employee_id}-${record.date}`;
+      if (processedEmployees.has(uniqueKey)) {
+        return; // Skip if already processed this employee for this date
+      }
+      processedEmployees.add(uniqueKey);
+      
       if (!departmentCounts.has(department)) {
         departmentCounts.set(department, {
           department,

@@ -52,23 +52,88 @@ export default function AdminDashboard() {
     logout();
   };
 
-  const attendanceData = useMemo(() => [], []);
+  const [attendanceData, setAttendanceData] = useState({
+    present: 0,
+    late: 0,
+    absent: 0,
+  });
+  const [recentActivities, setRecentActivities] = useState([]);
+
+  // Load today's attendance summary
+  useEffect(() => {
+    const loadTodayAttendance = async () => {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const res = await fetch(`${API_BASE_URL}/attendance/summary?date=${today}`, {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setAttendanceData({
+            present: data.present || 0,
+            late: data.late || 0,
+            absent: data.absent || 0,
+          });
+        }
+      } catch (err) {
+        console.error("Failed to load today's attendance:", err);
+      }
+    };
+
+    loadTodayAttendance();
+    // Refresh every 5 minutes
+    const interval = setInterval(loadTodayAttendance, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Load recent activities
+  useEffect(() => {
+    const loadRecentActivities = async () => {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const res = await fetch(`${API_BASE_URL}/attendance/records?startDate=${today}&endDate=${today}`, {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const records = await res.json();
+          const activities = records.slice(0, 10).map((record) => {
+            // Handle nested structure: record.employees.users
+            const employees = Array.isArray(record.employees) ? record.employees[0] : record.employees;
+            const users = Array.isArray(employees?.users) ? employees.users[0] : employees?.users;
+            const userName = users 
+              ? `${users.first_name || ''} ${users.last_name || ''}`.trim() || 'Unknown'
+              : 'Unknown';
+            const timeIn = record.time_in || '-';
+            const timeOut = record.time_out || '-';
+            return {
+              id: record.attendance_id || record.id,
+              type: 'attendance',
+              employee: userName,
+              action: record.time_out ? 'timed out' : 'timed in',
+              time: record.time_out || record.time_in || '-',
+            };
+          });
+          setRecentActivities(activities);
+        }
+      } catch (err) {
+        console.error("Failed to load recent activities:", err);
+      }
+    };
+
+    loadRecentActivities();
+    // Refresh every 2 minutes
+    const interval = setInterval(loadRecentActivities, 2 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const dashboardStats = useMemo(() => {
-    const totalEmployees = employeeCount;
-    const presentToday = attendanceData.filter(a => a.status === "Present").length;
-    const lateToday = attendanceData.filter(a => a.status === "Late").length;
-    const absentToday = attendanceData.filter(a => a.status === "Absent").length;
-
     return {
-      totalEmployees,
-      presentToday,
-      lateToday,
-      absentToday
+      totalEmployees: employeeCount,
+      presentToday: attendanceData.present,
+      lateToday: attendanceData.late,
+      absentToday: attendanceData.absent,
     };
   }, [employeeCount, attendanceData]);
-
-  const recentActivities = useMemo(() => [], []);
 
   return (
     <div className={`admin-layout${isSidebarOpen ? "" : " sidebar-collapsed"}`}>

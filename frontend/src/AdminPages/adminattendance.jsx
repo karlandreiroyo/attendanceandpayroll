@@ -104,9 +104,9 @@ export default function AdminAttendance() {
 
         const data = await res.json();
         
-        // Update summary cards
-        if (data.present !== undefined) {
-          // Data is already in the right format
+        // The backend returns { present, late, absent, total, records }
+        // records contains the formatted attendance data
+        if (data && data.records) {
           setRows(data.records || []);
         } else {
           setRows([]);

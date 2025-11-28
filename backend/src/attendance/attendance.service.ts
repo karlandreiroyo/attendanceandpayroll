@@ -1,6 +1,14 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 
+// Shift definitions matching frontend
+const SHIFT_DEFINITIONS: Record<string, { startHour: number; startMinute: number }> = {
+  M: { startHour: 8, startMinute: 0 },   // Morning: 8:00 AM
+  A: { startHour: 14, startMinute: 0 },   // Afternoon: 2:00 PM (14:00)
+  N: { startHour: 22, startMinute: 0 },    // Night: 10:00 PM (22:00)
+  O: { startHour: 0, startMinute: 0 },    // Day Off: no start time
+};
+
 type AttendanceRecord = {
   attendance_id?: string;
   id?: string;
@@ -123,17 +131,25 @@ export class AttendanceService {
 
     // IMPORTANT: The foreign key constraint references employees.employee_id, not users.user_id
     // We need to find the corresponding employee record, or create one if it doesn't exist
-    let { data: employee, error: employeeError } = await this.supabaseService.client
+    // Use .select() first to handle cases where multiple records might exist
+    const { data: employees, error: employeeError } = await this.supabaseService.client
       .from('employees')
       .select('employee_id, user_id, first_name, last_name')
-      .eq('user_id', user.user_id) // Link users to employees via user_id
-      .maybeSingle();
+      .eq('user_id', user.user_id); // Link users to employees via user_id
 
     if (employeeError) {
       throw new BadRequestException(
         `Error finding employee record: ${employeeError.message}`,
       );
     }
+
+    // Handle multiple employee records (data integrity issue)
+    if (employees && employees.length > 1) {
+      console.warn(`[ATTENDANCE] Multiple employee records found for user_id ${user.user_id}, using the first one`);
+      // Use the first employee record
+    }
+
+    let employee = employees && employees.length > 0 ? employees[0] : null;
 
     // If employee record doesn't exist, create it
     if (!employee || !employee.employee_id) {
@@ -197,10 +213,30 @@ export class AttendanceService {
       // Find the most recent record for today
       const latestRecord = existingRecords[0] as AttendanceRecord;
 
-      // If record has time_in but no time_out, this is Time Out
+      // If record has time_in but no time_out, check if enough time has passed
       if (latestRecord.time_in && !latestRecord.time_out) {
-        isTimeIn = false;
-        recordToUpdate = latestRecord;
+        // Calculate time difference between time_in and now
+        const [timeInHours, timeInMinutes] = latestRecord.time_in.split(':').map(Number);
+        const [currentHours, currentMinutes] = currentTime.split(':').map(Number);
+        
+        const timeInTotalMinutes = timeInHours * 60 + timeInMinutes;
+        const currentTotalMinutes = currentHours * 60 + currentMinutes;
+        const diffMinutes = currentTotalMinutes - timeInTotalMinutes;
+        
+        // Minimum 2 minutes between time in and time out to prevent accidental immediate time outs
+        const MIN_TIME_BETWEEN_IN_OUT = 2;
+        
+        if (diffMinutes >= MIN_TIME_BETWEEN_IN_OUT) {
+          // Enough time has passed, allow time out
+          isTimeIn = false;
+          recordToUpdate = latestRecord;
+        } else {
+          // Not enough time has passed, treat as new time in (or show error)
+          const remainingSeconds = (MIN_TIME_BETWEEN_IN_OUT - diffMinutes) * 60;
+          throw new BadRequestException(
+            `Please wait at least ${MIN_TIME_BETWEEN_IN_OUT} minutes between time in and time out. You can time out in ${Math.ceil(remainingSeconds)} second${Math.ceil(remainingSeconds) !== 1 ? 's' : ''}.`,
+          );
+        }
       }
       // If record has both time_in and time_out, create a new Time In (for multiple entries)
       else if (latestRecord.time_in && latestRecord.time_out) {
@@ -214,6 +250,14 @@ export class AttendanceService {
       // employeeId is already determined above, just verify it exists
       console.log(`[ATTENDANCE] Inserting attendance record with employee_id: ${employeeId}`);
 
+      // Determine status based on scheduled start time
+      // Try both user_id formats (number and UUID string)
+      const userIdStr = String(user.user_id);
+      const scheduledStart = await this.getScheduledStartTime(userIdStr, todayDateStr);
+      console.log(`[ATTENDANCE] Scheduled start for user ${userIdStr}:`, scheduledStart ? `${scheduledStart.startHour}:${scheduledStart.startMinute}` : 'not found');
+      console.log(`[ATTENDANCE] Time in: ${currentTime}, Is late: ${this.isLate(currentTime, scheduledStart)}`);
+      const attendanceStatus = this.isLate(currentTime, scheduledStart) ? 'Late' : 'Present';
+
       const { data: newRecord, error: insertError } =
         await this.supabaseService.client
           .from('attendance')
@@ -224,7 +268,7 @@ export class AttendanceService {
               time_in: currentTime,
               time_out: null,
               total_hours: null,
-              status: 'Present',
+              status: attendanceStatus,
               record_source: 'fingerprint',
             },
           ])
@@ -288,13 +332,16 @@ export class AttendanceService {
         );
       }
 
+      // Preserve the existing status (could be 'Late' or 'Present' from time in)
+      const existingStatus = recordToUpdate.status || 'Present';
+
       const { data: updatedRecord, error: updateError } =
         await this.supabaseService.client
           .from('attendance')
           .update({
             time_out: currentTime,
             total_hours: totalHoursDecimal,
-            status: 'Present',
+            status: existingStatus, // Preserve the status from time in
           })
           .eq(pkKey, pkValue)
           .select('*')
@@ -337,6 +384,7 @@ export class AttendanceService {
     userId?: string;
     department?: string;
   }): Promise<AttendanceRecord[]> {
+    // Join through employees to get user information
     let query = this.supabaseService.client
       .from('attendance')
       .select(
@@ -349,11 +397,15 @@ export class AttendanceService {
         total_hours,
         status,
         record_source,
-        users!inner (
+        employees!inner (
+          employee_id,
           user_id,
-          first_name,
-          last_name,
-          department
+          users!inner (
+            user_id,
+            first_name,
+            last_name,
+            department
+          )
         )
       `,
       )
@@ -373,7 +425,7 @@ export class AttendanceService {
     }
 
     if (params.department && params.department !== 'All Departments') {
-      query = query.eq('users.department', params.department);
+      query = query.eq('employees.users.department', params.department);
     }
 
     const { data, error } = await query;
@@ -409,15 +461,20 @@ export class AttendanceService {
     // Process records to determine daily status
     const userRecords = new Map<string, any>();
 
-    records.forEach((record: any) => {
+    // Process records sequentially to handle async schedule lookups
+    for (const record of records) {
       const employeeId = record.employee_id;
+      // Extract user info from nested structure: record.employees.users
+      const employees = Array.isArray(record.employees) ? record.employees[0] : record.employees;
+      const users = Array.isArray(employees?.users) ? employees.users[0] : employees?.users;
+      
       if (!userRecords.has(employeeId)) {
         userRecords.set(employeeId, {
           id: record.attendance_id,
           employee_id: employeeId,
-          name: `${record.users?.first_name || ''} ${record.users?.last_name || ''}`.trim(),
-          empId: record.users?.user_id,
-          dept: record.users?.department || '',
+          name: `${users?.first_name || ''} ${users?.last_name || ''}`.trim(),
+          empId: users?.user_id,
+          dept: users?.department || '',
           date: record.date || date,
           in: record.time_in || null,
           out: record.time_out || null,
@@ -434,12 +491,23 @@ export class AttendanceService {
       if (record.time_in) {
         userRecord.in = record.time_in;
 
-        // Check if late (assuming 09:00 is standard start time)
-        const [hours, minutes] = record.time_in.split(':').map(Number);
-        if (hours > 9 || (hours === 9 && minutes > 0)) {
-          userRecord.status = 'Late';
+        // Get scheduled start time for this employee on this date
+        const userId = users?.user_id;
+        if (userId) {
+          const scheduledStart = await this.getScheduledStartTime(String(userId), record.date || date);
+          if (this.isLate(record.time_in, scheduledStart)) {
+            userRecord.status = 'Late';
+          } else {
+            userRecord.status = 'Present';
+          }
         } else {
-          userRecord.status = 'Present';
+          // Fallback to default check if no user_id
+          const [hours, minutes] = record.time_in.split(':').map(Number);
+          if (hours > 9 || (hours === 9 && minutes > 0)) {
+            userRecord.status = 'Late';
+          } else {
+            userRecord.status = 'Present';
+          }
         }
       }
 
@@ -452,7 +520,7 @@ export class AttendanceService {
       if (record.total_hours) {
         userRecord.total = this.formatHours(record.total_hours);
       }
-    });
+    }
 
     const recordsArray = Array.from(userRecords.values());
     const present = recordsArray.filter((r) => r.status === 'Present').length;
@@ -472,5 +540,96 @@ export class AttendanceService {
     const hours = Math.floor(decimalHours);
     const minutes = Math.round((decimalHours - hours) * 60);
     return `${hours}:${minutes.toString().padStart(2, '0')}`;
+  }
+
+  /**
+   * Get the scheduled start time for an employee on a specific date
+   */
+  private async getScheduledStartTime(
+    userId: string,
+    date: string,
+  ): Promise<{ startHour: number; startMinute: number } | null> {
+    try {
+      const dateObj = new Date(date);
+      const year = dateObj.getFullYear();
+      // Frontend sends 0-indexed months (0-11), database stores 0-indexed months
+      const month = dateObj.getMonth(); // Keep 0-indexed to match database
+      const day = dateObj.getDate();
+
+      console.log(`[ATTENDANCE] Looking up schedule for user_id: ${userId}, date: ${date}, year: ${year}, month: ${month} (0-indexed), day: ${day}`);
+
+      // First try to get from employee_schedule_entries table
+      const { data: entry, error: entryError } = await this.supabaseService.client
+        .from('employee_schedule_entries')
+        .select('shift')
+        .eq('user_id', userId)
+        .eq('year', year)
+        .eq('month', month)
+        .eq('day', day)
+        .maybeSingle();
+
+      if (entryError) {
+        console.log(`[ATTENDANCE] Error querying employee_schedule_entries:`, entryError.message);
+      }
+
+      if (!entryError && entry && entry.shift) {
+        console.log(`[ATTENDANCE] Found shift in employee_schedule_entries: ${entry.shift}`);
+        const shiftDef = SHIFT_DEFINITIONS[entry.shift];
+        if (shiftDef) {
+          console.log(`[ATTENDANCE] Shift definition found: ${entry.shift} -> ${shiftDef.startHour}:${shiftDef.startMinute}`);
+          return shiftDef;
+        }
+      }
+
+      // Fallback: try to get from employee_schedules table (JSON shifts field)
+      const { data: schedule, error: scheduleError } = await this.supabaseService.client
+        .from('employee_schedules')
+        .select('shifts')
+        .eq('year', year)
+        .eq('month', month)
+        .maybeSingle();
+
+      if (scheduleError) {
+        console.log(`[ATTENDANCE] Error querying employee_schedules:`, scheduleError.message);
+      }
+
+      if (!scheduleError && schedule && schedule.shifts) {
+        const shiftKey = `${userId}-${day}`;
+        const shiftCode = schedule.shifts[shiftKey];
+        console.log(`[ATTENDANCE] Checking shifts JSON for key "${shiftKey}": ${shiftCode}`);
+        if (shiftCode) {
+          const shiftDef = SHIFT_DEFINITIONS[shiftCode];
+          if (shiftDef) {
+            console.log(`[ATTENDANCE] Shift definition found from JSON: ${shiftCode} -> ${shiftDef.startHour}:${shiftDef.startMinute}`);
+            return shiftDef;
+          }
+        }
+      }
+
+      console.log(`[ATTENDANCE] No schedule found for user_id: ${userId}, date: ${date}`);
+      return null;
+    } catch (error) {
+      console.error('[ATTENDANCE] Error fetching schedule:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Determine if a time-in is late based on the scheduled start time
+   */
+  private isLate(timeIn: string, scheduledStart: { startHour: number; startMinute: number } | null): boolean {
+    if (!scheduledStart || scheduledStart.startHour === 0) {
+      // No schedule or day off - use default 9:00 AM check
+      const [hours, minutes] = timeIn.split(':').map(Number);
+      return hours > 9 || (hours === 9 && minutes > 0);
+    }
+
+    const [hours, minutes] = timeIn.split(':').map(Number);
+    const timeInMinutes = hours * 60 + minutes;
+    const scheduledMinutes = scheduledStart.startHour * 60 + scheduledStart.startMinute;
+
+    // Allow 15 minutes grace period
+    const gracePeriod = 15;
+    return timeInMinutes > scheduledMinutes + gracePeriod;
   }
 }
