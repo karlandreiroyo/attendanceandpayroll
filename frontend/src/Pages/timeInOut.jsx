@@ -22,7 +22,8 @@ export default function TimeInOut({
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
   const eventSourceRef = useRef(null);
-  const lastSuccessScanRef = useRef(0);
+  // Track cooldown per employee (by fingerprint ID)
+  const employeeCooldownsRef = useRef(new Map());
   const isCompact = variant === "compact";
 
   // Auto-start scanning when component is active
@@ -242,21 +243,21 @@ export default function TimeInOut({
 
   const handleFingerprintDetected = async (fingerprintId) => {
     const now = Date.now();
-    const lastSuccessTs = lastSuccessScanRef.current;
-    if (
-      lastSuccessTs &&
-      now - lastSuccessTs < SCAN_COOLDOWN_MS
-    ) {
+    const fidStr = String(fingerprintId);
+    
+    // Check if this specific employee is in cooldown
+    const lastSuccessTs = employeeCooldownsRef.current.get(fidStr);
+    if (lastSuccessTs && now - lastSuccessTs < SCAN_COOLDOWN_MS) {
       const waitSeconds = Math.ceil(
         (SCAN_COOLDOWN_MS - (now - lastSuccessTs)) / 1000,
       );
       setNotification({
         type: "warning",
-        message: `⌛ Last scan already recorded. Please wait ${waitSeconds}s before scanning again.`,
+        message: `⌛ Please wait ${waitSeconds} second${waitSeconds !== 1 ? 's' : ''} before scanning again.`,
         show: true,
       });
       setStatus(
-        "Scan already recorded. Please wait a few seconds before scanning again.",
+        `Please wait ${waitSeconds} second${waitSeconds !== 1 ? 's' : ''} before scanning again.`,
       );
       setTimeout(() => {
         setNotification({
@@ -292,7 +293,31 @@ export default function TimeInOut({
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "Failed to record attendance");
+        // Check if it's a cooldown error
+        const errorMessage = data.message || "Failed to record attendance";
+        if (errorMessage.includes("wait") && errorMessage.includes("second")) {
+          // This is a cooldown error - extract the wait time
+          const waitMatch = errorMessage.match(/(\d+)\s+second/);
+          const waitSeconds = waitMatch ? parseInt(waitMatch[1]) : 60;
+          
+          setNotification({
+            type: "warning",
+            message: `⌛ ${errorMessage}`,
+            show: true,
+          });
+          setStatus(errorMessage);
+          setTimeout(() => {
+            setNotification({
+              type: "info",
+              message: "👆 Ready! Place your finger on the scanner now",
+              show: true,
+            });
+            setStatus("Ready - Place your finger on the scanner now");
+          }, Math.min(waitSeconds, 5) * 1000);
+          setLoading(false);
+          return;
+        }
+        throw new Error(errorMessage);
       }
 
       if (data.success) {
@@ -316,7 +341,10 @@ export default function TimeInOut({
           employee: data.employee,
           message: data.message,
         });
-        lastSuccessScanRef.current = Date.now();
+        
+        // Set cooldown for THIS specific employee (by fingerprint ID)
+        employeeCooldownsRef.current.set(fidStr, Date.now());
+        
         setStatus(data.message);
 
         // Show success notification with all details

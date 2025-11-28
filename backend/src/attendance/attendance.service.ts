@@ -15,7 +15,45 @@ type AttendanceRecord = {
 
 @Injectable()
 export class AttendanceService {
+  // Track cooldown per employee (by fingerprint ID) - 1 minute cooldown
+  private readonly employeeCooldowns = new Map<number, number>();
+  private readonly COOLDOWN_MS = 60000; // 1 minute
+
   constructor(private readonly supabaseService: SupabaseService) {}
+  
+  /**
+   * Check if employee is in cooldown period
+   */
+  private isInCooldown(fingerprintId: number): { inCooldown: boolean; waitSeconds?: number } {
+    const lastScanTime = this.employeeCooldowns.get(fingerprintId);
+    if (!lastScanTime) {
+      return { inCooldown: false };
+    }
+    
+    const now = Date.now();
+    const timeSinceLastScan = now - lastScanTime;
+    
+    if (timeSinceLastScan < this.COOLDOWN_MS) {
+      const waitSeconds = Math.ceil((this.COOLDOWN_MS - timeSinceLastScan) / 1000);
+      return { inCooldown: true, waitSeconds };
+    }
+    
+    // Cooldown expired, remove from map
+    this.employeeCooldowns.delete(fingerprintId);
+    return { inCooldown: false };
+  }
+  
+  /**
+   * Set cooldown for employee after successful scan
+   */
+  private setCooldown(fingerprintId: number): void {
+    this.employeeCooldowns.set(fingerprintId, Date.now());
+    
+    // Auto-cleanup after cooldown expires (set timeout to remove from map)
+    setTimeout(() => {
+      this.employeeCooldowns.delete(fingerprintId);
+    }, this.COOLDOWN_MS);
+  }
 
   /**
    * Record time in/out based on fingerprint ID
@@ -31,6 +69,14 @@ export class AttendanceService {
       department: string;
     };
   }> {
+    // Check if this employee is in cooldown period
+    const cooldownCheck = this.isInCooldown(fingerprintId);
+    if (cooldownCheck.inCooldown) {
+      throw new BadRequestException(
+        `Please wait ${cooldownCheck.waitSeconds} second${cooldownCheck.waitSeconds !== 1 ? 's' : ''} before scanning again.`,
+      );
+    }
+    
     // Find user by fingerprint template ID
     // Lookup user by fingerprint id (stored as string in DB, but we receive as number)
     const { data: user, error: userError } = await this.supabaseService.client
@@ -176,6 +222,9 @@ export class AttendanceService {
         );
       }
 
+      // Set cooldown for this employee after successful time in
+      this.setCooldown(fingerprintId);
+      
       return {
         success: true,
         message: `Time In recorded for ${employeeName}`,
@@ -240,6 +289,9 @@ export class AttendanceService {
       const minutes = Math.round((totalHoursDecimal - hours) * 60);
       const totalHoursStr = `${hours}:${minutes.toString().padStart(2, '0')}`;
 
+      // Set cooldown for this employee after successful time out
+      this.setCooldown(fingerprintId);
+      
       return {
         success: true,
         message: `Time Out recorded for ${employeeName}. Total hours: ${totalHoursStr}`,

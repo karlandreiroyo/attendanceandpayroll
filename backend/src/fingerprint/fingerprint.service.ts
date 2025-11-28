@@ -492,11 +492,12 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
       throw new Error('Serial port not initialized or not connected');
     }
 
-    this.logger.log(`[FINGERPRINT] Deleting fingerprint ID: ${id}`);
+    this.logger.log(`[FINGERPRINT] Starting delete process for fingerprint ID: ${id}`);
 
     return new Promise((resolve, reject) => {
       let idSent = false;
       let completed = false;
+      let deleteStarted = false;
 
       const cleanup = (result?: boolean) => {
         if (completed) return;
@@ -504,11 +505,23 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
         clearTimeout(timeout);
         subscription.unsubscribe();
         if (typeof result === 'boolean') {
+          this.logger.log(`[FINGERPRINT] Delete process completed for ID ${id}, result: ${result}`);
           resolve(result);
+        } else {
+          this.logger.warn(`[FINGERPRINT] Delete process completed for ID ${id} without result`);
+          resolve(false);
         }
       };
 
+      // Set up subscription FIRST before sending any commands
       const subscription = this.subject.subscribe((event) => {
+        // Log all raw events for debugging
+        if (event.type === 'raw') {
+          const raw = (event.raw || '').trim();
+          this.logger.log(`[FINGERPRINT] Delete - received raw: "${raw}"`);
+        }
+
+        // Handle "Enter ID" prompt from Arduino
         if (
           event.type === 'raw' &&
           /Enter ID/i.test(event.raw || '') &&
@@ -518,39 +531,100 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
           this.logger.log(
             `[FINGERPRINT] Arduino requested ID to delete, sending: ${id}`,
           );
+          // Send ID after Arduino is ready (similar to enrollment)
           setTimeout(() => {
             this.sendCommand(String(id)).catch((err) => {
               this.logger.error(`Failed to send delete ID: ${err.message}`);
+              cleanup(false);
             });
           }, 200);
+          return;
         }
 
+        // Check if delete process has started
+        if (event.type === 'raw' && /Deleting fingerprint ID/i.test(event.raw || '')) {
+          deleteStarted = true;
+          this.logger.log(`[FINGERPRINT] Delete operation started on device for ID ${id}`);
+        }
+
+        // Handle delete responses - check raw events
         if (event.type === 'raw') {
           const raw = (event.raw || '').trim();
-          if (/DELETE_OK/i.test(raw) || /Delete success/i.test(raw)) {
-            this.logger.log(
-              `[FINGERPRINT] Delete confirmed for ID ${id} (raw: "${raw}")`,
-            );
-            cleanup(true);
-          } else if (/DELETE_FAIL/i.test(raw) || /Delete failed/i.test(raw)) {
-            this.logger.warn(
-              `[FINGERPRINT] Delete failed for ID ${id} (raw: "${raw}")`,
-            );
-            cleanup(false);
+          const rawLower = raw.toLowerCase();
+          
+          // Check for success messages (multiple formats - be very permissive)
+          if (
+            rawLower === 'delete_ok' ||
+            /delete_ok/i.test(raw) || 
+            /delete success/i.test(raw) ||
+            /✅ delete success/i.test(raw) ||
+            /✅.*delete.*success/i.test(raw)
+          ) {
+            if (!completed) {
+              this.logger.log(
+                `[FINGERPRINT] ✅ Delete SUCCESS confirmed for ID ${id} (raw: "${raw}")`,
+              );
+              cleanup(true);
+            }
+            return;
+          }
+          
+          // Check for failure messages (multiple formats)
+          if (
+            rawLower === 'delete_fail' ||
+            /delete_fail/i.test(raw) || 
+            /delete failed/i.test(raw) ||
+            /❌ delete failed/i.test(raw) ||
+            /❌.*delete.*failed/i.test(raw) ||
+            /delete failed, code/i.test(raw)
+          ) {
+            if (!completed) {
+              this.logger.warn(
+                `[FINGERPRINT] ❌ Delete FAILED for ID ${id} (raw: "${raw}")`,
+              );
+              cleanup(false);
+            }
+            return;
+          }
+
+          // Also check for "Invalid ID" message
+          if (/Invalid ID/i.test(raw)) {
+            if (!completed) {
+              this.logger.warn(
+                `[FINGERPRINT] Invalid ID message received for ID ${id}: "${raw}"`,
+              );
+              cleanup(false);
+            }
+            return;
           }
         }
       });
 
+      // Timeout after 20 seconds
       const timeout = setTimeout(() => {
-        this.logger.warn(
-          `[FINGERPRINT] Delete command timed out for ID ${id}`,
-        );
-        cleanup(false);
-      }, 15000);
+        if (!completed) {
+          if (!idSent) {
+            this.logger.warn(
+              `[FINGERPRINT] Delete command timed out: Arduino did not request ID for ID ${id}. Check if device is responding.`,
+            );
+          } else if (!deleteStarted) {
+            this.logger.warn(
+              `[FINGERPRINT] Delete command timed out: ID sent but delete operation did not start for ID ${id}. Device may not have received the ID.`,
+            );
+          } else {
+            this.logger.warn(
+              `[FINGERPRINT] Delete command timed out: Delete started but no confirmation (DELETE_OK/DELETE_FAIL) received for ID ${id}. Check device response.`,
+            );
+          }
+          cleanup(false);
+        }
+      }, 20000);
 
+      // Send delete command (subscription is already active)
+      this.logger.log(`[FINGERPRINT] Sending 'delete' command to Arduino`);
       this.sendCommand('delete').catch((err) => {
         this.logger.error(`Failed to send delete command: ${err.message}`);
-        cleanup();
+        cleanup(false);
         reject(err);
       });
     });

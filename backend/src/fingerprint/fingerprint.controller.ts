@@ -111,16 +111,32 @@ export class FingerprintController {
       return { ok: false, message: 'Missing id in body' };
     }
 
+    // Check if device is connected
+    const connected = this.fingerprintService.isDeviceConnected();
+    if (!connected) {
+      return { 
+        ok: false, 
+        message: 'Fingerprint device is not connected. Please connect the device and try again.' 
+      };
+    }
+
     try {
       const success = await this.fingerprintService.deleteFingerprint(body.id);
       return {
         ok: success,
         message: success
-          ? `Fingerprint ID ${body.id} deleted.`
-          : `Failed to delete fingerprint ID ${body.id}. It may not exist or the device did not confirm the deletion.`,
+          ? `Fingerprint ID ${body.id} deleted successfully from device.`
+          : `Failed to delete fingerprint ID ${body.id}. The fingerprint may not exist on the device, or the device returned an error. If the fingerprint was already deleted or never existed, this is normal.`,
       };
     } catch (err) {
-      return { ok: false, message: String(err) };
+      const errorMessage = String(err);
+      if (errorMessage.includes('not connected') || errorMessage.includes('not initialized')) {
+        return { 
+          ok: false, 
+          message: 'Fingerprint device is not connected. Please connect the device and try again.' 
+        };
+      }
+      return { ok: false, message: errorMessage };
     }
   }
 }

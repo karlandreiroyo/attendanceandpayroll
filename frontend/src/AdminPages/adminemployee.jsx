@@ -51,6 +51,10 @@ export default function AdminEmployee() {
   const [isFingerprintManagerOpen, setIsFingerprintManagerOpen] = useState(false);
   const [fingerprintManagerLoading, setFingerprintManagerLoading] = useState(false);
   const [deletingFingerprintIds, setDeletingFingerprintIds] = useState(new Set());
+  const [managerScanListening, setManagerScanListening] = useState(false);
+  const [managerScanStatus, setManagerScanStatus] = useState("");
+  const [detectedFingerprintIds, setDetectedFingerprintIds] = useState(new Set());
+  const managerEventSourceRef = useRef(null);
   const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
@@ -101,6 +105,21 @@ export default function AdminEmployee() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAddOpen]);
+
+  // stop manager event source when fingerprint manager modal closes
+  useEffect(() => {
+    if (!isFingerprintManagerOpen && managerEventSourceRef.current) {
+      if (managerEventSourceRef.current) {
+        try {
+          managerEventSourceRef.current.close();
+        } catch (e) { }
+        managerEventSourceRef.current = null;
+      }
+      setManagerScanListening(false);
+      setManagerScanStatus("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFingerprintManagerOpen]);
 
   // Department -> Positions mapping based on provided positions list
   const defaultDepartmentPositions = useMemo(
@@ -517,8 +536,40 @@ export default function AdminEmployee() {
       return;
     }
 
+    // Check if device is connected first
+    try {
+      setFingerprintManagerLoading(true);
+      const statusRes = await fetch(`${API_BASE_URL}/fingerprint/status`, {
+        credentials: "include",
+      });
+      const statusData = await statusRes.json().catch(() => ({}));
+      
+      if (!statusData.connected) {
+        setNotification({
+          type: "error",
+          message: "Fingerprint device is not connected. Please connect the device and restart the backend, then try again.",
+        });
+        setTimeout(() => setNotification(null), 5000);
+        setFingerprintManagerLoading(false);
+        return;
+      }
+      
+      console.log("Device connection verified, proceeding with deletion...");
+    } catch (err) {
+      console.error("Failed to check device status:", err);
+      setNotification({
+        type: "error",
+        message: "Unable to check device connection. Please ensure the fingerprint device is connected and the backend is running.",
+      });
+      setTimeout(() => setNotification(null), 5000);
+      setFingerprintManagerLoading(false);
+      return;
+    }
+
     try {
       setDeletingFingerprintIds((prev) => new Set(prev).add(id));
+      setFingerprintManagerLoading(false);
+      
       const res = await fetch(`${API_BASE_URL}/fingerprint/delete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -526,10 +577,31 @@ export default function AdminEmployee() {
         body: JSON.stringify({ id }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) {
+      
+      if (!res.ok) {
         throw new Error(
-          data.message || `Failed to delete fingerprint ID ${id}. Please try again.`
+          data.message || `Server error: ${res.status}. Failed to delete fingerprint ID ${id}.`
         );
+      }
+      
+      if (!data.ok) {
+        // Check if this fingerprint was detected as being on the device
+        const wasDetected = detectedFingerprintIds.has(String(id));
+        let errorMsg = data.message || `Failed to delete fingerprint ID ${id}.`;
+        
+        if (wasDetected) {
+          // Fingerprint was detected but deletion failed - more specific error
+          errorMsg = `Failed to delete fingerprint ID ${id} even though it was detected on the device. ` +
+            `This could be due to: (1) Communication timeout with device, (2) Device error during deletion, ` +
+            `(3) The fingerprint may have been deleted between detection and deletion attempt. ` +
+            `Try again or check backend logs for details.`;
+        } else {
+          // Fingerprint wasn't detected, so it might not exist
+          errorMsg = `Failed to delete fingerprint ID ${id}. ` +
+            `The fingerprint may not exist on the device, or the device returned an error. ` +
+            `If the fingerprint was already deleted or never existed, this is normal.`;
+        }
+        throw new Error(errorMsg);
       }
 
       setNotification({
@@ -541,17 +613,167 @@ export default function AdminEmployee() {
       console.error("Failed to delete orphaned fingerprint:", err);
       setNotification({
         type: "error",
-        message: err.message || `Failed to delete fingerprint ID ${id}.`,
+        message: err.message || `Failed to delete fingerprint ID ${id}. Please check device connection and try again.`,
       });
-      setTimeout(() => setNotification(null), 5000);
+      setTimeout(() => setNotification(null), 6000);
     } finally {
       setDeletingFingerprintIds((prev) => {
         const next = new Set(prev);
         next.delete(id);
         return next;
       });
+      setFingerprintManagerLoading(false);
     }
   }
+
+  // Start fingerprint detection stream for manager modal
+  const startManagerFingerprintStream = async () => {
+    if (managerScanListening) return;
+
+    // Check device status first
+    try {
+      const statusRes = await fetch(`${API_BASE_URL}/fingerprint/status`, {
+        credentials: "include",
+      });
+      const statusData = await statusRes.json();
+
+      if (!statusData.connected) {
+        setManagerScanStatus("Device not connected");
+        setManagerScanListening(false);
+        setNotification({
+          type: "error",
+          message: statusData.message || "Fingerprint device is not connected. Please connect the device and try again.",
+        });
+        setTimeout(() => setNotification(null), 5000);
+        return;
+      }
+    } catch (err) {
+      console.error("Failed to check device status:", err);
+    }
+
+    setManagerScanListening(true);
+    setManagerScanStatus("Connecting to fingerprint scanner...");
+    const url = `${API_BASE_URL}/fingerprint/events`;
+    const es = new EventSource(url);
+    managerEventSourceRef.current = es;
+
+    console.log("🔍 Starting fingerprint stream for manager modal...");
+
+    es.onopen = () => {
+      console.log("✅ EventSource connected for fingerprint detection");
+      setManagerScanStatus("Ready - Scan fingerprints to detect registered IDs");
+    };
+
+    es.onmessage = (evt) => {
+      try {
+        const payload = JSON.parse(evt.data);
+        console.log("📥 Manager fingerprint event received:", payload);
+
+        if (payload.type === "scanning") {
+          setManagerScanStatus("🔍 Scanning fingerprint...");
+        } else if (payload.type === "detected" && payload.id) {
+          const fingerprintId = String(payload.id);
+          const idNum = Number(payload.id);
+          console.log("✅ Fingerprint detected in manager, ID:", fingerprintId);
+          
+          // Add to detected set
+          setDetectedFingerprintIds((prev) => {
+            const newSet = new Set(prev);
+            newSet.add(fingerprintId);
+            return newSet;
+          });
+          
+          setManagerScanStatus(`✅ Detected ID: ${payload.id} - Registered on device`);
+          setNotification({
+            type: "success",
+            message: `✅ Fingerprint ID ${payload.id} detected - This ID is registered on the device.`,
+          });
+          setTimeout(() => {
+            setNotification(null);
+            setDetectedFingerprintIds((prev) => {
+              const detectedList = Array.from(prev).sort((a, b) => Number(a) - Number(b));
+              setManagerScanStatus(`Ready - Scan more fingerprints (Detected: ${detectedList.join(", ")})`);
+              return prev;
+            });
+          }, 3000);
+        } else if (payload.type === "unregistered") {
+          setManagerScanStatus("❌ Unregistered fingerprint - Not enrolled");
+          setTimeout(() => {
+            setManagerScanStatus("Ready - Scan fingerprints to detect registered IDs");
+          }, 3000);
+        } else if (payload.type === "raw") {
+          // Check for detection in raw data (fallback)
+          const detectedMatch = payload.raw?.match(/Detected ID:\s*(\d+)/i) || payload.raw?.match(/Found ID\s*#?\s*(\d+)/i);
+          if (detectedMatch && detectedMatch[1]) {
+            const id = Number(detectedMatch[1]);
+            const fingerprintId = String(id);
+            console.log("✅ Found detection in raw data, ID:", id);
+            
+            // Add to detected set
+            setDetectedFingerprintIds((prev) => {
+              const newSet = new Set(prev);
+              newSet.add(fingerprintId);
+              return newSet;
+            });
+            
+            setManagerScanStatus(`✅ Detected ID: ${id} - Registered on device`);
+            setNotification({
+              type: "success",
+              message: `✅ Fingerprint ID ${id} detected - This ID is registered on the device.`,
+            });
+            setTimeout(() => {
+              setNotification(null);
+              setDetectedFingerprintIds((prev) => {
+                const detectedList = Array.from(prev).sort((a, b) => Number(a) - Number(b));
+                setManagerScanStatus(`Ready - Scan more fingerprints (Detected: ${detectedList.join(", ")})`);
+                return prev;
+              });
+            }, 3000);
+          }
+
+          // Check for scanning message
+          if (payload.raw && (payload.raw.includes("scanning") || payload.raw.includes("Scanning"))) {
+            setManagerScanStatus("🔍 Scanning fingerprint...");
+          }
+
+          // Check for unregistered
+          if (payload.raw && payload.raw.includes("Unregistered")) {
+            setManagerScanStatus("❌ Unregistered fingerprint");
+            setTimeout(() => {
+              setManagerScanStatus("Ready - Scan fingerprints to detect registered IDs");
+            }, 3000);
+          }
+        }
+      } catch (err) {
+        console.error("❌ Error parsing fingerprint event:", err, "Raw data:", evt.data);
+      }
+    };
+
+    es.onerror = (err) => {
+      console.error("❌ EventSource error:", err);
+      if (es.readyState === EventSource.CLOSED) {
+        setManagerScanStatus("Connection closed. Click Listen again to reconnect.");
+        setManagerScanListening(false);
+      } else {
+        setManagerScanStatus("Device connection error");
+        setManagerScanListening(false);
+      }
+      try {
+        es.close();
+      } catch (e) { }
+    };
+  };
+
+  const stopManagerFingerprintStream = () => {
+    if (managerEventSourceRef.current) {
+      try {
+        managerEventSourceRef.current.close();
+      } catch (e) { }
+      managerEventSourceRef.current = null;
+    }
+    setManagerScanListening(false);
+    setManagerScanStatus("Stopped");
+  };
 
   function openView(row) {
     setViewEmployee(row);
@@ -2814,12 +3036,74 @@ export default function AdminEmployee() {
                   <p style={{ marginBottom: "10px", color: "#666" }}>
                     Manage fingerprint IDs (1-127). Orphaned IDs are registered on the device but not assigned to any employee.
                   </p>
-                  <div style={{ display: "flex", gap: "20px", marginBottom: "20px" }}>
+                  <div style={{ display: "flex", gap: "20px", marginBottom: "15px", flexWrap: "wrap" }}>
                     <div style={{ padding: "10px", background: "#e8f5e9", borderRadius: "4px" }}>
                       <strong>Used:</strong> {analyzeFingerprints.usedCount}
                     </div>
                     <div style={{ padding: "10px", background: "#fff3e0", borderRadius: "4px" }}>
                       <strong>Available:</strong> {analyzeFingerprints.availableCount}
+                    </div>
+                    <div style={{ padding: "10px", background: "#e3f2fd", borderRadius: "4px" }}>
+                      <strong>Detected on Device:</strong> {detectedFingerprintIds.size}
+                    </div>
+                  </div>
+                  
+                  {/* Listen Controls */}
+                  <div style={{ 
+                    padding: "15px", 
+                    background: "#f5f5f5", 
+                    borderRadius: "4px", 
+                    marginBottom: "15px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "15px",
+                    flexWrap: "wrap"
+                  }}>
+                    <button
+                      className="btn"
+                      onClick={startManagerFingerprintStream}
+                      disabled={managerScanListening}
+                      style={{ 
+                        display: "flex", 
+                        alignItems: "center", 
+                        gap: "8px",
+                        background: managerScanListening ? "#ccc" : "#4caf50",
+                        color: "white"
+                      }}
+                    >
+                      Listen
+                      <div
+                        className={`scan-indicator ${managerScanListening ? "on" : "off"}`}
+                        style={{
+                          width: "10px",
+                          height: "10px",
+                          borderRadius: "50%",
+                          background: managerScanListening ? "#4caf50" : "#ccc",
+                          boxShadow: managerScanListening ? "0 0 8px #4caf50" : "none"
+                        }}
+                      ></div>
+                    </button>
+                    <button
+                      className="btn"
+                      onClick={stopManagerFingerprintStream}
+                      disabled={!managerScanListening}
+                      style={{ 
+                        background: !managerScanListening ? "#ccc" : "#f44336",
+                        color: "white"
+                      }}
+                    >
+                      Stop
+                    </button>
+                    <div style={{ 
+                      flex: 1, 
+                      minWidth: "200px",
+                      fontSize: "13px",
+                      color: managerScanStatus.includes("✅") ? "#4caf50" : 
+                             managerScanStatus.includes("❌") ? "#f44336" : 
+                             managerScanStatus.includes("🔍") ? "#2196f3" : "#666",
+                      fontWeight: managerScanStatus ? "500" : "400"
+                    }}>
+                      {managerScanStatus || "Click 'Listen' to start detecting registered fingerprints"}
                     </div>
                   </div>
                 </div>
@@ -2834,67 +3118,99 @@ export default function AdminEmployee() {
                   border: "1px solid #e0e0e0",
                   borderRadius: "4px"
                 }}>
-                  {analyzeFingerprints.allFingerprints.map((fp) => (
-                    <div
-                      key={fp.id}
-                      style={{
-                        padding: "12px",
-                        border: "1px solid #ddd",
-                        borderRadius: "4px",
-                        background: fp.isUsed ? "#e8f5e9" : "#fff",
-                        position: "relative",
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                        <strong>ID: {fp.id}</strong>
-                        {fp.isUsed && (
-                          <span style={{ 
-                            fontSize: "10px", 
-                            background: "#4caf50", 
-                            color: "white", 
-                            padding: "2px 6px", 
-                            borderRadius: "10px" 
-                          }}>
-                            USED
-                          </span>
+                  {analyzeFingerprints.allFingerprints.map((fp) => {
+                    const isDetected = detectedFingerprintIds.has(fp.idStr);
+                    return (
+                      <div
+                        key={fp.id}
+                        style={{
+                          padding: "12px",
+                          border: isDetected ? "2px solid #2196f3" : "1px solid #ddd",
+                          borderRadius: "4px",
+                          background: fp.isUsed ? "#e8f5e9" : isDetected ? "#e3f2fd" : "#fff",
+                          position: "relative",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                          <strong>ID: {fp.id}</strong>
+                          <div style={{ display: "flex", gap: "5px", alignItems: "center" }}>
+                            {isDetected && (
+                              <span style={{ 
+                                fontSize: "10px", 
+                                background: "#2196f3", 
+                                color: "white", 
+                                padding: "2px 6px", 
+                                borderRadius: "10px" 
+                              }}>
+                                ON DEVICE
+                              </span>
+                            )}
+                            {fp.isUsed && (
+                              <span style={{ 
+                                fontSize: "10px", 
+                                background: "#4caf50", 
+                                color: "white", 
+                                padding: "2px 6px", 
+                                borderRadius: "10px" 
+                              }}>
+                                USED
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {fp.isUsed && fp.employee ? (
+                          <div style={{ fontSize: "12px", color: "#666" }}>
+                            <div><strong>Employee:</strong> {fp.employee.employeeName}</div>
+                            <div><strong>Status:</strong> {fp.employee.status}</div>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: "12px", color: "#999" }}>
+                            {isDetected ? (
+                              <span style={{ color: "#2196f3", fontWeight: "500" }}>
+                                ✓ Registered on device (not assigned to employee)
+                              </span>
+                            ) : (
+                              "Not assigned"
+                            )}
+                          </div>
+                        )}
+                        {!fp.isUsed && (
+                          <button
+                            className="btn"
+                            style={{
+                              marginTop: "8px",
+                              width: "100%",
+                              fontSize: "11px",
+                              padding: "6px",
+                              background: "#ff9800",
+                              color: "white",
+                              border: "none",
+                              opacity: deletingFingerprintIds.has(fp.id) ? 0.6 : 1
+                            }}
+                            onClick={() => deleteOrphanedFingerprint(fp.id)}
+                            disabled={deletingFingerprintIds.has(fp.id)}
+                          >
+                            {deletingFingerprintIds.has(fp.id) ? "Deleting..." : "Delete from Device"}
+                          </button>
                         )}
                       </div>
-                      {fp.isUsed && fp.employee ? (
-                        <div style={{ fontSize: "12px", color: "#666" }}>
-                          <div><strong>Employee:</strong> {fp.employee.employeeName}</div>
-                          <div><strong>Status:</strong> {fp.employee.status}</div>
-                        </div>
-                      ) : (
-                        <div style={{ fontSize: "12px", color: "#999" }}>
-                          Not assigned
-                        </div>
-                      )}
-                      {!fp.isUsed && (
-                        <button
-                          className="btn"
-                          style={{
-                            marginTop: "8px",
-                            width: "100%",
-                            fontSize: "11px",
-                            padding: "6px",
-                            background: "#ff9800",
-                            color: "white",
-                            border: "none",
-                          }}
-                          onClick={() => deleteOrphanedFingerprint(fp.id)}
-                          disabled={deletingFingerprintIds.has(fp.id)}
-                        >
-                          {deletingFingerprintIds.has(fp.id) ? "Deleting..." : "Delete from Device"}
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <div style={{ marginTop: "20px", padding: "15px", background: "#fff3cd", borderRadius: "4px", fontSize: "13px" }}>
                   <strong>Note:</strong> "Delete from Device" removes the fingerprint from the physical scanner device. 
                   This is useful for cleaning up orphaned fingerprints (IDs registered on device but not linked to employees). 
                   Only unassigned IDs can be deleted this way.
+                  <br /><br />
+                  <strong>Troubleshooting:</strong> If deletion fails even though the fingerprint is registered on the device:
+                  <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
+                    <li>Check that the fingerprint device is properly connected and the backend is running</li>
+                    <li>Check the backend console logs for detailed error messages</li>
+                    <li>Try restarting the backend if communication seems stuck</li>
+                    <li>Ensure no other process is using the serial port</li>
+                    <li>Wait a few seconds and try again - the device may be processing another operation</li>
+                  </ul>
                 </div>
               </div>
               <div className="modal-actions">
