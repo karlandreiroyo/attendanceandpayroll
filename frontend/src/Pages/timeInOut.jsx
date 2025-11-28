@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import "./employeecss/timeInOut.css";
 import { API_BASE_URL } from "../config/api";
 
+const SCAN_COOLDOWN_MS = 60000; // 60s guard between successful scans
+
 export default function TimeInOut({
   backTo = "/employee/dashboard",
   backLabel = "Back to Dashboard",
@@ -20,6 +22,7 @@ export default function TimeInOut({
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
   const eventSourceRef = useRef(null);
+  const lastSuccessScanRef = useRef(0);
   const isCompact = variant === "compact";
 
   // Auto-start scanning when component is active
@@ -238,6 +241,34 @@ export default function TimeInOut({
   };
 
   const handleFingerprintDetected = async (fingerprintId) => {
+    const now = Date.now();
+    const lastSuccessTs = lastSuccessScanRef.current;
+    if (
+      lastSuccessTs &&
+      now - lastSuccessTs < SCAN_COOLDOWN_MS
+    ) {
+      const waitSeconds = Math.ceil(
+        (SCAN_COOLDOWN_MS - (now - lastSuccessTs)) / 1000,
+      );
+      setNotification({
+        type: "warning",
+        message: `⌛ Last scan already recorded. Please wait ${waitSeconds}s before scanning again.`,
+        show: true,
+      });
+      setStatus(
+        "Scan already recorded. Please wait a few seconds before scanning again.",
+      );
+      setTimeout(() => {
+        setNotification({
+          type: "info",
+          message: "👆 Ready! Place your finger on the scanner now",
+          show: true,
+        });
+        setStatus("Ready - Place your finger on the scanner now");
+      }, Math.min(waitSeconds, 5) * 1000);
+      return;
+    }
+
     const fid = Number(fingerprintId);
     if (!Number.isFinite(fid)) {
       setError("Invalid fingerprint ID received from scanner");
@@ -285,6 +316,7 @@ export default function TimeInOut({
           employee: data.employee,
           message: data.message,
         });
+        lastSuccessScanRef.current = Date.now();
         setStatus(data.message);
 
         // Show success notification with all details

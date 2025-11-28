@@ -104,4 +104,23 @@ export class FingerprintController {
       return { ok: false, message: String(err) };
     }
   }
+
+  @Post('delete')
+  async delete(@Body() body: { id: number }) {
+    if (!body || typeof body.id !== 'number') {
+      return { ok: false, message: 'Missing id in body' };
+    }
+
+    try {
+      const success = await this.fingerprintService.deleteFingerprint(body.id);
+      return {
+        ok: success,
+        message: success
+          ? `Fingerprint ID ${body.id} deleted.`
+          : `Failed to delete fingerprint ID ${body.id}. It may not exist or the device did not confirm the deletion.`,
+      };
+    } catch (err) {
+      return { ok: false, message: String(err) };
+    }
+  }
 }

@@ -1,3 +1,26 @@
+.fingerprint-delete-row {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.delete-fingerprint-btn {
+  background-color: #dc2626;
+  color: #fff;
+  font-weight: 600;
+}
+
+.delete-fingerprint-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.fingerprint-delete-hint {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0;
+}
 .table .tr.clickable-row {
   cursor: pointer;
 }

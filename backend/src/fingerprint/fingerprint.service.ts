@@ -487,6 +487,75 @@ export class FingerprintService implements OnModuleInit, OnModuleDestroy {
     await this.sendCommand('clear');
   }
 
+  async deleteFingerprint(id: number): Promise<boolean> {
+    if (!this.port || !this.port.isOpen) {
+      throw new Error('Serial port not initialized or not connected');
+    }
+
+    this.logger.log(`[FINGERPRINT] Deleting fingerprint ID: ${id}`);
+
+    return new Promise((resolve, reject) => {
+      let idSent = false;
+      let completed = false;
+
+      const cleanup = (result?: boolean) => {
+        if (completed) return;
+        completed = true;
+        clearTimeout(timeout);
+        subscription.unsubscribe();
+        if (typeof result === 'boolean') {
+          resolve(result);
+        }
+      };
+
+      const subscription = this.subject.subscribe((event) => {
+        if (
+          event.type === 'raw' &&
+          /Enter ID/i.test(event.raw || '') &&
+          !idSent
+        ) {
+          idSent = true;
+          this.logger.log(
+            `[FINGERPRINT] Arduino requested ID to delete, sending: ${id}`,
+          );
+          setTimeout(() => {
+            this.sendCommand(String(id)).catch((err) => {
+              this.logger.error(`Failed to send delete ID: ${err.message}`);
+            });
+          }, 200);
+        }
+
+        if (event.type === 'raw') {
+          const raw = (event.raw || '').trim();
+          if (/DELETE_OK/i.test(raw) || /Delete success/i.test(raw)) {
+            this.logger.log(
+              `[FINGERPRINT] Delete confirmed for ID ${id} (raw: "${raw}")`,
+            );
+            cleanup(true);
+          } else if (/DELETE_FAIL/i.test(raw) || /Delete failed/i.test(raw)) {
+            this.logger.warn(
+              `[FINGERPRINT] Delete failed for ID ${id} (raw: "${raw}")`,
+            );
+            cleanup(false);
+          }
+        }
+      });
+
+      const timeout = setTimeout(() => {
+        this.logger.warn(
+          `[FINGERPRINT] Delete command timed out for ID ${id}`,
+        );
+        cleanup(false);
+      }, 15000);
+
+      this.sendCommand('delete').catch((err) => {
+        this.logger.error(`Failed to send delete command: ${err.message}`);
+        cleanup();
+        reject(err);
+      });
+    });
+  }
+
   /**
    * List all available serial ports
    */

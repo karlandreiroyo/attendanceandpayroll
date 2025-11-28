@@ -85,8 +85,23 @@ void loop() {
       }
     }
 
+    else if (cmd == "delete") {
+      Serial.println("Enter ID # (1-127) to delete:");
+
+      while (!Serial.available())
+        ;
+      int id = Serial.parseInt();
+      Serial.readStringUntil('\n'); // Consume newline
+
+      if (id < 1 || id > 127) {
+        Serial.println("Invalid ID. Must be 1–127.");
+      } else {
+        deleteFingerprint(id);
+      }
+    }
+
     else {
-      Serial.println("Unknown command. Use 'enroll' or 'clear'.");
+      Serial.println("Unknown command. Use 'enroll', 'clear', or 'delete'.");
     }
   }
 
@@ -260,4 +275,19 @@ bool captureFingerToBuffer(uint8_t bufferId) {
   }
 
   return true;
+}
+
+void deleteFingerprint(int id) {
+  Serial.print("Deleting fingerprint ID #");
+  Serial.println(id);
+
+  uint8_t p = finger.deleteModel(id);
+  if (p == FINGERPRINT_OK) {
+    Serial.println("✅ Delete success!");
+    Serial.println("DELETE_OK");
+  } else {
+    Serial.print("❌ Delete failed, code: ");
+    Serial.println(p);
+    Serial.println("DELETE_FAIL");
+  }
 }

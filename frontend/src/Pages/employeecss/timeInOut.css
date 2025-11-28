@@ -324,6 +324,12 @@
   color: #2e7d32;
 }
 
+.notification-banner.warning {
+  background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+  border: 2px solid #fb923c;
+  color: #c2410c;
+}
+
 .notification-banner.error {
   background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
   border: 2px solid #f44336;

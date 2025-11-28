@@ -44,9 +44,13 @@ export default function AdminEmployee() {
   const [editEmail, setEditEmail] = useState("");
   const [editStatus, setEditStatus] = useState("Active");
   const [editFingerprint, setEditFingerprint] = useState("");
+  const [deleteFingerprintLoading, setDeleteFingerprintLoading] = useState(false);
   const [scanListening, setScanListening] = useState(false);
   const [scanStatus, setScanStatus] = useState("");
   const eventSourceRef = useRef(null);
+  const [isFingerprintManagerOpen, setIsFingerprintManagerOpen] = useState(false);
+  const [fingerprintManagerLoading, setFingerprintManagerLoading] = useState(false);
+  const [deletingFingerprintIds, setDeletingFingerprintIds] = useState(new Set());
   const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
@@ -251,24 +255,33 @@ export default function AdminEmployee() {
         if (!res.ok) throw new Error(`Failed to fetch users: ${res.status}`);
         const users = await res.json();
         if (aborted) return;
-        const mapped = (users || []).map((u) => ({
-          id: u.id || u.user_id,
-          user_id: u.user_id || u.id,
-          name:
-            [u.first_name, u.last_name].filter(Boolean).join(" ") || u.username,
-          first_name: u.first_name || "",
-          last_name: u.last_name || "",
-          username: u.username,
-          role: u.role || "employee",
-          email: u.email,
-          phone: formatPhoneDisplay(u.phone),
-          address: u.address || "",
-          dept: u.department,
-          position: u.position,
-          status: u.status || "Active",
-          joinDate: formatDate(u.join_date),
-          finger_template_id: u.finger_template_id || "",
-        }));
+        const mapped = (users || []).map((u) => {
+          // Handle fingerprint ID: convert to string, handle null/undefined/0
+          const fingerprintId = u.finger_template_id;
+          const fingerprintIdStr =
+            fingerprintId !== null && fingerprintId !== undefined && fingerprintId !== ""
+              ? String(fingerprintId)
+              : "";
+          
+          return {
+            id: u.id || u.user_id,
+            user_id: u.user_id || u.id,
+            name:
+              [u.first_name, u.last_name].filter(Boolean).join(" ") || u.username,
+            first_name: u.first_name || "",
+            last_name: u.last_name || "",
+            username: u.username,
+            role: u.role || "employee",
+            email: u.email,
+            phone: formatPhoneDisplay(u.phone),
+            address: u.address || "",
+            dept: u.department,
+            position: u.position,
+            status: u.status || "Active",
+            joinDate: formatDate(u.join_date),
+            finger_template_id: fingerprintIdStr,
+          };
+        });
         const employeesOnly = mapped.filter((user) => !isAdminRole(user.role));
         setRows(employeesOnly);
       } catch (err) {
@@ -307,18 +320,237 @@ export default function AdminEmployee() {
   }, [rows, query, deptFilter, statusFilter]);
 
   function openEdit(row) {
-    setSelected(row);
-    setEditDept(row.dept || "");
-    setEditPosition(row.position || "");
-    setEditFirstName(row.first_name || "");
-    setEditLastName(row.last_name || "");
-    setEditPhone(formatPhoneDisplay(row.phone));
-    setEditAddress(row.address || "");
-    setEditEmail(row.email || "");
-    setEditStatus(row.status || "Active");
-    setEditFingerprint(row.finger_template_id || "");
-    setEditFormErrors({});
-    setIsEditOpen(true);
+    if (!row) {
+      console.error("Cannot edit: row is null or undefined");
+      return;
+    }
+    
+    // Ensure row has required properties
+    if (!row.id && !row.user_id) {
+      console.error("Cannot edit: row missing id or user_id", row);
+      setNotification({
+        type: "error",
+        message: "Employee data is incomplete. Cannot open edit form.",
+      });
+      setTimeout(() => setNotification(null), 4000);
+      return;
+    }
+
+    try {
+      console.log("Opening edit for employee:", row);
+      
+      // Set selected first to ensure modal can render
+      setSelected(row);
+      
+      // Set all form fields with defensive checks
+      setEditDept(row.dept || "");
+      setEditPosition(row.position || "");
+      setEditFirstName(row.first_name || "");
+      setEditLastName(row.last_name || "");
+      
+      // Handle phone formatting safely
+      try {
+        const phoneValue = row.phone || "";
+        setEditPhone(phoneValue ? formatPhoneDisplay(phoneValue) : "");
+      } catch (err) {
+        console.error("Error formatting phone:", err);
+        setEditPhone(row.phone || "");
+      }
+      
+      setEditAddress(row.address || "");
+      setEditEmail(row.email || "");
+      setEditStatus(row.status || "Active");
+      
+      // Handle fingerprint ID: convert to string, handle null/undefined
+      try {
+        const fingerprintId = row.finger_template_id;
+        // Convert to string if it exists, otherwise use empty string
+        // Handle null, undefined, empty string, and ensure it's always a string
+        let fingerprintStr = "";
+        if (fingerprintId != null && fingerprintId !== "") {
+          const str = String(fingerprintId).trim();
+          fingerprintStr = str || "";
+        }
+        setEditFingerprint(fingerprintStr);
+      } catch (err) {
+        console.error("Error setting fingerprint ID:", err, "fingerprintId:", row.finger_template_id);
+        setEditFingerprint("");
+      }
+      
+      setEditFormErrors({});
+      setIsEditOpen(true);
+    } catch (err) {
+      console.error("Error opening edit modal:", err, row);
+      // Even if there's an error, try to open the modal with what we have
+      setSelected(row);
+      setIsEditOpen(true);
+      setNotification({
+        type: "error",
+        message: "Some fields may not have loaded correctly. Please check the form.",
+      });
+      setTimeout(() => setNotification(null), 4000);
+    }
+  }
+
+  async function handleDeleteFingerprintFromDevice() {
+    const trimmed = (editFingerprint || "").trim();
+    if (!trimmed) {
+      setNotification({
+        type: "error",
+        message: "No fingerprint ID to delete. Enter or detect an ID first.",
+      });
+      setTimeout(() => setNotification(null), 4000);
+      return;
+    }
+
+    const id = Number(trimmed);
+    if (!Number.isFinite(id) || id < 1 || id > 127) {
+      setNotification({
+        type: "error",
+        message: "Fingerprint ID must be a number between 1 and 127.",
+      });
+      setTimeout(() => setNotification(null), 4000);
+      return;
+    }
+
+    try {
+      setDeleteFingerprintLoading(true);
+      const res = await fetch(`${API_BASE_URL}/fingerprint/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        throw new Error(
+          data.message ||
+            `Failed to delete fingerprint ID ${id}. Please try again.`,
+        );
+      }
+
+      setNotification({
+        type: "success",
+        message: data.message || `Fingerprint ID ${id} deleted from device.`,
+      });
+      setEditFingerprint("");
+      setRows((prev) =>
+        prev.map((row) =>
+          row.id === selected?.id || row.user_id === selected?.user_id
+            ? { ...row, finger_template_id: "" }
+            : row,
+        ),
+      );
+      if (selected) {
+        setSelected((prev) => (prev ? { ...prev, finger_template_id: "" } : prev));
+      }
+      setTimeout(() => setNotification(null), 4000);
+    } catch (err) {
+      console.error("Failed to delete fingerprint:", err);
+      setNotification({
+        type: "error",
+        message: err.message || "Failed to delete fingerprint ID.",
+      });
+      setTimeout(() => setNotification(null), 5000);
+    } finally {
+      setDeleteFingerprintLoading(false);
+    }
+  }
+
+  // Analyze fingerprint IDs to find orphaned ones
+  const analyzeFingerprints = useMemo(() => {
+    // Create a map of fingerprint ID to employee
+    const fingerprintMap = new Map();
+    rows.forEach((employee) => {
+      const fpId = employee.finger_template_id;
+      if (fpId && fpId.trim() !== "") {
+        const id = String(fpId).trim();
+        fingerprintMap.set(id, {
+          employeeId: employee.id || employee.user_id,
+          employeeName: employee.name || `${employee.first_name} ${employee.last_name}`.trim() || employee.username,
+          status: employee.status,
+        });
+      }
+    });
+
+    // Generate list of all possible IDs (1-127) with their status
+    const allFingerprints = [];
+    for (let i = 1; i <= 127; i++) {
+      const idStr = String(i);
+      const employee = fingerprintMap.get(idStr);
+      allFingerprints.push({
+        id: i,
+        idStr: idStr,
+        isUsed: !!employee,
+        employee: employee || null,
+        isOrphaned: false, // We can't know if it's on device without checking, so we'll mark as "potentially orphaned" if not in our DB
+      });
+    }
+
+    return {
+      allFingerprints,
+      usedCount: fingerprintMap.size,
+      availableCount: 127 - fingerprintMap.size,
+    };
+  }, [rows]);
+
+  // Delete an orphaned fingerprint by ID
+  async function deleteOrphanedFingerprint(fingerprintId) {
+    const id = Number(fingerprintId);
+    if (!Number.isFinite(id) || id < 1 || id > 127) {
+      setNotification({
+        type: "error",
+        message: "Invalid fingerprint ID. Must be between 1 and 127.",
+      });
+      setTimeout(() => setNotification(null), 4000);
+      return;
+    }
+
+    // Check if this ID is actually used by an employee
+    const fingerprintInfo = analyzeFingerprints.allFingerprints.find((fp) => fp.id === id);
+    if (fingerprintInfo && fingerprintInfo.isUsed) {
+      setNotification({
+        type: "error",
+        message: `Cannot delete fingerprint ID ${id}. It is assigned to employee: ${fingerprintInfo.employee.employeeName}`,
+      });
+      setTimeout(() => setNotification(null), 4000);
+      return;
+    }
+
+    try {
+      setDeletingFingerprintIds((prev) => new Set(prev).add(id));
+      const res = await fetch(`${API_BASE_URL}/fingerprint/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        throw new Error(
+          data.message || `Failed to delete fingerprint ID ${id}. Please try again.`
+        );
+      }
+
+      setNotification({
+        type: "success",
+        message: data.message || `Fingerprint ID ${id} deleted from device successfully.`,
+      });
+      setTimeout(() => setNotification(null), 4000);
+    } catch (err) {
+      console.error("Failed to delete orphaned fingerprint:", err);
+      setNotification({
+        type: "error",
+        message: err.message || `Failed to delete fingerprint ID ${id}.`,
+      });
+      setTimeout(() => setNotification(null), 5000);
+    } finally {
+      setDeletingFingerprintIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
   }
 
   function openView(row) {
@@ -398,6 +630,13 @@ export default function AdminEmployee() {
       const updatedFromServer = await res.json();
       console.log("Update successful:", updatedFromServer);
 
+      // Handle fingerprint ID: convert to string, handle null/undefined/0
+      const updatedFingerprintId = updatedFromServer.finger_template_id;
+      const updatedFingerprintIdStr =
+        updatedFingerprintId !== null && updatedFingerprintId !== undefined && updatedFingerprintId !== ""
+          ? String(updatedFingerprintId)
+          : "";
+      
       const updatedRow = {
         id: updatedFromServer.id || updatedFromServer.user_id,
         user_id: updatedFromServer.user_id || updatedFromServer.id,
@@ -416,7 +655,7 @@ export default function AdminEmployee() {
         position: updatedFromServer.position,
         status: updatedFromServer.status || "Active",
         joinDate: formatDate(updatedFromServer.join_date),
-        finger_template_id: updatedFromServer.finger_template_id || "",
+        finger_template_id: updatedFingerprintIdStr,
       };
       const updatedIsAdmin = isAdminRole(updatedRow.role);
       const identifier = updatedRow.user_id || updatedRow.id;
@@ -594,12 +833,15 @@ export default function AdminEmployee() {
   };
 
   const handleEditInputChange = (field, value) => {
-    let processedValue = value;
+    if (value === null || value === undefined) {
+      value = "";
+    }
+    let processedValue = String(value || "");
 
     // Auto-capitalize first letter for names and remove numbers/special characters
     if (field === "first_name" || field === "last_name") {
       // Remove all non-letter characters (keep only letters and spaces)
-      processedValue = value.replace(/[^a-zA-Z\s]/g, "");
+      processedValue = processedValue.replace(/[^a-zA-Z\s]/g, "");
       // Auto-capitalize first letter
       if (processedValue.length > 0) {
         processedValue =
@@ -609,7 +851,12 @@ export default function AdminEmployee() {
 
     // Auto-add +63 prefix for phone and only allow numbers
     if (field === "phone") {
-      processedValue = formatPhoneDisplay(value);
+      try {
+        processedValue = formatPhoneDisplay(processedValue);
+      } catch (err) {
+        console.error("Error formatting phone:", err);
+        processedValue = processedValue || "";
+      }
     }
 
     // Update the appropriate state
@@ -788,7 +1035,12 @@ export default function AdminEmployee() {
         position: created.position,
         status: created.status || "Active",
         joinDate: formatDate(created.join_date),
-        finger_template_id: created.finger_template_id || "",
+        finger_template_id: (() => {
+          const fpId = created.finger_template_id;
+          return fpId !== null && fpId !== undefined && fpId !== ""
+            ? String(fpId)
+            : "";
+        })(),
       };
       const createdIsAdmin = isAdminRole(newRow.role);
       if (!createdIsAdmin) {
@@ -1390,6 +1642,14 @@ export default function AdminEmployee() {
                 Filter
               </button>
               <button
+                className="btn"
+                onClick={() => setIsFingerprintManagerOpen(true)}
+                disabled={loading}
+                style={{ marginRight: "10px" }}
+              >
+                Manage Fingerprints
+              </button>
+              <button
                 className="btn primary"
                 onClick={() => setIsAddOpen(true)}
                 disabled={loading}
@@ -1489,31 +1749,55 @@ export default function AdminEmployee() {
           </div>
         </section>
 
-        {isEditOpen && selected && (
+        {isEditOpen && (
           <div className="modal" role="dialog">
             <div className="modal-body view-modal">
               <div className="modal-header">
                 <div className="modal-title">Edit Employee</div>
                 <button
                   className="icon-btn"
-                  onClick={() => setIsEditOpen(false)}
+                  onClick={() => {
+                    setIsEditOpen(false);
+                    setSelected(null);
+                  }}
                 >
                   ✖
                 </button>
               </div>
 
+              {!selected || (!selected.id && !selected.user_id) ? (
+                <div className="employee-details" style={{ padding: "20px", textAlign: "center" }}>
+                  <p>Error: Employee data is incomplete. Please try again.</p>
+                  <button className="btn" onClick={() => {
+                    setIsEditOpen(false);
+                    setSelected(null);
+                  }}>
+                    Close
+                  </button>
+                </div>
+              ) : (
               <div className="employee-details">
                 <div className="employee-header">
                   <div className="employee-avatar-large">
-                    {selected.name?.[0]}
+                    {(() => {
+                      const name = selected?.name || selected?.first_name || "?";
+                      return String(name)[0] || "?";
+                    })()}
                   </div>
                   <div className="employee-info">
-                    <h2 className="employee-name">{selected.name}</h2>
-                    <p className="employee-position">{selected.position}</p>
+                    <h2 className="employee-name">
+                      {selected?.name || 
+                       (selected?.first_name && selected?.last_name 
+                         ? `${selected.first_name} ${selected.last_name}` 
+                         : selected?.first_name || selected?.username || "Unknown Employee")}
+                    </h2>
+                    <p className="employee-position">{selected?.position || "No Position"}</p>
                     <span
-                      className={`status-badge ${selected.status.toLowerCase()}`}
+                      className={`status-badge ${(
+                        (selected?.status || "Inactive")
+                      ).toLowerCase()}`}
                     >
-                      {selected.status}
+                      {selected?.status || "Unknown"}
                     </span>
                   </div>
                 </div>
@@ -1621,7 +1905,7 @@ export default function AdminEmployee() {
                       <span className="detail-label">Employee ID</span>
                       <span className="detail-value">
                         EMP
-                        {String(selected.user_id || selected.id).padStart(
+                        {String(selected?.user_id || selected?.id || "000").padStart(
                           3,
                           "0"
                         )}
@@ -1655,7 +1939,7 @@ export default function AdminEmployee() {
                         required
                       >
                         <option value="">Select Department</option>
-                        {availableDepartments.map((dept) => (
+                        {(availableDepartments || []).map((dept) => (
                           <option key={dept} value={dept}>
                             {dept}
                           </option>
@@ -1692,8 +1976,9 @@ export default function AdminEmployee() {
                             : "Select a department first"}
                         </option>
                         {(
-                          departmentPositions[editDept] ||
-                          (editPosition ? [editPosition] : [])
+                          (departmentPositions && editDept && departmentPositions[editDept]) ||
+                          (editPosition ? [editPosition] : []) ||
+                          []
                         ).map((pos) => (
                           <option key={pos} value={pos}>
                             {pos}
@@ -1723,7 +2008,7 @@ export default function AdminEmployee() {
 
                     <div className="detail-item">
                       <span className="detail-label">Join Date</span>
-                      <span className="detail-value">{selected.joinDate}</span>
+                      <span className="detail-value">{selected?.joinDate || "N/A"}</span>
                     </div>
                   </div>
 
@@ -1738,8 +2023,8 @@ export default function AdminEmployee() {
                       <div className="biometric-right">
                         <input
                           name="finger_template_id"
-                          value={editFingerprint}
-                          onChange={(e) => setEditFingerprint(e.target.value)}
+                          value={editFingerprint || ""}
+                          onChange={(e) => setEditFingerprint(e.target.value || "")}
                           placeholder="Enter template ID or scan"
                           autoComplete="off"
                           className="detail-input fingerprint-input"
@@ -1801,6 +2086,26 @@ export default function AdminEmployee() {
                             </>
                           )}
                         </div>
+                        <div className="fingerprint-delete-row">
+                          <button
+                            type="button"
+                            className="btn delete-fingerprint-btn"
+                            onClick={handleDeleteFingerprintFromDevice}
+                            disabled={
+                              deleteFingerprintLoading ||
+                              !editFingerprint ||
+                              !editFingerprint.trim()
+                            }
+                          >
+                            {deleteFingerprintLoading
+                              ? "Deleting..."
+                              : "Delete Fingerprint on Device"}
+                          </button>
+                          <p className="fingerprint-delete-hint">
+                            Removes the stored template from the scanner so this ID
+                            can be reused confidently.
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1820,6 +2125,7 @@ export default function AdminEmployee() {
                   </div>
                 </form>
               </div>
+              )}
             </div>
           </div>
         )}
@@ -2321,9 +2627,11 @@ export default function AdminEmployee() {
                     <h2 className="employee-name">{viewEmployee.name}</h2>
                     <p className="employee-position">{viewEmployee.position}</p>
                     <span
-                      className={`status-badge ${viewEmployee.status.toLowerCase()}`}
+                      className={`status-badge ${(
+                        viewEmployee.status || "Inactive"
+                      ).toLowerCase()}`}
                     >
-                      {viewEmployee.status}
+                      {viewEmployee.status || "Unknown"}
                     </span>
                   </div>
                 </div>
@@ -2379,9 +2687,11 @@ export default function AdminEmployee() {
                       <span className="detail-label">Status</span>
                       <span className="detail-value">
                         <span
-                          className={`status-badge ${viewEmployee.status.toLowerCase()}`}
+                          className={`status-badge ${(
+                            viewEmployee.status || "Inactive"
+                          ).toLowerCase()}`}
                         >
-                          {viewEmployee.status}
+                          {viewEmployee.status || "Unknown"}
                         </span>
                       </span>
                     </div>
@@ -2481,6 +2791,118 @@ export default function AdminEmployee() {
                   disabled={deleteLoading}
                 >
                   {deleteLoading ? "Updating..." : "Deactivate Employee"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isFingerprintManagerOpen && (
+          <div className="modal" role="dialog">
+            <div className="modal-body view-modal" style={{ maxWidth: "900px", maxHeight: "90vh", overflow: "auto" }}>
+              <div className="modal-header">
+                <div className="modal-title">Fingerprint ID Management</div>
+                <button
+                  className="icon-btn"
+                  onClick={() => setIsFingerprintManagerOpen(false)}
+                >
+                  ✖
+                </button>
+              </div>
+              <div className="employee-details" style={{ padding: "20px" }}>
+                <div style={{ marginBottom: "20px" }}>
+                  <p style={{ marginBottom: "10px", color: "#666" }}>
+                    Manage fingerprint IDs (1-127). Orphaned IDs are registered on the device but not assigned to any employee.
+                  </p>
+                  <div style={{ display: "flex", gap: "20px", marginBottom: "20px" }}>
+                    <div style={{ padding: "10px", background: "#e8f5e9", borderRadius: "4px" }}>
+                      <strong>Used:</strong> {analyzeFingerprints.usedCount}
+                    </div>
+                    <div style={{ padding: "10px", background: "#fff3e0", borderRadius: "4px" }}>
+                      <strong>Available:</strong> {analyzeFingerprints.availableCount}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ 
+                  display: "grid", 
+                  gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", 
+                  gap: "10px",
+                  maxHeight: "60vh",
+                  overflowY: "auto",
+                  padding: "10px",
+                  border: "1px solid #e0e0e0",
+                  borderRadius: "4px"
+                }}>
+                  {analyzeFingerprints.allFingerprints.map((fp) => (
+                    <div
+                      key={fp.id}
+                      style={{
+                        padding: "12px",
+                        border: "1px solid #ddd",
+                        borderRadius: "4px",
+                        background: fp.isUsed ? "#e8f5e9" : "#fff",
+                        position: "relative",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                        <strong>ID: {fp.id}</strong>
+                        {fp.isUsed && (
+                          <span style={{ 
+                            fontSize: "10px", 
+                            background: "#4caf50", 
+                            color: "white", 
+                            padding: "2px 6px", 
+                            borderRadius: "10px" 
+                          }}>
+                            USED
+                          </span>
+                        )}
+                      </div>
+                      {fp.isUsed && fp.employee ? (
+                        <div style={{ fontSize: "12px", color: "#666" }}>
+                          <div><strong>Employee:</strong> {fp.employee.employeeName}</div>
+                          <div><strong>Status:</strong> {fp.employee.status}</div>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: "12px", color: "#999" }}>
+                          Not assigned
+                        </div>
+                      )}
+                      {!fp.isUsed && (
+                        <button
+                          className="btn"
+                          style={{
+                            marginTop: "8px",
+                            width: "100%",
+                            fontSize: "11px",
+                            padding: "6px",
+                            background: "#ff9800",
+                            color: "white",
+                            border: "none",
+                          }}
+                          onClick={() => deleteOrphanedFingerprint(fp.id)}
+                          disabled={deletingFingerprintIds.has(fp.id)}
+                        >
+                          {deletingFingerprintIds.has(fp.id) ? "Deleting..." : "Delete from Device"}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ marginTop: "20px", padding: "15px", background: "#fff3cd", borderRadius: "4px", fontSize: "13px" }}>
+                  <strong>Note:</strong> "Delete from Device" removes the fingerprint from the physical scanner device. 
+                  This is useful for cleaning up orphaned fingerprints (IDs registered on device but not linked to employees). 
+                  Only unassigned IDs can be deleted this way.
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button
+                  className="btn primary"
+                  onClick={() => setIsFingerprintManagerOpen(false)}
+                >
+                  Close
                 </button>
               </div>
             </div>
